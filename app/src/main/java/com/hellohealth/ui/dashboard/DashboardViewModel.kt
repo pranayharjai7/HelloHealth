@@ -6,8 +6,10 @@ import androidx.health.connect.client.HealthConnectClient
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.model.WorkoutSummary
+import com.hellohealth.domain.model.User
+import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +21,7 @@ data class DashboardUiState(
     val workoutSummary: WorkoutSummary = WorkoutSummary(),
     val hasHealthPermissions: Boolean = false,
     val healthConnectAvailability: Int = 1, // Default to UNAVAILABLE
+    val user: User? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
     val lastSyncTime: Long? = null
@@ -26,14 +29,23 @@ data class DashboardUiState(
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val activityRepository: ActivityRepository
+    private val activityRepository: ActivityRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
+        loadUserInfo()
         checkPermissionsAndLoadData()
+    }
+
+    private fun loadUserInfo() {
+        viewModelScope.launch {
+            val user = authRepository.getCurrentUser()
+            _uiState.value = _uiState.value.copy(user = user)
+        }
     }
 
     fun checkPermissionsAndLoadData() {

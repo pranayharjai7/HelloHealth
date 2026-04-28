@@ -273,7 +273,11 @@ private fun handleGoogleSignIn(context: Context, viewModel: AuthViewModel, scope
                 
                 if (googleIdToken.isNotEmpty()) {
                     Log.d("GoogleSignIn", "ID Token obtained successfully")
-                    viewModel.signInWithGoogle(googleIdToken)
+                    viewModel.signInWithGoogle(
+                        idToken = googleIdToken,
+                        name = googleIdTokenCredential.displayName,
+                        avatarUrl = googleIdTokenCredential.profilePictureUri?.toString()
+                    )
                 } else {
                     Log.e("GoogleSignIn", "ID Token is empty. This can happen if the Client ID type is incorrect.")
                     viewModel.setError("Google Sign-In: ID Token is empty. Ensure you are using a 'Web application' Client ID.")

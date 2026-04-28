@@ -45,10 +45,10 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun signInWithGoogle(idToken: String) {
+    fun signInWithGoogle(idToken: String, name: String? = null, avatarUrl: String? = null) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
-            val result = authRepository.signInWithGoogle(idToken)
+            val result = authRepository.signInWithGoogle(idToken, name, avatarUrl)
             _authState.value = if (result.isSuccess) AuthState.Success else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
         }
     }

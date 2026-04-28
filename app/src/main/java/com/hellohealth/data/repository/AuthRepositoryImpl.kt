@@ -2,6 +2,7 @@ package com.hellohealth.data.repository
 
 import com.hellohealth.data.local.dao.UserDao
 import com.hellohealth.data.local.entities.UserEntity
+import com.hellohealth.domain.model.User
 import com.hellohealth.domain.repository.AuthRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -42,14 +43,36 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun signInWithGoogle(idToken: String): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun signInWithGoogle(
+        idToken: String,
+        name: String?,
+        avatarUrl: String?
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         return@withContext try {
-            // In a real local-only app, we might just use the token/id as a user identifier
+            // Simplified: use email from idToken or a unique identifier
+            // In a production app with Supabase, we would get this from the JWT/Session
             val email = "google_user_${idToken.takeLast(5)}@gmail.com" 
-            val user = userDao.getUserByEmail(email) ?: UserEntity(email = email, password = "", isGoogleUser = true)
+            val existingUser = userDao.getUserByEmail(email)
+            
+            val user = if (existingUser != null) {
+                existingUser.copy(
+                    name = name ?: existingUser.name,
+                    avatarUrl = avatarUrl ?: existingUser.avatarUrl,
+                    isLoggedIn = true
+                )
+            } else {
+                UserEntity(
+                    email = email,
+                    password = "",
+                    name = name,
+                    avatarUrl = avatarUrl,
+                    isGoogleUser = true,
+                    isLoggedIn = true
+                )
+            }
             
             userDao.logoutAll()
-            userDao.insertUser(user.copy(isLoggedIn = true))
+            userDao.insertUser(user)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -67,5 +90,15 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun isUserLoggedIn(): Boolean = withContext(Dispatchers.IO) {
         return@withContext userDao.getLoggedInUser() != null
+    }
+
+    override suspend fun getCurrentUser(): User? = withContext(Dispatchers.IO) {
+        val entity = userDao.getLoggedInUser() ?: return@withContext null
+        return@withContext User(
+            email = entity.email,
+            name = entity.name,
+            avatarUrl = entity.avatarUrl,
+            isGoogleUser = entity.isGoogleUser
+        )
     }
 }
