@@ -1,6 +1,7 @@
 package com.hellohealth.ui.dashboard
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -29,6 +31,7 @@ import coil.compose.AsyncImage
 import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
 import com.hellohealth.ui.dashboard.components.WorkoutCard
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,13 +41,27 @@ fun DashboardScreen(
     onLogout: () -> Unit,
     onNavigateToWorkoutDetails: () -> Unit
 ) {
+    val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
-    val context = LocalContext.current
+
+    // Track sync completion for feedback
+    var prevLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.isLoading) {
+        if (prevLoading && !uiState.isLoading && uiState.error == null) {
+            snackbarHostState.showSnackbar("Activity data synced successfully")
+        } else if (uiState.error != null) {
+            snackbarHostState.showSnackbar(uiState.error ?: "Sync failed")
+        }
+        prevLoading = uiState.isLoading
+    }
 
     Scaffold(
         topBar = {
@@ -62,6 +79,7 @@ fun DashboardScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent
     ) { padding ->
         Box(
@@ -157,6 +175,10 @@ fun DashboardScreen(
                     showProfileMenu = false
                     if (option == "Sign Out") {
                         showLogoutDialog = true
+                    } else {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("$option screen coming soon!")
+                        }
                     }
                 }
             )

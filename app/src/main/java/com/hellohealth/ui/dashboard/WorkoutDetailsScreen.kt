@@ -49,7 +49,11 @@ fun WorkoutDetailsScreen(
                 },
                 actions = {
                     IconButton(onClick = { viewModel.loadWorkoutSummary() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        if (uiState.isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = primaryColor)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(

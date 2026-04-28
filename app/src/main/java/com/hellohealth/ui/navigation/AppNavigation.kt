@@ -13,6 +13,7 @@ import com.hellohealth.ui.auth.LoginScreen
 import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
+import com.hellohealth.ui.splash.SplashScreen
 
 @Composable
 fun AppNavigation(
@@ -21,10 +22,30 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route
+        startDestination = Screen.Splash.route
     ) {
         composable(
+            route = Screen.Splash.route,
+            exitTransition = { fadeOut(tween(500)) }
+        ) {
+            SplashScreen(
+                viewModel = authViewModel,
+                onNavigateToLogin = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                },
+                onNavigateToDashboard = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(
             route = Screen.Login.route,
+            enterTransition = { fadeIn(tween(300)) },
             exitTransition = { fadeOut(tween(300)) }
         ) {
             LoginScreen(
@@ -75,6 +96,7 @@ fun AppNavigation(
 }
 
 sealed class Screen(val route: String) {
+    object Splash : Screen("splash")
     object Login : Screen("login")
     object Dashboard : Screen("dashboard")
     object WorkoutDetails : Screen("workout_details")

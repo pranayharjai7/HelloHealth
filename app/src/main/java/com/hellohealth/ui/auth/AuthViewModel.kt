@@ -14,7 +14,7 @@ class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
+    private val _authState = MutableStateFlow<AuthState>(AuthState.Checking)
     val authState = _authState.asStateFlow()
 
     init {
@@ -24,7 +24,9 @@ class AuthViewModel @Inject constructor(
     fun checkSession() {
         viewModelScope.launch {
             if (authRepository.isUserLoggedIn()) {
-                _authState.value = AuthState.Success
+                _authState.value = AuthState.Authenticated
+            } else {
+                _authState.value = AuthState.Unauthenticated
             }
         }
     }
@@ -33,7 +35,7 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             val result = authRepository.signUp(email, password)
-            _authState.value = if (result.isSuccess) AuthState.Success else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            _authState.value = if (result.isSuccess) AuthState.Authenticated else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
         }
     }
 
@@ -41,22 +43,22 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             val result = authRepository.signIn(email, password)
-            _authState.value = if (result.isSuccess) AuthState.Success else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            _authState.value = if (result.isSuccess) AuthState.Authenticated else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
         }
     }
 
-    fun signInWithGoogle(idToken: String, name: String? = null, avatarUrl: String? = null) {
+    fun signInWithGoogle(idToken: String, email: String? = null, name: String? = null, avatarUrl: String? = null) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
-            val result = authRepository.signInWithGoogle(idToken, name, avatarUrl)
-            _authState.value = if (result.isSuccess) AuthState.Success else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            val result = authRepository.signInWithGoogle(idToken, email, name, avatarUrl)
+            _authState.value = if (result.isSuccess) AuthState.Authenticated else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
         }
     }
 
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
-            _authState.value = AuthState.Idle
+            _authState.value = AuthState.Unauthenticated
         }
     }
 
@@ -70,8 +72,9 @@ class AuthViewModel @Inject constructor(
 }
 
 sealed class AuthState {
-    object Idle : AuthState()
+    object Checking : AuthState()
+    object Authenticated : AuthState()
+    object Unauthenticated : AuthState()
     object Loading : AuthState()
-    object Success : AuthState()
     data class Error(val message: String) : AuthState()
 }

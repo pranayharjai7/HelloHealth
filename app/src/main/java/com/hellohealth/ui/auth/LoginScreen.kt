@@ -47,7 +47,7 @@ fun LoginScreen(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(authState) {
-        if (authState is AuthState.Success) {
+        if (authState is AuthState.Authenticated) {
             onLoginSuccess()
         }
     }
@@ -275,6 +275,7 @@ private fun handleGoogleSignIn(context: Context, viewModel: AuthViewModel, scope
                     Log.d("GoogleSignIn", "ID Token obtained successfully")
                     viewModel.signInWithGoogle(
                         idToken = googleIdToken,
+                        email = googleIdTokenCredential.id,
                         name = googleIdTokenCredential.displayName,
                         avatarUrl = googleIdTokenCredential.profilePictureUri?.toString()
                     )

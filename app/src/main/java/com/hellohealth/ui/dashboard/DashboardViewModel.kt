@@ -72,6 +72,7 @@ class DashboardViewModel @Inject constructor(
 
     fun loadWorkoutSummary() {
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
             try {
                 val summary = activityRepository.fetchSummary()
                 _uiState.value = _uiState.value.copy(

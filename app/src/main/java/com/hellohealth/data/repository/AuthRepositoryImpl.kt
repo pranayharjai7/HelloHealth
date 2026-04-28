@@ -45,14 +45,13 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun signInWithGoogle(
         idToken: String,
+        email: String?,
         name: String?,
         avatarUrl: String?
     ): Result<Unit> = withContext(Dispatchers.IO) {
         return@withContext try {
-            // Simplified: use email from idToken or a unique identifier
-            // In a production app with Supabase, we would get this from the JWT/Session
-            val email = "google_user_${idToken.takeLast(5)}@gmail.com" 
-            val existingUser = userDao.getUserByEmail(email)
+            val userEmail = email ?: "google_user_${idToken.takeLast(5)}@gmail.com" 
+            val existingUser = userDao.getUserByEmail(userEmail)
             
             val user = if (existingUser != null) {
                 existingUser.copy(
@@ -62,7 +61,7 @@ class AuthRepositoryImpl @Inject constructor(
                 )
             } else {
                 UserEntity(
-                    email = email,
+                    email = userEmail,
                     password = "",
                     name = name,
                     avatarUrl = avatarUrl,
