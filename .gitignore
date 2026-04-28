@@ -1,0 +1,33 @@
+# Gradle files
+.gradle/
+build/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# Local configuration
+local.properties
+capture/
+
+# Log files
+*.log
+*.hprof
+
+# Secrets
+*.json
+
+# Mac files
+.DS_Store
+
+# Agent artifacts
+.artifacts/
+
+# Build artifacts
+*.apk
+*.aar
