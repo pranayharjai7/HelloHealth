@@ -51,6 +51,7 @@ fun DashboardScreen(
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
+    val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     
@@ -97,7 +98,7 @@ fun DashboardScreen(
                 },
                 actions = {
                     ProfileAvatar(
-                        user = uiState.user,
+                        user = authUser,
                         onClick = { showProfileMenu = true }
                     )
                     Spacer(modifier = Modifier.width(16.dp))
@@ -160,7 +161,7 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = uiState.user?.name ?: "Healthy User",
+                            text = authUser?.name ?: "Healthy User",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
@@ -197,7 +198,7 @@ fun DashboardScreen(
 
         if (showProfileMenu) {
             ProfileBottomSheet(
-                user = uiState.user,
+                user = authUser,
                 onDismiss = { showProfileMenu = false },
                 onOptionClick = { option ->
                     showProfileMenu = false

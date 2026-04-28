@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -112,7 +111,8 @@ fun WorkoutCard(
                     ) {
                         // Steps Progress Ring
                         Box(contentAlignment = Alignment.Center) {
-                            val stepsProgress = (summary.steps.toFloat() / summary.stepsGoal).coerceIn(0.01f, 1f)
+                            val safeStepsGoal = summary.stepsGoal.coerceAtLeast(1)
+                            val stepsProgress = (summary.steps.toFloat() / safeStepsGoal).coerceIn(0.01f, 1f)
                             val animatedProgress by animateFloatAsState(
                                 targetValue = if (isSyncing) 0.01f else stepsProgress,
                                 animationSpec = tween(durationMillis = 1000),
@@ -146,7 +146,7 @@ fun WorkoutCard(
                         // Other metrics
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             MetricSmall(
-                                value = "${summary.activeCalories.toInt()} kcal",
+                                value = "${summary.activeCalories.toInt()} Cal",
                                 label = "Active Burn",
                                 color = Color(0xFFFF7043)
                             )

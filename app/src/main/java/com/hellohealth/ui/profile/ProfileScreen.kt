@@ -9,8 +9,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,8 +36,17 @@ fun ProfileScreen(
     onBack: () -> Unit
 ) {
     val user by viewModel.currentUser.collectAsState()
+    val editorState by viewModel.profileEditorState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editedName by remember(user?.name) { mutableStateOf(user?.name.orEmpty()) }
+
+    LaunchedEffect(editorState.successMessage) {
+        if (editorState.successMessage != null) {
+            showEditDialog = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -133,7 +146,11 @@ fun ProfileScreen(
 
                 // Edit Button
                 Button(
-                    onClick = { /* TODO: Edit Profile */ },
+                    onClick = {
+                        editedName = user?.name.orEmpty()
+                        viewModel.clearProfileEditorMessage()
+                        showEditDialog = true
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
@@ -142,8 +159,68 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Edit Profile", fontWeight = FontWeight.Bold)
                 }
+
+                if (editorState.successMessage != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = editorState.successMessage!!,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
+    }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showEditDialog = false
+                viewModel.clearProfileEditorMessage()
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.saveProfile(editedName) },
+                    enabled = !editorState.isSaving
+                ) {
+                    if (editorState.isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Save")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showEditDialog = false
+                        viewModel.clearProfileEditorMessage()
+                    },
+                    enabled = !editorState.isSaving
+                ) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Edit Profile") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = editedName,
+                        onValueChange = { editedName = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (editorState.error != null) {
+                        Text(
+                            text = editorState.error!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        )
     }
 }
 

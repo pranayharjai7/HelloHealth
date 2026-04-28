@@ -23,41 +23,20 @@ data class ActivityGoalsDto(
 
 @Singleton
 class GoalsRepositoryImpl @Inject constructor(
-    private val supabase: SupabaseClient
+    private val supabase: SupabaseClient,
+    private val sessionManager: SupabaseSessionManager
 ) : GoalsRepository {
 
     override fun getActivityGoals(): Flow<ActivityGoals> = flow {
-        val userId = resolveUserId().orEmpty()
-        if (userId.isEmpty()) {
-            emit(ActivityGoals())
-            return@flow
-        }
-
-        try {
-            val response = supabase.postgrest["activity_goals"]
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                    }
-                }
-                .decodeSingleOrNull<ActivityGoalsDto>()
-
-            if (response != null) {
-                emit(ActivityGoals(
-                    steps = response.steps_goal,
-                    activeCalories = response.calories_goal,
-                    activeMinutes = response.active_minutes_goal
-                ))
-            } else {
-                emit(ActivityGoals())
-            }
-        } catch (e: Exception) {
-            emit(ActivityGoals())
-        }
+        emit(fetchActivityGoals())
     }.flowOn(Dispatchers.IO)
 
+    override suspend fun getCurrentActivityGoals(): ActivityGoals {
+        return fetchActivityGoals()
+    }
+
     override suspend fun updateActivityGoals(goals: ActivityGoals) {
-        val userId = resolveUserId() ?: return
+        val userId = sessionManager.getCurrentUserId() ?: return
         
         val dto = ActivityGoalsDto(
             user_id = userId,
@@ -72,10 +51,32 @@ class GoalsRepositoryImpl @Inject constructor(
         )
     }
 
-    private suspend fun resolveUserId(): String? {
-        supabase.auth.awaitInitialization()
-        return supabase.auth.currentUserOrNull()?.id
-            ?: supabase.auth.currentSessionOrNull()?.user?.id
-            ?: runCatching { supabase.auth.retrieveUserForCurrentSession(updateSession = true).id }.getOrNull()
+    private suspend fun fetchActivityGoals(): ActivityGoals {
+        val userId = sessionManager.getCurrentUserId().orEmpty()
+        if (userId.isEmpty()) {
+            return ActivityGoals()
+        }
+
+        return try {
+            val response = supabase.postgrest["activity_goals"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
+                .decodeSingleOrNull<ActivityGoalsDto>()
+
+            if (response != null) {
+                ActivityGoals(
+                    steps = response.steps_goal,
+                    activeCalories = response.calories_goal,
+                    activeMinutes = response.active_minutes_goal
+                )
+            } else {
+                ActivityGoals()
+            }
+        } catch (_: Exception) {
+            ActivityGoals()
+        }
     }
 }

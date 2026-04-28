@@ -131,9 +131,26 @@ fun FoodPreferencesScreen(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Text(
+                        text = "We use these preferences to tailor nutrition guidance inside Insights and to prepare the app for meal and recovery recommendations.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        modifier = Modifier.padding(20.dp)
+                    )
+                }
                 
                 if (uiState.error != null) {
                     Text(uiState.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+
+                if (uiState.successMessage != null) {
+                    Text(uiState.successMessage!!, color = primaryColor, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

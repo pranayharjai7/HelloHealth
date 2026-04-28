@@ -3,7 +3,6 @@ package com.hellohealth.data.repository
 import com.hellohealth.domain.model.FoodPreferences
 import com.hellohealth.domain.repository.UserRepository
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -23,41 +22,20 @@ data class FoodPreferencesDto(
 
 @Singleton
 class UserRepositoryImpl @Inject constructor(
-    private val supabase: SupabaseClient
+    private val supabase: SupabaseClient,
+    private val sessionManager: SupabaseSessionManager
 ) : UserRepository {
 
     override fun getFoodPreferences(): Flow<FoodPreferences> = flow {
-        val userId = resolveUserId().orEmpty()
-        if (userId.isEmpty()) {
-            emit(FoodPreferences())
-            return@flow
-        }
-
-        try {
-            val response = supabase.postgrest["food_preferences"]
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                    }
-                }
-                .decodeSingleOrNull<FoodPreferencesDto>()
-
-            if (response != null) {
-                emit(FoodPreferences(
-                    dietType = response.diet_type,
-                    allergies = response.allergies,
-                    cuisinePreferences = response.cuisines
-                ))
-            } else {
-                emit(FoodPreferences())
-            }
-        } catch (e: Exception) {
-            emit(FoodPreferences())
-        }
+        emit(fetchFoodPreferences())
     }.flowOn(Dispatchers.IO)
 
+    override suspend fun getCurrentFoodPreferences(): FoodPreferences {
+        return fetchFoodPreferences()
+    }
+
     override suspend fun updateFoodPreferences(preferences: FoodPreferences) {
-        val userId = resolveUserId() ?: return
+        val userId = sessionManager.getCurrentUserId() ?: return
         
         val dto = FoodPreferencesDto(
             user_id = userId,
@@ -72,10 +50,32 @@ class UserRepositoryImpl @Inject constructor(
         )
     }
 
-    private suspend fun resolveUserId(): String? {
-        supabase.auth.awaitInitialization()
-        return supabase.auth.currentUserOrNull()?.id
-            ?: supabase.auth.currentSessionOrNull()?.user?.id
-            ?: runCatching { supabase.auth.retrieveUserForCurrentSession(updateSession = true).id }.getOrNull()
+    private suspend fun fetchFoodPreferences(): FoodPreferences {
+        val userId = sessionManager.getCurrentUserId().orEmpty()
+        if (userId.isEmpty()) {
+            return FoodPreferences()
+        }
+
+        return try {
+            val response = supabase.postgrest["food_preferences"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
+                .decodeSingleOrNull<FoodPreferencesDto>()
+
+            if (response != null) {
+                FoodPreferences(
+                    dietType = response.diet_type,
+                    allergies = response.allergies,
+                    cuisinePreferences = response.cuisines
+                )
+            } else {
+                FoodPreferences()
+            }
+        } catch (_: Exception) {
+            FoodPreferences()
+        }
     }
 }

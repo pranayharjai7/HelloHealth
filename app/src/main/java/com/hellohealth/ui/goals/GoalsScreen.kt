@@ -100,7 +100,7 @@ fun GoalsScreen(
                     value = uiState.goals.activeCalories.toFloat(),
                     range = 100f..2000f,
                     step = 50f,
-                    unit = "kcal",
+                    unit = "Cal",
                     color = Color(0xFFFF7043),
                     onValueChange = { viewModel.updateCaloriesGoal(it.toInt()) }
                 )
@@ -126,6 +126,21 @@ fun GoalsScreen(
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
+
+                if (uiState.successMessage != null) {
+                    Text(
+                        text = uiState.successMessage!!,
+                        color = primaryColor,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+
+                Text(
+                    text = "These saved targets become the shared daily limit used throughout the app, including the dashboard card and Health Stats screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
         }
     }

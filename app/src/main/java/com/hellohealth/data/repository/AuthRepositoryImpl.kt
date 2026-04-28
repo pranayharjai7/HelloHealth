@@ -12,6 +12,7 @@ import kotlinx.datetime.toJavaInstant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -84,6 +85,18 @@ class AuthRepositoryImpl @Inject constructor(
             ?: runCatching { supabase.auth.retrieveUserForCurrentSession(updateSession = true) }.getOrNull()
 
         return userInfo?.toDomainUser()
+    }
+
+    override suspend fun updateCurrentUserName(name: String): Result<User?> {
+        return runCatching {
+            supabase.auth.updateUser {
+                data {
+                    put("name", name)
+                    put("full_name", name)
+                }
+            }
+            getCurrentUser()
+        }
     }
 
     private suspend fun ensureCurrentUserLoaded(

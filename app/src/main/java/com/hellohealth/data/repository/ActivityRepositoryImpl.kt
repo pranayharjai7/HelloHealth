@@ -3,6 +3,7 @@ package com.hellohealth.data.repository
 import android.content.Context
 import android.content.Intent
 import com.hellohealth.data.health.HealthConnectManager
+import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.HealthSummary
 import com.hellohealth.domain.repository.ActivityRepository
 import javax.inject.Inject
@@ -12,11 +13,15 @@ import javax.inject.Singleton
 class ActivityRepositoryImpl @Inject constructor(
     private val healthConnectManager: HealthConnectManager
 ) : ActivityRepository {
-    override suspend fun fetchSummary(): HealthSummary {
+    override suspend fun fetchSummary(goals: ActivityGoals): HealthSummary {
         return if (healthConnectManager.isAvailable && healthConnectManager.hasAllPermissions()) {
-            healthConnectManager.fetchHealthSummary()
+            healthConnectManager.fetchHealthSummary(goals)
         } else {
-            HealthSummary()
+            HealthSummary(
+                stepsGoal = goals.steps.toLong(),
+                caloriesGoal = goals.activeCalories.toDouble(),
+                activeTimeGoal = goals.activeMinutes.toLong()
+            )
         }
     }
 

@@ -8,10 +8,13 @@ import androidx.health.connect.client.records.*
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.ExerciseSession
 import com.hellohealth.domain.model.HealthSummary
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZonedDateTime
+import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -77,8 +80,14 @@ class HealthConnectManager @Inject constructor(
         return granted.containsAll(essentialPermissions)
     }
 
-    suspend fun fetchHealthSummary(): HealthSummary {
-        if (healthConnectClient == null) return HealthSummary()
+    suspend fun fetchHealthSummary(goals: ActivityGoals): HealthSummary {
+        if (healthConnectClient == null) {
+            return HealthSummary(
+                stepsGoal = goals.steps.toLong(),
+                caloriesGoal = goals.activeCalories.toDouble(),
+                activeTimeGoal = goals.activeMinutes.toLong()
+            )
+        }
 
         val startOfDay = ZonedDateTime.now().withHour(0).withMinute(0).withSecond(0).toInstant()
         val now = Instant.now()
@@ -121,8 +130,11 @@ class HealthConnectManager @Inject constructor(
 
             HealthSummary(
                 steps = steps,
+                stepsGoal = goals.steps.toLong(),
                 activeCalories = refinedActiveCalories,
+                caloriesGoal = goals.activeCalories.toDouble(),
                 activeTimeMinutes = activeTime,
+                activeTimeGoal = goals.activeMinutes.toLong(),
                 distanceKm = distance / 1000.0,
                 totalCalories = totalCalories,
                 basalMetabolicRate = bmr,
@@ -142,7 +154,11 @@ class HealthConnectManager @Inject constructor(
             )
         } catch (e: Exception) {
             Log.e("HealthConnectManager", "Error in fetchHealthSummary", e)
-            HealthSummary()
+            HealthSummary(
+                stepsGoal = goals.steps.toLong(),
+                caloriesGoal = goals.activeCalories.toDouble(),
+                activeTimeGoal = goals.activeMinutes.toLong()
+            )
         }
     }
 
@@ -151,9 +167,10 @@ class HealthConnectManager @Inject constructor(
         
         val stats = mutableListOf<com.hellohealth.domain.model.DailyStat>()
         val now = ZonedDateTime.now()
+        val startOfWeek = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         
         for (i in 0..6) {
-            val date = now.minusDays(i.toLong())
+            val date = startOfWeek.plusDays(i.toLong())
             val startOfDay = date.withHour(0).withMinute(0).withSecond(0).toInstant()
             val endOfDay = date.withHour(23).withMinute(59).withSecond(59).toInstant()
             val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfDay)
@@ -167,19 +184,24 @@ class HealthConnectManager @Inject constructor(
                 response.records.sumOf { java.time.Duration.between(it.startTime, it.endTime).toMinutes() }
             } catch (e: Exception) { 0L }
             val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt() ?: 0
+            val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
+            val activeMinutes = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
+                if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
+            )
 
             stats.add(
                 com.hellohealth.domain.model.DailyStat(
                     date = date.toLocalDate(),
                     steps = steps,
                     calories = calories,
+                    activeMinutes = activeMinutes,
                     sleepMinutes = sleep,
                     avgHeartRate = heartRate
                 )
             )
         }
         
-        return com.hellohealth.domain.model.WeeklyStats(dailyStats = stats.reversed())
+        return com.hellohealth.domain.model.WeeklyStats(dailyStats = stats)
     }
 
     private suspend fun <T> safeAggregate(block: suspend () -> T): T? {

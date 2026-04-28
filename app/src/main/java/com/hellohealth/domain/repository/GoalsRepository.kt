@@ -5,5 +5,6 @@ import kotlinx.coroutines.flow.Flow
 
 interface GoalsRepository {
     fun getActivityGoals(): Flow<ActivityGoals>
+    suspend fun getCurrentActivityGoals(): ActivityGoals
     suspend fun updateActivityGoals(goals: ActivityGoals)
 }

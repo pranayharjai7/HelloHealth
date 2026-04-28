@@ -16,7 +16,8 @@ data class FoodPreferencesUiState(
     val preferences: FoodPreferences = FoodPreferences(),
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val successMessage: String? = null
 )
 
 @HiltViewModel
@@ -37,7 +38,8 @@ class FoodPreferencesViewModel @Inject constructor(
             repository.getFoodPreferences().collectLatest { prefs ->
                 _uiState.value = _uiState.value.copy(
                     preferences = prefs,
-                    isLoading = false
+                    isLoading = false,
+                    error = null
                 )
             }
         }
@@ -75,10 +77,13 @@ class FoodPreferencesViewModel @Inject constructor(
 
     fun savePreferences() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true)
+            _uiState.value = _uiState.value.copy(isSaving = true, error = null, successMessage = null)
             try {
                 repository.updateFoodPreferences(_uiState.value.preferences)
-                _uiState.value = _uiState.value.copy(isSaving = false)
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    successMessage = "Food preferences saved."
+                )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,

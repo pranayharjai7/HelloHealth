@@ -6,6 +6,7 @@ data class DailyStat(
     val date: LocalDate,
     val steps: Long,
     val calories: Double,
+    val activeMinutes: Long,
     val sleepMinutes: Long,
     val avgHeartRate: Int
 )

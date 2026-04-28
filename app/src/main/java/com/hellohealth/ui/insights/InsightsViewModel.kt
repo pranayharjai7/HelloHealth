@@ -2,8 +2,14 @@ package com.hellohealth.ui.insights
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.domain.model.ActivityGoals
+import com.hellohealth.domain.model.FoodPreferences
+import com.hellohealth.domain.model.WeeklyInsights
 import com.hellohealth.domain.model.WeeklyStats
 import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.GoalsRepository
+import com.hellohealth.domain.repository.UserRepository
+import com.hellohealth.domain.usecase.BuildWeeklyInsightsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,13 +19,19 @@ import javax.inject.Inject
 
 data class InsightsUiState(
     val weeklyStats: WeeklyStats = WeeklyStats(),
+    val goals: ActivityGoals = ActivityGoals(),
+    val foodPreferences: FoodPreferences = FoodPreferences(),
+    val weeklyInsights: WeeklyInsights = WeeklyInsights(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
 
 @HiltViewModel
 class InsightsViewModel @Inject constructor(
-    private val repository: ActivityRepository
+    private val repository: ActivityRepository,
+    private val goalsRepository: GoalsRepository,
+    private val userRepository: UserRepository,
+    private val buildWeeklyInsights: BuildWeeklyInsightsUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(InsightsUiState())
@@ -34,9 +46,16 @@ class InsightsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
                 val stats = repository.fetchWeeklyStats()
+                val goals = goalsRepository.getCurrentActivityGoals()
+                val preferences = userRepository.getCurrentFoodPreferences()
+                val insights = buildWeeklyInsights(stats, goals, preferences)
                 _uiState.value = _uiState.value.copy(
                     weeklyStats = stats,
-                    isLoading = false
+                    goals = goals,
+                    foodPreferences = preferences,
+                    weeklyInsights = insights,
+                    isLoading = false,
+                    error = null
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

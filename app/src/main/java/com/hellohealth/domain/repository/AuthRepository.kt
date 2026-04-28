@@ -14,4 +14,5 @@ interface AuthRepository {
     suspend fun signOut(): Result<Unit>
     suspend fun isUserLoggedIn(): Boolean
     suspend fun getCurrentUser(): User?
+    suspend fun updateCurrentUserName(name: String): Result<User?>
 }

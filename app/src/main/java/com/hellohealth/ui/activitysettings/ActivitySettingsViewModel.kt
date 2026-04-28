@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.GoalsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +21,8 @@ data class ActivitySettingsUiState(
 
 @HiltViewModel
 class ActivitySettingsViewModel @Inject constructor(
-    private val activityRepository: ActivityRepository
+    private val activityRepository: ActivityRepository,
+    private val goalsRepository: GoalsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ActivitySettingsUiState())
@@ -42,7 +44,8 @@ class ActivitySettingsViewModel @Inject constructor(
     fun syncNow() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSyncing = true)
-            activityRepository.fetchSummary()
+            val goals = goalsRepository.getCurrentActivityGoals()
+            activityRepository.fetchSummary(goals)
             _uiState.value = _uiState.value.copy(
                 isSyncing = false,
                 lastSyncTime = System.currentTimeMillis()

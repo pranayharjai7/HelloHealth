@@ -16,7 +16,8 @@ data class GoalsUiState(
     val goals: ActivityGoals = ActivityGoals(),
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val successMessage: String? = null
 )
 
 @HiltViewModel
@@ -37,7 +38,8 @@ class GoalsViewModel @Inject constructor(
             repository.getActivityGoals().collectLatest { goals ->
                 _uiState.value = _uiState.value.copy(
                     goals = goals,
-                    isLoading = false
+                    isLoading = false,
+                    error = null
                 )
             }
         }
@@ -63,10 +65,13 @@ class GoalsViewModel @Inject constructor(
 
     fun saveGoals() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true)
+            _uiState.value = _uiState.value.copy(isSaving = true, error = null, successMessage = null)
             try {
                 repository.updateActivityGoals(_uiState.value.goals)
-                _uiState.value = _uiState.value.copy(isSaving = false)
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    successMessage = "Daily goals saved."
+                )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,

@@ -10,6 +10,7 @@ import com.hellohealth.domain.model.HealthSummary
 import com.hellohealth.domain.model.User
 import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.AuthRepository
+import com.hellohealth.domain.repository.GoalsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,8 @@ data class DashboardUiState(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val activityRepository: ActivityRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val goalsRepository: GoalsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -75,7 +77,8 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
-                val summary = activityRepository.fetchSummary()
+                val goals = goalsRepository.getCurrentActivityGoals()
+                val summary = activityRepository.fetchSummary(goals)
                 _uiState.value = _uiState.value.copy(
                     healthSummary = summary,
                     isLoading = false,

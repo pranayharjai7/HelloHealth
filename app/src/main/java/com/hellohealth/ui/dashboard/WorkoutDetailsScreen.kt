@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellohealth.domain.model.ExerciseSession
+import com.hellohealth.ui.common.formatCalories
+import com.hellohealth.ui.common.formatProgress
 import com.hellohealth.ui.dashboard.components.MultiActivityRings
 import java.time.format.DateTimeFormatter
 
@@ -100,10 +102,13 @@ fun WorkoutDetailsScreen(
                                 modifier = Modifier.size(220.dp),
                                 contentAlignment = Alignment.Center
                             ) {
+                                val safeStepsGoal = summary.stepsGoal.coerceAtLeast(1)
+                                val safeCaloriesGoal = summary.caloriesGoal.coerceAtLeast(1.0)
+                                val safeActiveTimeGoal = summary.activeTimeGoal.coerceAtLeast(1)
                                 MultiActivityRings(
-                                    stepsProgress = summary.steps.toFloat() / summary.stepsGoal,
-                                    caloriesProgress = summary.activeCalories.toFloat() / summary.caloriesGoal.toFloat(),
-                                    minutesProgress = summary.activeTimeMinutes.toFloat() / summary.activeTimeGoal.toFloat(),
+                                    stepsProgress = summary.steps.toFloat() / safeStepsGoal,
+                                    caloriesProgress = summary.activeCalories.toFloat() / safeCaloriesGoal.toFloat(),
+                                    minutesProgress = summary.activeTimeMinutes.toFloat() / safeActiveTimeGoal.toFloat(),
                                     modifier = Modifier.size(200.dp)
                                 )
                             }
@@ -114,16 +119,16 @@ fun WorkoutDetailsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                RingLegendItem("Steps", primaryColor, summary.steps.toString())
-                                RingLegendItem("Kcal", Color(0xFFFF7043), summary.activeCalories.toInt().toString())
-                                RingLegendItem("Min", Color(0xFF42A5F5), summary.activeTimeMinutes.toString())
+                                RingLegendItem("Steps", primaryColor, formatProgress(summary.steps, summary.stepsGoal))
+                                RingLegendItem("Cal", Color(0xFFFF7043), formatProgress(summary.activeCalories.toInt(), summary.caloriesGoal.toInt()))
+                                RingLegendItem("Min", Color(0xFF42A5F5), formatProgress(summary.activeTimeMinutes.toInt(), summary.activeTimeGoal.toInt()))
                             }
                             
                             Spacer(modifier = Modifier.height(24.dp))
                             
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 MiniStat(Icons.Default.Route, "Distance", String.format("%.2f km", summary.distanceKm), Modifier.weight(1f))
-                                MiniStat(Icons.Default.LocalFireDepartment, "Total Burn", "${summary.totalCalories.toInt()} kcal", Modifier.weight(1f))
+                                MiniStat(Icons.Default.LocalFireDepartment, "Total Burn", formatCalories(summary.totalCalories), Modifier.weight(1f))
                             }
                         }
                     }
@@ -394,7 +399,7 @@ private fun ExerciseSessionItem(session: ExerciseSession) {
             }
             if (session.calories != null) {
                 Text(
-                    text = "${session.calories.toInt()} kcal",
+                    text = formatCalories(session.calories),
                     fontWeight = FontWeight.Black,
                     color = Color(0xFFFF7043),
                     fontSize = 14.sp

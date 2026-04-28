@@ -5,5 +5,6 @@ import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
     fun getFoodPreferences(): Flow<FoodPreferences>
+    suspend fun getCurrentFoodPreferences(): FoodPreferences
     suspend fun updateFoodPreferences(preferences: FoodPreferences)
 }
