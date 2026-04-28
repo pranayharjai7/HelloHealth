@@ -13,6 +13,7 @@ build/
 
 # Local configuration
 local.properties
+supabase_setup.sql
 capture/
 
 # Log files
