@@ -91,7 +91,20 @@ class HealthConnectManager @Inject constructor(
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
             
             val totalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) } ?: activeCalories
-            val bmr = safeFetch { fetchLatestBasalMetabolicRate() } ?: 0.0
+            var bmr = safeFetch { fetchLatestBasalMetabolicRate() } ?: 0.0
+            if (bmr == 0.0) bmr = 1800.0 // Default BMR if record missing
+            
+            // Refine active calories if direct reading is low but total is high
+            val nowCalendar = java.util.Calendar.getInstance()
+            val minutesPassedToday = nowCalendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + nowCalendar.get(java.util.Calendar.MINUTE)
+            val bmrSoFar = (bmr / 1440.0) * minutesPassedToday
+            
+            val refinedActiveCalories = if (totalCalories > bmrSoFar) {
+                maxOf(activeCalories, totalCalories - bmrSoFar)
+            } else {
+                activeCalories
+            }
+
             val weight = safeFetch { fetchLatestWeight() }
             val height = safeFetch { fetchLatestHeight() }
             val bodyFat = safeFetch { fetchLatestBodyFat() }
@@ -108,7 +121,7 @@ class HealthConnectManager @Inject constructor(
 
             HealthSummary(
                 steps = steps,
-                activeCalories = activeCalories,
+                activeCalories = refinedActiveCalories,
                 activeTimeMinutes = activeTime,
                 distanceKm = distance / 1000.0,
                 totalCalories = totalCalories,
