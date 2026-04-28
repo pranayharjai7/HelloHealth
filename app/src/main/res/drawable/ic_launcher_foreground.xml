@@ -1,41 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillType="evenOdd"
-        android:pathData="M32,64C32,64 38.39,52 54,52C69.61,52 76,64 76,64"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="78.58"
-                android:endY="90.91"
-                android:startX="48.76"
-                android:startY="66.6"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M66.94,46.02L66.94,46.02C68.52,47.07 69,49.17 68,50.75L66.33,53.44C65.28,55.02 63.18,55.5 61.6,54.48L61.6,54.48C60.02,53.43 59.54,51.33 60.54,49.75L62.21,47.06C63.26,45.48 65.36,45 66.94,46.02Z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M41.17,46.02L41.17,46.02C39.58,47.07 39.1,49.17 40.1,50.75L41.77,53.44C42.82,55.02 44.92,55.5 46.5,54.48L46.5,54.48C48.08,53.43 48.56,51.33 47.56,49.75L45.89,47.06C44.84,45.48 42.74,45 41.17,46.02Z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+    <group
+        android:translateX="27"
+        android:translateY="27">
+        <group
+            android:scaleX="2.25"
+            android:scaleY="2.25">
+            <!-- White Heart -->
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M12,21.35l-1.45,-1.32C5.4,15.36 2,12.28 2,8.5 2,5.42 4.42,3 7.5,3c1.74,0 3.41,0.81 4.5,2.09C13.09,3.81 14.76,3 16.5,3 19.58,3 22,5.42 22,8.5c0,3.78 -3.4,6.86 -8.55,11.54L12,21.35z" />
+            
+            <!-- Pulse Line (Cutout using the background color for visibility) -->
+            <path
+                android:strokeColor="#4CAF50"
+                android:strokeWidth="1.2"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:pathData="M5,10h3l1.5,-4l2,8l1.5,-4h3" />
+        </group>
+    </group>
 </vector>
