@@ -9,7 +9,7 @@ import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.hellohealth.domain.model.ExerciseSession
-import com.hellohealth.domain.model.WorkoutSummary
+import com.hellohealth.domain.model.HealthSummary
 import java.time.Instant
 import java.time.ZonedDateTime
 import javax.inject.Inject
@@ -22,31 +22,14 @@ class HealthConnectManager @Inject constructor(
 ) {
     fun getAvailability(): Int {
         val status = HealthConnectClient.getSdkStatus(context)
-        Log.d("HealthConnectManager", "SDK Status: $status")
-        
-        // If we successfully initialized the client in the Module, it's available.
-        if (healthConnectClient != null) {
-            Log.d("HealthConnectManager", "Client is NOT null, returning AVAILABLE")
-            return HealthConnectClient.SDK_AVAILABLE
-        }
-        
-        // On Android 14+, Health Connect is part of the system
-        if (android.os.Build.VERSION.SDK_INT >= 34) {
-            Log.d("HealthConnectManager", "Android 14+, forcing AVAILABLE")
-            return HealthConnectClient.SDK_AVAILABLE
-        }
-
-        // Manual check for package visibility if SDK reports unavailable on older versions
+        if (healthConnectClient != null) return HealthConnectClient.SDK_AVAILABLE
+        if (android.os.Build.VERSION.SDK_INT >= 34) return HealthConnectClient.SDK_AVAILABLE
         if (status == HealthConnectClient.SDK_UNAVAILABLE) {
             try {
                 context.packageManager.getPackageInfo("com.google.android.apps.healthdata", 0)
-                Log.d("HealthConnectManager", "Package com.google.android.apps.healthdata found manually, returning AVAILABLE")
                 return HealthConnectClient.SDK_AVAILABLE
-            } catch (e: Exception) {
-                Log.d("HealthConnectManager", "Package com.google.android.apps.healthdata NOT found")
-            }
+            } catch (e: Exception) {}
         }
-        
         return status
     }
 
@@ -69,145 +52,211 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(FloorsClimbedRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class)
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(BasalMetabolicRateRecord::class),
+        HealthPermission.getReadPermission(HeightRecord::class),
+        HealthPermission.getReadPermission(WeightRecord::class),
+        HealthPermission.getReadPermission(BodyFatRecord::class),
+        HealthPermission.getReadPermission(OxygenSaturationRecord::class),
+        HealthPermission.getReadPermission(BloodGlucoseRecord::class),
+        HealthPermission.getReadPermission(BloodPressureRecord::class),
+        HealthPermission.getReadPermission(SleepSessionRecord::class),
+        HealthPermission.getReadPermission(Vo2MaxRecord::class),
+        HealthPermission.getReadPermission(NutritionRecord::class)
     )
 
     suspend fun hasAllPermissions(): Boolean {
-        if (healthConnectClient == null) {
-            Log.d("HealthConnectManager", "hasAllPermissions: Client is null, returning false")
-            return false
-        }
+        if (healthConnectClient == null) return false
         val granted = healthConnectClient.permissionController.getGrantedPermissions()
-        Log.d("HealthConnectManager", "Granted Permissions: $granted")
-        
         val essentialPermissions = setOf(
             HealthPermission.getReadPermission(StepsRecord::class),
             HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
             HealthPermission.getReadPermission(DistanceRecord::class)
         )
-        val result = granted.containsAll(essentialPermissions)
-        Log.d("HealthConnectManager", "hasEssentialPermissions: $result")
-        return result
+        return granted.containsAll(essentialPermissions)
     }
 
-    suspend fun fetchWorkoutSummary(): WorkoutSummary {
-        if (healthConnectClient == null) return WorkoutSummary()
+    suspend fun fetchHealthSummary(): HealthSummary {
+        if (healthConnectClient == null) return HealthSummary()
 
         val startOfDay = ZonedDateTime.now().withHour(0).withMinute(0).withSecond(0).toInstant()
         val now = Instant.now()
-        Log.d("HealthConnectManager", "Time Range: $startOfDay to $now")
         val timeRangeFilter = TimeRangeFilter.between(startOfDay, now)
 
         return try {
-            val steps = try { aggregateSteps(timeRangeFilter) } catch (e: Exception) { 
-                Log.e("HealthConnectManager", "Error fetching steps", e)
-                0L 
-            }
-            val calories = try { aggregateCalories(timeRangeFilter) } catch (e: Exception) { 
-                Log.e("HealthConnectManager", "Error fetching calories", e)
-                0.0 
-            }
-            val distance = try { aggregateDistance(timeRangeFilter) } catch (e: Exception) { 
-                Log.e("HealthConnectManager", "Error fetching distance", e)
-                0.0 
-            }
-            val floors = try { aggregateFloors(timeRangeFilter) } catch (e: Exception) { 
-                Log.e("HealthConnectManager", "Error fetching floors", e)
-                0.0 
-            }
-            val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { 
-                Log.e("HealthConnectManager", "Error fetching sessions", e)
-                emptyList() 
-            }
+            val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
+            val activeCalories = safeAggregate { aggregateActiveCalories(timeRangeFilter) } ?: 0.0
+            val distance = safeAggregate { aggregateDistance(timeRangeFilter) } ?: 0.0
+            val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
             
+            val totalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) } ?: activeCalories
+            val bmr = safeFetch { fetchLatestBasalMetabolicRate() } ?: 0.0
+            val weight = safeFetch { fetchLatestWeight() }
+            val height = safeFetch { fetchLatestHeight() }
+            val bodyFat = safeFetch { fetchLatestBodyFat() }
+            val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt()
+            val oxygen = safeFetch { fetchLatestOxygenSaturation() }
+            val vo2max = safeFetch { fetchLatestVo2Max() }
+            val bloodPressure = safeFetch { fetchLatestBloodPressure() }
+            val glucose = safeFetch { fetchLatestBloodGlucose() }
+            val sleep = try { fetchLatestSleepSession() } catch (e: Exception) { null }
+
             val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
                 if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
             )
 
-            WorkoutSummary(
+            HealthSummary(
                 steps = steps,
-                activeCalories = calories,
+                activeCalories = activeCalories,
                 activeTimeMinutes = activeTime,
                 distanceKm = distance / 1000.0,
-                floorsClimbed = floors,
+                totalCalories = totalCalories,
+                basalMetabolicRate = bmr,
+                weight = weight,
+                height = height,
+                bodyFat = bodyFat,
+                heartRateAvg = heartRate,
+                oxygenSaturation = oxygen,
+                vo2max = vo2max,
+                bloodPressureSystolic = bloodPressure?.first,
+                bloodPressureDiastolic = bloodPressure?.second,
+                bloodGlucose = glucose,
+                sleepDurationMinutes = sleep?.first ?: 0,
+                sleepStartTime = sleep?.second,
+                sleepEndTime = sleep?.third,
                 exerciseSessions = sessions
             )
         } catch (e: Exception) {
-            Log.e("HealthConnectManager", "Critical error in fetchWorkoutSummary", e)
-            WorkoutSummary()
+            Log.e("HealthConnectManager", "Error in fetchHealthSummary", e)
+            HealthSummary()
+        }
+    }
+
+    private suspend fun <T> safeAggregate(block: suspend () -> T): T? {
+        return try { block() } catch (e: Exception) { 
+            Log.w("HealthConnectManager", "Aggregation failed: ${e.message}")
+            null 
+        }
+    }
+
+    private suspend fun <T> safeFetch(block: suspend () -> T): T? {
+        return try { block() } catch (e: Exception) { 
+            Log.w("HealthConnectManager", "Fetch failed: ${e.message}")
+            null 
         }
     }
 
     private suspend fun aggregateSteps(timeRangeFilter: TimeRangeFilter): Long {
         val response = healthConnectClient?.aggregate(
-            AggregateRequest(
-                metrics = setOf(StepsRecord.COUNT_TOTAL),
-                timeRangeFilter = timeRangeFilter
-            )
+            AggregateRequest(metrics = setOf(StepsRecord.COUNT_TOTAL), timeRangeFilter = timeRangeFilter)
         )
-        val result = response?.get(StepsRecord.COUNT_TOTAL) ?: 0L
-        Log.d("HealthConnectManager", "Raw Steps: $result")
-        return result
+        return response?.get(StepsRecord.COUNT_TOTAL) ?: 0L
     }
 
-    private suspend fun aggregateCalories(timeRangeFilter: TimeRangeFilter): Double {
+    private suspend fun aggregateActiveCalories(timeRangeFilter: TimeRangeFilter): Double {
         val response = healthConnectClient?.aggregate(
-            AggregateRequest(
-                metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL),
-                timeRangeFilter = timeRangeFilter
-            )
+            AggregateRequest(metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), timeRangeFilter = timeRangeFilter)
         )
-        val result = response?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories ?: 0.0
-        Log.d("HealthConnectManager", "Raw Calories: $result")
-        return result
+        return response?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories ?: 0.0
+    }
+
+    private suspend fun aggregateTotalCalories(timeRangeFilter: TimeRangeFilter): Double {
+        val response = healthConnectClient?.aggregate(
+            AggregateRequest(metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL), timeRangeFilter = timeRangeFilter)
+        )
+        return response?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
     }
 
     private suspend fun aggregateDistance(timeRangeFilter: TimeRangeFilter): Double {
         val response = healthConnectClient?.aggregate(
-            AggregateRequest(
-                metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
-                timeRangeFilter = timeRangeFilter
-            )
+            AggregateRequest(metrics = setOf(DistanceRecord.DISTANCE_TOTAL), timeRangeFilter = timeRangeFilter)
         )
-        val result = response?.get(DistanceRecord.DISTANCE_TOTAL)?.inMeters ?: 0.0
-        Log.d("HealthConnectManager", "Raw Distance: $result")
-        return result
+        return response?.get(DistanceRecord.DISTANCE_TOTAL)?.inMeters ?: 0.0
     }
 
-    private suspend fun aggregateFloors(timeRangeFilter: TimeRangeFilter): Double {
+    private suspend fun aggregateHeartRate(timeRangeFilter: TimeRangeFilter): Long {
         val response = healthConnectClient?.aggregate(
-            AggregateRequest(
-                metrics = setOf(FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL),
-                timeRangeFilter = timeRangeFilter
-            )
+            AggregateRequest(metrics = setOf(HeartRateRecord.BPM_AVG), timeRangeFilter = timeRangeFilter)
         )
-        val result = response?.get(FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL) ?: 0.0
-        Log.d("HealthConnectManager", "Raw Floors: $result")
-        return result
+        return response?.get(HeartRateRecord.BPM_AVG) ?: 0L
+    }
+
+    private suspend fun fetchLatestWeight(): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.weight?.inKilograms
+    }
+
+    private suspend fun fetchLatestHeight(): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = HeightRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.height?.inMeters
+    }
+
+    private suspend fun fetchLatestBodyFat(): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = BodyFatRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.percentage?.value
+    }
+
+    private suspend fun fetchLatestBasalMetabolicRate(): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = BasalMetabolicRateRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.basalMetabolicRate?.inKilocaloriesPerDay
+    }
+
+    private suspend fun fetchLatestOxygenSaturation(): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = OxygenSaturationRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.percentage?.value
+    }
+
+    private suspend fun fetchLatestVo2Max(): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = Vo2MaxRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.vo2MillilitersPerMinuteKilogram
+    }
+
+    private suspend fun fetchLatestBloodPressure(): Pair<Double, Double>? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = BloodPressureRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        val record = response?.records?.firstOrNull() ?: return null
+        return Pair(record.systolic.inMillimetersOfMercury, record.diastolic.inMillimetersOfMercury)
+    }
+
+    private suspend fun fetchLatestBloodGlucose(): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = BloodGlucoseRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.level?.inMilligramsPerDeciliter
+    }
+
+    private suspend fun fetchLatestSleepSession(): Triple<Long, Instant, Instant>? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+        )
+        val record = response?.records?.firstOrNull() ?: return null
+        val duration = java.time.Duration.between(record.startTime, record.endTime).toMinutes()
+        return Triple(duration, record.startTime, record.endTime)
     }
 
     private suspend fun fetchExerciseSessions(timeRangeFilter: TimeRangeFilter): List<ExerciseSession> {
         val client = healthConnectClient ?: return emptyList()
         val response = client.readRecords(
-            ReadRecordsRequest(
-                recordType = ExerciseSessionRecord::class,
-                timeRangeFilter = timeRangeFilter
-            )
+            ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = timeRangeFilter)
         )
-        
-        Log.d("HealthConnectManager", "Fetched ${response.records.size} sessions")
-        
         return response.records.map { record ->
-            val sessionTimeFilter = TimeRangeFilter.between(record.startTime, record.endTime)
-            
-            // Try to get calories and distance for this specific session
-            val sessionMetrics = client.aggregate(
-                AggregateRequest(
-                    metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, DistanceRecord.DISTANCE_TOTAL),
-                    timeRangeFilter = sessionTimeFilter
-                )
+            val metrics = client.aggregate(
+                AggregateRequest(metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, DistanceRecord.DISTANCE_TOTAL), timeRangeFilter = TimeRangeFilter.between(record.startTime, record.endTime))
             )
-
             ExerciseSession(
                 title = record.title,
                 type = record.exerciseType,
@@ -215,8 +264,8 @@ class HealthConnectManager @Inject constructor(
                 startTime = record.startTime,
                 endTime = record.endTime,
                 durationMinutes = java.time.Duration.between(record.startTime, record.endTime).toMinutes(),
-                calories = sessionMetrics[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories,
-                distanceKm = sessionMetrics[DistanceRecord.DISTANCE_TOTAL]?.inKilometers
+                calories = metrics[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories,
+                distanceKm = metrics[DistanceRecord.DISTANCE_TOTAL]?.inKilometers
             )
         }
     }

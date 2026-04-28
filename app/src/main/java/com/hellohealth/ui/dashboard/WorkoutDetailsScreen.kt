@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,24 +32,23 @@ fun WorkoutDetailsScreen(
     viewModel: DashboardViewModel,
     onBack: () -> Unit
 ) {
-    val uiState by viewModel.collectAsState()
-    val summary = uiState.workoutSummary
+    val uiState by viewModel.uiState.collectAsState()
+    val summary = uiState.healthSummary
     
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
-    val onBackgroundColor = MaterialTheme.colorScheme.onBackground
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Daily Activity", fontWeight = FontWeight.Black) },
+                title = { Text("Health Stats", fontWeight = FontWeight.Black) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadWorkoutSummary() }) {
+                    IconButton(onClick = { viewModel.loadHealthSummary() }) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = primaryColor)
                         } else {
@@ -79,10 +79,11 @@ fun WorkoutDetailsScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // Activity Rings Section
+                // 1. Activity Section (Core Rings)
                 item {
+                    SectionHeader("Daily Activity")
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(32.dp),
@@ -117,39 +118,134 @@ fun WorkoutDetailsScreen(
                                 RingLegendItem("Kcal", Color(0xFFFF7043), summary.activeCalories.toInt().toString())
                                 RingLegendItem("Min", Color(0xFF42A5F5), summary.activeTimeMinutes.toString())
                             }
+                            
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                MiniStat(Icons.Default.Route, "Distance", String.format("%.2f km", summary.distanceKm), Modifier.weight(1f))
+                                MiniStat(Icons.Default.LocalFireDepartment, "Total Burn", "${summary.totalCalories.toInt()} kcal", Modifier.weight(1f))
+                            }
                         }
                     }
                 }
 
-                // Stats Grid
+                // 2. Body Metrics Section
                 item {
+                    SectionHeader("Body Metrics")
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         StatCard(
                             modifier = Modifier.weight(1f),
-                            icon = Icons.Default.DirectionsWalk,
-                            label = "Distance",
-                            value = String.format("%.2f km", summary.distanceKm),
-                            color = primaryColor
+                            icon = Icons.Default.MonitorWeight,
+                            label = "Weight",
+                            value = summary.weight?.let { String.format("%.1f kg", it) } ?: "--",
+                            color = Color(0xFF9C27B0)
                         )
                         StatCard(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.Height,
-                            label = "Floors",
-                            value = summary.floorsClimbed.toInt().toString(),
+                            label = "Height",
+                            value = summary.height?.let { String.format("%.0f cm", it * 100) } ?: "--",
                             color = Color(0xFF795548)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    StatCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Default.Percent,
+                        label = "Body Fat",
+                        value = summary.bodyFat?.let { String.format("%.1f %%", it) } ?: "--",
+                        color = Color(0xFFFF9800)
+                    )
+                }
+
+                // 3. Heart & Vitals Section
+                item {
+                    SectionHeader("Heart & Vitals")
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Favorite,
+                            label = "Avg Heart Rate",
+                            value = summary.heartRateAvg?.let { "$it bpm" } ?: "--",
+                            color = Color(0xFFE91E63)
+                        )
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Opacity,
+                            label = "SpO2",
+                            value = summary.oxygenSaturation?.let { String.format("%.0f %%", it) } ?: "--",
+                            color = Color(0xFF03A9F4)
+                        )
+                    }
+                    if (summary.bloodPressureSystolic != null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        StatCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Default.MonitorHeart,
+                            label = "Blood Pressure",
+                            value = "${summary.bloodPressureSystolic.toInt()}/${summary.bloodPressureDiastolic?.toInt()} mmHg",
+                            color = Color(0xFFF44336)
                         )
                     }
                 }
 
-                // Exercise Sessions Header
+                // 4. Cardio Fitness Section
                 item {
-                    Text(
-                        text = "Activity Log",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Black,
-                        color = onBackgroundColor,
-                        modifier = Modifier.padding(top = 8.dp)
+                    SectionHeader("Cardio Fitness")
+                    StatCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Default.Speed,
+                        label = "VO2 Max",
+                        value = summary.vo2max?.let { String.format("%.1f ml/kg/min", it) } ?: "--",
+                        color = Color(0xFF009688)
                     )
+                }
+
+                // 5. Sleep Section
+                item {
+                    SectionHeader("Sleep")
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF5C6BC0).copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Bedtime, null, tint = Color(0xFF5C6BC0), modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column {
+                                    Text("Sleep Duration", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                    Text(
+                                        text = formatSleepDuration(summary.sleepDurationMinutes),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
+                            if (summary.sleepStartTime != null && summary.sleepEndTime != null) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    SleepTimeInfo("Asleep", summary.sleepStartTime)
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), modifier = Modifier.size(16.dp))
+                                    SleepTimeInfo("Awake", summary.sleepEndTime)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 6. Activity Log
+                item {
+                    SectionHeader("Activity Log")
                 }
 
                 if (summary.exerciseSessions.isEmpty()) {
@@ -162,15 +258,50 @@ fun WorkoutDetailsScreen(
                     }
                 }
                 
-                item { Spacer(modifier = Modifier.height(24.dp)) }
+                item { Spacer(modifier = Modifier.height(48.dp)) }
             }
         }
     }
 }
 
-// Extension to fix the collectAsState issue in the previous turn if any
 @Composable
-private fun DashboardViewModel.collectAsState() = this.uiState.collectAsState()
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Black,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun MiniStat(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SleepTimeInfo(label: String, time: java.time.Instant) {
+    val formatter = DateTimeFormatter.ofPattern("HH:mm").withZone(java.time.ZoneId.systemDefault())
+    Column {
+        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        Text(formatter.format(time), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    }
+}
+
+private fun formatSleepDuration(minutes: Long): String {
+    if (minutes == 0L) return "--"
+    val hours = minutes / 60
+    val remainingMinutes = minutes % 60
+    return "${hours}h ${remainingMinutes}m"
+}
 
 @Composable
 private fun StatCard(
@@ -187,10 +318,15 @@ private fun StatCard(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+            Box(
+                modifier = Modifier.size(32.dp).clip(CircleShape).background(color.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+            }
             Spacer(modifier = Modifier.height(12.dp))
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -233,9 +369,9 @@ private fun ExerciseSessionItem(session: ExerciseSession) {
             ) {
                 Icon(
                     imageVector = when(session.typeLabel) {
-                        "Running" -> Icons.Default.DirectionsRun
-                        "Walking" -> Icons.Default.DirectionsWalk
-                        "Cycling" -> Icons.Default.DirectionsBike
+                        "Running" -> Icons.AutoMirrored.Filled.DirectionsRun
+                        "Walking" -> Icons.AutoMirrored.Filled.DirectionsWalk
+                        "Cycling" -> Icons.AutoMirrored.Filled.DirectionsBike
                         else -> Icons.Default.FitnessCenter
                     },
                     contentDescription = null,

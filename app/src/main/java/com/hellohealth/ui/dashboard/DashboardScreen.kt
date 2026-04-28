@@ -166,7 +166,7 @@ fun DashboardScreen(
 
                 // Activity Overview
                 WorkoutCard(
-                    summary = uiState.workoutSummary,
+                    summary = uiState.healthSummary,
                     hasPermissions = uiState.hasHealthPermissions,
                     healthConnectAvailability = uiState.healthConnectAvailability,
                     isSyncing = uiState.isLoading,
@@ -174,7 +174,7 @@ fun DashboardScreen(
                     error = uiState.error,
                     onPermissionRequest = { dashboardViewModel.checkPermissionsAndLoadData() },
                     onOpenSettings = { dashboardViewModel.openHealthConnectSettings(context) },
-                    onSync = { dashboardViewModel.loadWorkoutSummary() },
+                    onSync = { dashboardViewModel.loadHealthSummary() },
                     onClick = onNavigateToWorkoutDetails
                 )
 

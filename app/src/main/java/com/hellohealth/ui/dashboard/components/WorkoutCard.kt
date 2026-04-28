@@ -21,11 +21,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.HealthConnectClient
-import com.hellohealth.domain.model.WorkoutSummary
+import com.hellohealth.domain.model.HealthSummary
 
 @Composable
 fun WorkoutCard(
-    summary: WorkoutSummary,
+    summary: HealthSummary,
     hasPermissions: Boolean,
     healthConnectAvailability: Int,
     isSyncing: Boolean,
@@ -112,9 +112,9 @@ fun WorkoutCard(
                     ) {
                         // Steps Progress Ring
                         Box(contentAlignment = Alignment.Center) {
-                            val stepsProgress = (summary.steps.toFloat() / summary.stepsGoal).coerceIn(0f, 1f)
+                            val stepsProgress = (summary.steps.toFloat() / summary.stepsGoal).coerceIn(0.01f, 1f)
                             val animatedProgress by animateFloatAsState(
-                                targetValue = if (isSyncing) 0f else stepsProgress,
+                                targetValue = if (isSyncing) 0.01f else stepsProgress,
                                 animationSpec = tween(durationMillis = 1000),
                                 label = "steps_progress"
                             )
@@ -187,7 +187,6 @@ private fun PermissionRequestContent(
     onPermissionRequest: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     val isAndroid14 = android.os.Build.VERSION.SDK_INT >= 34
     
     val message = when {

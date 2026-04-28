@@ -6,7 +6,7 @@ import androidx.health.connect.client.HealthConnectClient
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.hellohealth.domain.model.WorkoutSummary
+import com.hellohealth.domain.model.HealthSummary
 import com.hellohealth.domain.model.User
 import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.AuthRepository
@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class DashboardUiState(
-    val workoutSummary: WorkoutSummary = WorkoutSummary(),
+    val healthSummary: HealthSummary = HealthSummary(),
     val hasHealthPermissions: Boolean = false,
     val healthConnectAvailability: Int = 1, // Default to UNAVAILABLE
     val user: User? = null,
@@ -56,27 +56,28 @@ class DashboardViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(healthConnectAvailability = availability)
             
             if (availability == HealthConnectClient.SDK_AVAILABLE) {
-                // Check if we have at least the core permissions
                 val hasPermissions = activityRepository.hasPermissions()
                 Log.d("DashboardViewModel", "Has permissions: $hasPermissions")
                 _uiState.value = _uiState.value.copy(hasHealthPermissions = hasPermissions)
                 
-                // Try to load whatever data we have access to
-                loadWorkoutSummary()
+                if (hasPermissions) {
+                    loadHealthSummary()
+                } else {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
             } else {
-                Log.d("DashboardViewModel", "Availability NOT 0, skipping data load")
                 _uiState.value = _uiState.value.copy(isLoading = false)
             }
         }
     }
 
-    fun loadWorkoutSummary() {
+    fun loadHealthSummary() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
                 val summary = activityRepository.fetchSummary()
                 _uiState.value = _uiState.value.copy(
-                    workoutSummary = summary,
+                    healthSummary = summary,
                     isLoading = false,
                     lastSyncTime = System.currentTimeMillis(),
                     error = null
@@ -84,7 +85,7 @@ class DashboardViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Failed to load activity data"
+                    error = "Failed to load health data"
                 )
             }
         }

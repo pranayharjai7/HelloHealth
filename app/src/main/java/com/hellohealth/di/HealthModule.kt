@@ -2,7 +2,7 @@ package com.hellohealth.di
 
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
-import com.hellohealth.data.repository.HealthConnectRepository
+import com.hellohealth.data.repository.ActivityRepositoryImpl
 import com.hellohealth.domain.repository.ActivityRepository
 import dagger.Binds
 import dagger.Module
@@ -19,7 +19,7 @@ abstract class HealthModule {
     @Binds
     @Singleton
     abstract fun bindActivityRepository(
-        healthConnectRepository: HealthConnectRepository
+        activityRepositoryImpl: ActivityRepositoryImpl
     ): ActivityRepository
 
     companion object {
