@@ -29,6 +29,7 @@ fun HelpScreen(
     val context = LocalContext.current
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
+    val supportEmail = "pranayharjai7@gmail.com"
 
     Scaffold(
         topBar = {
@@ -92,6 +93,12 @@ fun HelpScreen(
                     fontWeight = FontWeight.Black
                 )
 
+                Text(
+                    text = supportEmail,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     SupportButton(
                         modifier = Modifier.weight(1f),
@@ -100,7 +107,7 @@ fun HelpScreen(
                         color = primaryColor,
                         onClick = {
                             val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:support@hellohealth.app")
+                                data = Uri.parse("mailto:$supportEmail")
                                 putExtra(Intent.EXTRA_SUBJECT, "Hello Health Support")
                             }
                             context.startActivity(intent)
@@ -113,7 +120,7 @@ fun HelpScreen(
                         color = Color(0xFFE91E63),
                         onClick = {
                             val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:bugs@hellohealth.app")
+                                data = Uri.parse("mailto:$supportEmail")
                                 putExtra(Intent.EXTRA_SUBJECT, "Hello Health Bug Report")
                             }
                             context.startActivity(intent)
