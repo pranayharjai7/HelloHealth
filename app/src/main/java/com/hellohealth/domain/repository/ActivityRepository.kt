@@ -6,6 +6,7 @@ import com.hellohealth.domain.model.HealthSummary
 
 interface ActivityRepository {
     suspend fun fetchSummary(): HealthSummary
+    suspend fun fetchWeeklyStats(): com.hellohealth.domain.model.WeeklyStats
     suspend fun hasPermissions(): Boolean
     fun getRequiredPermissions(): Set<String>
     fun getAvailability(): Int

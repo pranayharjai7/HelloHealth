@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import com.hellohealth.data.local.dao.UserDao
 import com.hellohealth.data.local.entities.UserEntity
 
-@Database(entities = [UserEntity::class], version = 2)
+@Database(entities = [UserEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
 }

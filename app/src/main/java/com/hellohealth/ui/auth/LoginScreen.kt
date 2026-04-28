@@ -102,28 +102,50 @@ fun LoginScreen(
                 targetState = isSignUp,
                 label = "FieldsAnimation"
             ) { targetIsSignUp ->
-                Column {
-                    // Email Field
-                    ModernTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = "Email",
-                        leadingIcon = Icons.Default.Email,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-                    )
+                if (targetIsSignUp) {
+                    Column {
+                        ModernTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = "Email",
+                            leadingIcon = Icons.Default.Email,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                        )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    // Password Field
-                    ModernTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = "Password",
-                        leadingIcon = Icons.Default.Lock,
-                        isPassword = true,
-                        passwordVisible = passwordVisible,
-                        onPasswordToggle = { passwordVisible = !passwordVisible }
-                    )
+                        ModernTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = "Password",
+                            leadingIcon = Icons.Default.Lock,
+                            isPassword = true,
+                            passwordVisible = passwordVisible,
+                            onPasswordToggle = { passwordVisible = !passwordVisible }
+                        )
+                    }
+                } else {
+                    Column {
+                        ModernTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = "Email",
+                            leadingIcon = Icons.Default.Email,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        ModernTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = "Password",
+                            leadingIcon = Icons.Default.Lock,
+                            isPassword = true,
+                            passwordVisible = passwordVisible,
+                            onPasswordToggle = { passwordVisible = !passwordVisible }
+                        )
+                    }
                 }
             }
 

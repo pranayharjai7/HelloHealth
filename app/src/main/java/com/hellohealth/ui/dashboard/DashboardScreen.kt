@@ -41,7 +41,13 @@ fun DashboardScreen(
     authViewModel: AuthViewModel,
     dashboardViewModel: DashboardViewModel = hiltViewModel(),
     onLogout: () -> Unit,
-    onNavigateToWorkoutDetails: () -> Unit
+    onNavigateToWorkoutDetails: () -> Unit,
+    onNavigateToProfile: () -> Unit,
+    onNavigateToGoals: () -> Unit,
+    onNavigateToActivitySettings: () -> Unit,
+    onNavigateToFoodPreferences: () -> Unit,
+    onNavigateToInsights: () -> Unit,
+    onNavigateToHelp: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -195,12 +201,14 @@ fun DashboardScreen(
                 onDismiss = { showProfileMenu = false },
                 onOptionClick = { option ->
                     showProfileMenu = false
-                    if (option == "Sign Out") {
-                        showLogoutDialog = true
-                    } else {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("$option screen coming soon!")
-                        }
+                    when (option) {
+                        "Profile" -> onNavigateToProfile()
+                        "Daily Goals" -> onNavigateToGoals()
+                        "Activity Settings" -> onNavigateToActivitySettings()
+                        "Food Preferences" -> onNavigateToFoodPreferences()
+                        "Insights" -> onNavigateToInsights()
+                        "Help & Support" -> onNavigateToHelp()
+                        "Sign Out" -> showLogoutDialog = true
                     }
                 }
             )

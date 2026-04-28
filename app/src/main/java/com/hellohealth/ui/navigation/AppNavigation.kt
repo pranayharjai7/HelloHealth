@@ -8,11 +8,21 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.hellohealth.ui.activitysettings.ActivitySettingsScreen
+import com.hellohealth.ui.activitysettings.ActivitySettingsViewModel
 import com.hellohealth.ui.auth.AuthViewModel
 import com.hellohealth.ui.auth.LoginScreen
 import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
+import com.hellohealth.ui.foodpreferences.FoodPreferencesScreen
+import com.hellohealth.ui.foodpreferences.FoodPreferencesViewModel
+import com.hellohealth.ui.goals.GoalsScreen
+import com.hellohealth.ui.goals.GoalsViewModel
+import com.hellohealth.ui.help.HelpScreen
+import com.hellohealth.ui.insights.InsightsScreen
+import com.hellohealth.ui.insights.InsightsViewModel
+import com.hellohealth.ui.profile.ProfileScreen
 import com.hellohealth.ui.splash.SplashScreen
 
 @Composable
@@ -73,7 +83,13 @@ fun AppNavigation(
                 },
                 onNavigateToWorkoutDetails = {
                     navController.navigate(Screen.WorkoutDetails.route)
-                }
+                },
+                onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
+                onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
+                onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },
+                onNavigateToFoodPreferences = { navController.navigate(Screen.FoodPreferences.route) },
+                onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
+                onNavigateToHelp = { navController.navigate(Screen.Help.route) }
             )
         }
         
@@ -92,6 +108,34 @@ fun AppNavigation(
                 onBack = { navController.popBackStack() }
             )
         }
+
+        composable(Screen.Profile.route) {
+            ProfileScreen(viewModel = authViewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.Goals.route) {
+            val viewModel: GoalsViewModel = hiltViewModel()
+            GoalsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.ActivitySettings.route) {
+            val viewModel: ActivitySettingsViewModel = hiltViewModel()
+            ActivitySettingsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.FoodPreferences.route) {
+            val viewModel: FoodPreferencesViewModel = hiltViewModel()
+            FoodPreferencesScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.Insights.route) {
+            val viewModel: InsightsViewModel = hiltViewModel()
+            InsightsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.Help.route) {
+            HelpScreen(onBack = { navController.popBackStack() })
+        }
     }
 }
 
@@ -100,4 +144,10 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object Dashboard : Screen("dashboard")
     object WorkoutDetails : Screen("workout_details")
+    object Profile : Screen("profile")
+    object Goals : Screen("goals")
+    object ActivitySettings : Screen("activity_settings")
+    object FoodPreferences : Screen("food_preferences")
+    object Insights : Screen("insights")
+    object Help : Screen("help")
 }

@@ -103,6 +103,13 @@ dependencies {
     // Health Connect
     implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
 
+    // Supabase
+    val supabaseVersion = "2.5.0"
+    implementation("io.github.jan-tennert.supabase:supabase-kt:$supabaseVersion")
+    implementation("io.github.jan-tennert.supabase:postgrest-kt:$supabaseVersion")
+    implementation("io.github.jan-tennert.supabase:gotrue-kt:$supabaseVersion")
+    implementation("io.ktor:ktor-client-android:2.3.11")
+
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

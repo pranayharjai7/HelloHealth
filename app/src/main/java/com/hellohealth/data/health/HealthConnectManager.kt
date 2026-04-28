@@ -146,6 +146,42 @@ class HealthConnectManager @Inject constructor(
         }
     }
 
+    suspend fun fetchWeeklyStats(): com.hellohealth.domain.model.WeeklyStats {
+        if (healthConnectClient == null) return com.hellohealth.domain.model.WeeklyStats()
+        
+        val stats = mutableListOf<com.hellohealth.domain.model.DailyStat>()
+        val now = ZonedDateTime.now()
+        
+        for (i in 0..6) {
+            val date = now.minusDays(i.toLong())
+            val startOfDay = date.withHour(0).withMinute(0).withSecond(0).toInstant()
+            val endOfDay = date.withHour(23).withMinute(59).withSecond(59).toInstant()
+            val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfDay)
+            
+            val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
+            val calories = safeAggregate { aggregateActiveCalories(timeRangeFilter) } ?: 0.0
+            val sleep = try { 
+                val response = healthConnectClient.readRecords(
+                    ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = timeRangeFilter)
+                )
+                response.records.sumOf { java.time.Duration.between(it.startTime, it.endTime).toMinutes() }
+            } catch (e: Exception) { 0L }
+            val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt() ?: 0
+
+            stats.add(
+                com.hellohealth.domain.model.DailyStat(
+                    date = date.toLocalDate(),
+                    steps = steps,
+                    calories = calories,
+                    sleepMinutes = sleep,
+                    avgHeartRate = heartRate
+                )
+            )
+        }
+        
+        return com.hellohealth.domain.model.WeeklyStats(dailyStats = stats.reversed())
+    }
+
     private suspend fun <T> safeAggregate(block: suspend () -> T): T? {
         return try { block() } catch (e: Exception) { 
             Log.w("HealthConnectManager", "Aggregation failed: ${e.message}")

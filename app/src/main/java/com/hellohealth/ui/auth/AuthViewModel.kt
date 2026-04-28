@@ -2,6 +2,7 @@ package com.hellohealth.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.domain.model.User
 import com.hellohealth.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,8 @@ class AuthViewModel @Inject constructor(
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Checking)
     val authState = _authState.asStateFlow()
+    private val _currentUser = MutableStateFlow<User?>(null)
+    val currentUser = _currentUser.asStateFlow()
 
     init {
         checkSession()
@@ -24,8 +27,10 @@ class AuthViewModel @Inject constructor(
     fun checkSession() {
         viewModelScope.launch {
             if (authRepository.isUserLoggedIn()) {
+                _currentUser.value = authRepository.getCurrentUser()
                 _authState.value = AuthState.Authenticated
             } else {
+                _currentUser.value = null
                 _authState.value = AuthState.Unauthenticated
             }
         }
@@ -35,7 +40,12 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             val result = authRepository.signUp(email, password)
-            _authState.value = if (result.isSuccess) AuthState.Authenticated else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            _authState.value = if (result.isSuccess) {
+                _currentUser.value = authRepository.getCurrentUser()
+                AuthState.Authenticated
+            } else {
+                AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            }
         }
     }
 
@@ -43,7 +53,12 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             val result = authRepository.signIn(email, password)
-            _authState.value = if (result.isSuccess) AuthState.Authenticated else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            _authState.value = if (result.isSuccess) {
+                _currentUser.value = authRepository.getCurrentUser()
+                AuthState.Authenticated
+            } else {
+                AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            }
         }
     }
 
@@ -51,13 +66,19 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             val result = authRepository.signInWithGoogle(idToken, email, name, avatarUrl)
-            _authState.value = if (result.isSuccess) AuthState.Authenticated else AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            _authState.value = if (result.isSuccess) {
+                _currentUser.value = authRepository.getCurrentUser()
+                AuthState.Authenticated
+            } else {
+                AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            }
         }
     }
 
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
+            _currentUser.value = null
             _authState.value = AuthState.Unauthenticated
         }
     }

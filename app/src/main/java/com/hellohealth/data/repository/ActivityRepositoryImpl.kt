@@ -20,6 +20,14 @@ class ActivityRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun fetchWeeklyStats(): com.hellohealth.domain.model.WeeklyStats {
+        return if (healthConnectManager.isAvailable && healthConnectManager.hasAllPermissions()) {
+            healthConnectManager.fetchWeeklyStats()
+        } else {
+            com.hellohealth.domain.model.WeeklyStats()
+        }
+    }
+
     override suspend fun hasPermissions(): Boolean {
         return healthConnectManager.hasAllPermissions()
     }
