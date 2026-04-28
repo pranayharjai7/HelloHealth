@@ -2,6 +2,9 @@ package com.hellohealth.di
 
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
+import com.hellohealth.data.repository.HealthConnectRepository
+import com.hellohealth.domain.repository.ActivityRepository
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -11,15 +14,23 @@ import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-object HealthModule {
+abstract class HealthModule {
 
-    @Provides
+    @Binds
     @Singleton
-    fun provideHealthConnectClient(@ApplicationContext context: Context): HealthConnectClient? {
-        return if (HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE) {
-            HealthConnectClient.getOrCreate(context)
-        } else {
-            null
+    abstract fun bindActivityRepository(
+        healthConnectRepository: HealthConnectRepository
+    ): ActivityRepository
+
+    companion object {
+        @Provides
+        @Singleton
+        fun provideHealthConnectClient(@ApplicationContext context: Context): HealthConnectClient? {
+            return try {
+                HealthConnectClient.getOrCreate(context)
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 }

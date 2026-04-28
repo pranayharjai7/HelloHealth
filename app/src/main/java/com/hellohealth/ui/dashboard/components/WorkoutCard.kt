@@ -1,13 +1,15 @@
 package com.hellohealth.ui.dashboard.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,289 +17,225 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.HealthConnectClient
 import com.hellohealth.domain.model.WorkoutSummary
 
 @Composable
 fun WorkoutCard(
     summary: WorkoutSummary,
     hasPermissions: Boolean,
+    healthConnectAvailability: Int,
     isSyncing: Boolean,
+    lastSyncTime: Long?,
+    error: String?,
     onPermissionRequest: () -> Unit,
-    onSync: () -> Unit
+    onOpenSettings: () -> Unit,
+    onSync: () -> Unit,
+    onClick: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    
-    val infiniteTransition = rememberInfiniteTransition(label = "sync_rotation")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
-    val cardColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val accentColor = MaterialTheme.colorScheme.primary
-
-    Card(
+    ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            )
-            .clickable { if (hasPermissions) expanded = !expanded },
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            accentColor.copy(alpha = 0.08f),
-                            Color.Transparent
-                        )
-                    )
-                )
-                .padding(24.dp)
-        ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(accentColor.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FitnessCenter,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = "Activity Today",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (hasPermissions) {
-                            Text(
-                                text = if (isSyncing) "Syncing..." else "Synced with Galaxy Watch",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                
-                if (hasPermissions) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onSync,
-                            modifier = Modifier.graphicsLayer {
-                                if (isSyncing) rotationZ = rotation
-                            },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = "Sync Data",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        IconButton(
-                            onClick = { expanded = !expanded },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
-                            )
-                        ) {
-                            Icon(
-                                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = if (expanded) "Show Less" else "Show More",
-                                tint = accentColor
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (!hasPermissions) {
-                PermissionRequestContent(onPermissionRequest)
-            } else {
-                SummaryContent(summary)
-                
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    DetailedContent(summary)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SummaryContent(summary: WorkoutSummary) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        StatItem(
-            label = "Steps",
-            value = String.format("%,d", summary.steps),
-            unit = "",
-            icon = Icons.Default.DirectionsWalk,
-            color = Color(0xFF4CAF50)
-        )
-        StatItem(
-            label = "Calories",
-            value = summary.activeCalories.toInt().toString(),
-            unit = "kcal",
-            icon = Icons.Default.Whatshot,
-            color = Color(0xFFFF5722)
-        )
-        StatItem(
-            label = "Active Time",
-            value = summary.activeTimeMinutes.toString(),
-            unit = "min",
-            icon = Icons.Default.Timer,
-            color = Color(0xFF2196F3)
-        )
-    }
-}
-
-@Composable
-private fun DetailedContent(summary: WorkoutSummary) {
-    Column(modifier = Modifier.padding(top = 24.dp)) {
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-            thickness = 1.dp
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            StatItem(
-                label = "Distance",
-                value = String.format("%.2f", summary.distanceKm),
-                unit = "km",
-                icon = Icons.Default.Straighten,
-                color = Color(0xFF9C27B0)
-            )
-            
-            StatItem(
-                label = "Status",
-                value = "Active",
-                unit = "",
-                icon = Icons.Default.CheckCircle,
-                color = Color(0xFF009688)
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatItem(
-    label: String,
-    value: String,
-    unit: String,
-    icon: ImageVector,
-    color: Color
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(IntrinsicSize.Min)
+            .padding(horizontal = 24.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .clickable(enabled = hasPermissions, onClick = onClick),
+        shape = RoundedCornerShape(32.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(color.copy(alpha = 0.08f)),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(24.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(26.dp)
-            )
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Daily Activity",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = onSurfaceColor
+                        )
+                        if (lastSyncTime != null) {
+                            Text(
+                                text = "Updated ${formatLastSync(lastSyncTime)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = onSurfaceColor.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onSync,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(primaryColor.copy(alpha = 0.1f), CircleShape)
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = primaryColor)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Sync",
+                                tint = primaryColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                if (!hasPermissions) {
+                    PermissionRequestContent(
+                        availability = healthConnectAvailability,
+                        error = error,
+                        onPermissionRequest = onPermissionRequest,
+                        onOpenSettings = onOpenSettings
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Steps Progress Ring
+                        Box(contentAlignment = Alignment.Center) {
+                            val stepsProgress = (summary.steps.toFloat() / summary.stepsGoal).coerceIn(0f, 1f)
+                            val animatedProgress by animateFloatAsState(
+                                targetValue = if (isSyncing) 0f else stepsProgress,
+                                animationSpec = tween(durationMillis = 1000),
+                                label = "steps_progress"
+                            )
+
+                            CircularProgressIndicator(
+                                progress = { animatedProgress },
+                                modifier = Modifier.size(100.dp),
+                                color = primaryColor,
+                                strokeWidth = 10.dp,
+                                trackColor = primaryColor.copy(alpha = 0.1f),
+                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                            )
+                            
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = summary.steps.toString(),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Black,
+                                    color = onSurfaceColor
+                                )
+                                Text(
+                                    text = "steps",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = onSurfaceColor.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+
+                        // Other metrics
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            MetricSmall(
+                                value = "${summary.activeCalories.toInt()} kcal",
+                                label = "Active Burn",
+                                color = Color(0xFFFF7043)
+                            )
+                            MetricSmall(
+                                value = "${summary.activeTimeMinutes} min",
+                                label = "Active Time",
+                                color = Color(0xFF42A5F5)
+                            )
+                        }
+                    }
+                }
+            }
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = if (unit.isNotEmpty()) "$label ($unit)" else label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
     }
 }
 
 @Composable
-private fun PermissionRequestContent(onPermissionRequest: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+private fun MetricSmall(value: String, label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(text = value, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        }
+    }
+}
+
+@Composable
+private fun PermissionRequestContent(
+    availability: Int,
+    error: String?,
+    onPermissionRequest: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isAndroid14 = android.os.Build.VERSION.SDK_INT >= 34
+    
+    val message = when {
+        availability == HealthConnectClient.SDK_AVAILABLE || isAndroid14 -> "Connect HelloHealth to your fitness data to see your activity rings."
+        availability == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "Health Connect needs an update to work properly."
+        else -> "Health Connect setup is required to track your activity."
+    }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        if (error != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        
         Text(
-            text = "Track steps, calories, and more from your Samsung Galaxy Watch.",
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 16.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         Spacer(modifier = Modifier.height(20.dp))
         Button(
             onClick = onPermissionRequest,
             shape = RoundedCornerShape(16.dp),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
         ) {
-            Icon(Icons.Default.Add, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Enable Health Connect")
+            Text("Connect Now", fontWeight = FontWeight.Bold)
         }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        TextButton(onClick = onOpenSettings) {
+            Text("Open Health Settings", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+private fun formatLastSync(time: Long): String {
+    val diff = System.currentTimeMillis() - time
+    return when {
+        diff < 60_000 -> "just now"
+        diff < 3600_000 -> "${diff / 60_000} min ago"
+        else -> "today"
     }
 }
