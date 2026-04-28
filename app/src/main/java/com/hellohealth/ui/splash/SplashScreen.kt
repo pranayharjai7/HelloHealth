@@ -13,8 +13,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hellohealth.ui.auth.AuthState
 import com.hellohealth.ui.auth.AuthViewModel
 import kotlinx.coroutines.delay
@@ -60,12 +62,12 @@ fun SplashScreen(
                 Icon(
                     imageVector = Icons.Default.Favorite,
                     contentDescription = null,
-                    modifier = Modifier.size(100.dp),
+                    modifier = Modifier.size(120.dp),
                     tint = primaryColor
                 )
                 
                 // Pulse line overlay
-                Canvas(modifier = Modifier.size(60.dp)) {
+                Canvas(modifier = Modifier.size(72.dp)) {
                     val width = size.width
                     val height = size.height
                     val path = androidx.compose.ui.graphics.Path().apply {
@@ -79,20 +81,36 @@ fun SplashScreen(
                     drawPath(
                         path = path,
                         color = Color.White,
-                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
             }
             
             Spacer(modifier = Modifier.height(24.dp))
             
+            // Beautified Split Style Title
             Text(
-                text = "Hello Health",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onBackground
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Light, color = primaryColor)) {
+                        append("Hello ")
+                    }
+                    withStyle(
+                        SpanStyle(
+                            fontWeight = FontWeight.Black,
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(primaryColor, Color(0xFF1B5E20))
+                            )
+                        )
+                    ) {
+                        append("Health")
+                    }
+                },
+                fontSize = 42.sp,
+                letterSpacing = (-1.5).sp
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            
+            Spacer(modifier = Modifier.height(48.dp))
+            
             CircularProgressIndicator(
                 color = primaryColor,
                 strokeWidth = 3.dp,

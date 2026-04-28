@@ -11,18 +11,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +68,27 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("HelloHealth", fontWeight = FontWeight.Black) },
+                title = { 
+                    Text(
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Light, color = primaryColor)) {
+                                append("Hello")
+                            }
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.Black,
+                                    brush = Brush.horizontalGradient(
+                                        colors = listOf(primaryColor, Color(0xFF1B5E20))
+                                    )
+                                )
+                            ) {
+                                append("Health")
+                            }
+                        },
+                        fontSize = 24.sp,
+                        letterSpacing = (-0.5).sp
+                    )
+                },
                 actions = {
                     ProfileAvatar(
                         user = uiState.user,
@@ -285,7 +307,7 @@ fun ProfileBottomSheet(
                 )
             }
 
-            Divider(modifier = Modifier.padding(horizontal = 24.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
 
             // Menu Options
             Column(modifier = Modifier.padding(16.dp)) {
@@ -294,10 +316,10 @@ fun ProfileBottomSheet(
                 ProfileMenuItem(Icons.Default.Settings, "Activity Settings", onOptionClick)
                 ProfileMenuItem(Icons.Default.Restaurant, "Food Preferences", onOptionClick)
                 ProfileMenuItem(Icons.Default.Analytics, "Insights", onOptionClick)
-                ProfileMenuItem(Icons.Default.Help, "Help & Support", onOptionClick)
+                ProfileMenuItem(Icons.AutoMirrored.Filled.Help, "Help & Support", onOptionClick)
                 Spacer(modifier = Modifier.height(16.dp))
                 ProfileMenuItem(
-                    Icons.Default.Logout, 
+                    Icons.AutoMirrored.Filled.Logout,
                     "Sign Out", 
                     onOptionClick, 
                     color = MaterialTheme.colorScheme.error
