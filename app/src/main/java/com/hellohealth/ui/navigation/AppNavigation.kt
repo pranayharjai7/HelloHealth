@@ -3,6 +3,7 @@ package com.hellohealth.ui.navigation
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -74,8 +75,10 @@ fun AppNavigation(
             exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(300)) { -it } },
             popEnterTransition = { fadeIn(tween(400)) + slideInHorizontally(tween(400)) { -it } }
         ) {
+            val dashboardViewModel: DashboardViewModel = hiltViewModel()
             DashboardScreen(
                 authViewModel = authViewModel,
+                dashboardViewModel = dashboardViewModel,
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
@@ -102,7 +105,10 @@ fun AppNavigation(
                 fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 } 
             }
         ) {
-            val dashboardViewModel: DashboardViewModel = hiltViewModel()
+            val parentEntry = remember(navController) {
+                navController.getBackStackEntry(Screen.Dashboard.route)
+            }
+            val dashboardViewModel: DashboardViewModel = hiltViewModel(parentEntry)
             WorkoutDetailsScreen(
                 viewModel = dashboardViewModel,
                 onBack = { navController.popBackStack() }

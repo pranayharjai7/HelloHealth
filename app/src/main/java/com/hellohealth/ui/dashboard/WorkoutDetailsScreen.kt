@@ -26,6 +26,7 @@ import com.hellohealth.domain.model.ExerciseSession
 import com.hellohealth.ui.common.formatCalories
 import com.hellohealth.ui.common.formatProgress
 import com.hellohealth.ui.dashboard.components.MultiActivityRings
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +37,7 @@ fun WorkoutDetailsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val summary = uiState.healthSummary
+    val selectedDate = uiState.selectedDate
     
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -43,14 +45,30 @@ fun WorkoutDetailsScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Health Stats", fontWeight = FontWeight.Black) },
+                title = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Health Stats", fontWeight = FontWeight.Black)
+                        Text(
+                            text = if (selectedDate == LocalDate.now()) {
+                                "Today"
+                            } else {
+                                selectedDate.format(DateTimeFormatter.ofPattern("EEE, MMM d"))
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadHealthSummary() }) {
+                    IconButton(
+                        onClick = { viewModel.refreshSelectedDate() },
+                        enabled = uiState.hasHealthPermissions
+                    ) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = primaryColor)
                         } else {
@@ -255,7 +273,7 @@ fun WorkoutDetailsScreen(
 
                 if (summary.exerciseSessions.isEmpty()) {
                     item {
-                        EmptyState()
+                        EmptyState(selectedDate)
                     }
                 } else {
                     itemsIndexed(summary.exerciseSessions) { index, session ->
@@ -420,13 +438,20 @@ private fun RingLegendItem(label: String, color: Color, value: String) {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(selectedDate: LocalDate) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(Icons.Default.History, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f))
         Spacer(modifier = Modifier.height(16.dp))
-        Text("No workouts yet today.", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+        Text(
+            text = if (selectedDate == LocalDate.now()) {
+                "No workouts yet today."
+            } else {
+                "No workouts recorded for this day."
+            },
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+        )
     }
 }

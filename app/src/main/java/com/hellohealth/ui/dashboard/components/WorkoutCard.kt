@@ -21,10 +21,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.HealthConnectClient
 import com.hellohealth.domain.model.HealthSummary
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun WorkoutCard(
     summary: HealthSummary,
+    selectedDate: LocalDate,
     hasPermissions: Boolean,
     healthConnectAvailability: Int,
     isSyncing: Boolean,
@@ -43,7 +48,7 @@ fun WorkoutCard(
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(32.dp))
-            .clickable(enabled = hasPermissions, onClick = onClick),
+            .clickable(enabled = hasPermissions || lastSyncTime != null, onClick = onClick),
         shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
@@ -61,14 +66,18 @@ fun WorkoutCard(
                 ) {
                     Column {
                         Text(
-                            text = "Daily Activity",
+                            text = if (selectedDate == LocalDate.now()) {
+                                "Today's Activity"
+                            } else {
+                                "Activity on ${selectedDate.format(DateTimeFormatter.ofPattern("MMM d"))}"
+                            },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = onSurfaceColor
                         )
                         if (lastSyncTime != null) {
                             Text(
-                                text = "Updated ${formatLastSync(lastSyncTime)}",
+                                text = "Synced ${formatLastSync(lastSyncTime, selectedDate)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = onSurfaceColor.copy(alpha = 0.6f)
                             )
@@ -96,7 +105,7 @@ fun WorkoutCard(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                if (!hasPermissions) {
+                if (!hasPermissions && lastSyncTime == null) {
                     PermissionRequestContent(
                         availability = healthConnectAvailability,
                         error = error,
@@ -230,7 +239,12 @@ private fun PermissionRequestContent(
     }
 }
 
-private fun formatLastSync(time: Long): String {
+private fun formatLastSync(time: Long, selectedDate: LocalDate): String {
+    if (selectedDate != LocalDate.now()) {
+        val formatter = DateTimeFormatter.ofPattern("MMM d, HH:mm")
+        return formatter.format(Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()))
+    }
+
     val diff = System.currentTimeMillis() - time
     return when {
         diff < 60_000 -> "just now"

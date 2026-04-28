@@ -13,6 +13,8 @@ import com.hellohealth.domain.model.ExerciseSession
 import com.hellohealth.domain.model.HealthSummary
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
@@ -80,18 +82,25 @@ class HealthConnectManager @Inject constructor(
         return granted.containsAll(essentialPermissions)
     }
 
-    suspend fun fetchHealthSummary(goals: ActivityGoals): HealthSummary {
+    suspend fun fetchHealthSummary(
+        goals: ActivityGoals,
+        date: LocalDate = LocalDate.now()
+    ): HealthSummary {
         if (healthConnectClient == null) {
             return HealthSummary(
                 stepsGoal = goals.steps.toLong(),
                 caloriesGoal = goals.activeCalories.toDouble(),
-                activeTimeGoal = goals.activeMinutes.toLong()
+                activeTimeGoal = goals.activeMinutes.toLong(),
+                lastUpdated = 0L
             )
         }
 
-        val startOfDay = ZonedDateTime.now().withHour(0).withMinute(0).withSecond(0).toInstant()
-        val now = Instant.now()
-        val timeRangeFilter = TimeRangeFilter.between(startOfDay, now)
+        val zoneId = ZoneId.systemDefault()
+        val today = LocalDate.now(zoneId)
+        val startOfDay = date.atStartOfDay(zoneId).toInstant()
+        val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
+        val endOfRange = if (date == today) Instant.now() else endOfDay
+        val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfRange)
 
         return try {
             val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
@@ -100,13 +109,16 @@ class HealthConnectManager @Inject constructor(
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
             
             val totalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) } ?: activeCalories
-            var bmr = safeFetch { fetchLatestBasalMetabolicRate() } ?: 0.0
+            var bmr = safeFetch { fetchLatestBasalMetabolicRate(endOfRange) } ?: 0.0
             if (bmr == 0.0) bmr = 1800.0 // Default BMR if record missing
             
-            // Refine active calories if direct reading is low but total is high
-            val nowCalendar = java.util.Calendar.getInstance()
-            val minutesPassedToday = nowCalendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + nowCalendar.get(java.util.Calendar.MINUTE)
-            val bmrSoFar = (bmr / 1440.0) * minutesPassedToday
+            val minutesCovered = if (date == today) {
+                val nowCalendar = java.util.Calendar.getInstance()
+                nowCalendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + nowCalendar.get(java.util.Calendar.MINUTE)
+            } else {
+                24 * 60
+            }
+            val bmrSoFar = (bmr / 1440.0) * minutesCovered
             
             val refinedActiveCalories = if (totalCalories > bmrSoFar) {
                 maxOf(activeCalories, totalCalories - bmrSoFar)
@@ -114,15 +126,15 @@ class HealthConnectManager @Inject constructor(
                 activeCalories
             }
 
-            val weight = safeFetch { fetchLatestWeight() }
-            val height = safeFetch { fetchLatestHeight() }
-            val bodyFat = safeFetch { fetchLatestBodyFat() }
+            val weight = safeFetch { fetchLatestWeight(endOfRange) }
+            val height = safeFetch { fetchLatestHeight(endOfRange) }
+            val bodyFat = safeFetch { fetchLatestBodyFat(endOfRange) }
             val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt()
-            val oxygen = safeFetch { fetchLatestOxygenSaturation() }
-            val vo2max = safeFetch { fetchLatestVo2Max() }
-            val bloodPressure = safeFetch { fetchLatestBloodPressure() }
-            val glucose = safeFetch { fetchLatestBloodGlucose() }
-            val sleep = try { fetchLatestSleepSession() } catch (e: Exception) { null }
+            val oxygen = safeFetch { fetchLatestOxygenSaturation(endOfRange) }
+            val vo2max = safeFetch { fetchLatestVo2Max(endOfRange) }
+            val bloodPressure = safeFetch { fetchLatestBloodPressure(endOfRange) }
+            val glucose = safeFetch { fetchLatestBloodGlucose(endOfRange) }
+            val sleep = try { fetchSleepSummary(startOfDay, endOfRange) } catch (e: Exception) { null }
 
             val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
                 if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
@@ -150,14 +162,16 @@ class HealthConnectManager @Inject constructor(
                 sleepDurationMinutes = sleep?.first ?: 0,
                 sleepStartTime = sleep?.second,
                 sleepEndTime = sleep?.third,
-                exerciseSessions = sessions
+                exerciseSessions = sessions,
+                lastUpdated = System.currentTimeMillis()
             )
         } catch (e: Exception) {
             Log.e("HealthConnectManager", "Error in fetchHealthSummary", e)
             HealthSummary(
                 stepsGoal = goals.steps.toLong(),
                 caloriesGoal = goals.activeCalories.toDouble(),
-                activeTimeGoal = goals.activeMinutes.toLong()
+                activeTimeGoal = goals.activeMinutes.toLong(),
+                lastUpdated = 0L
             )
         }
     }
@@ -166,22 +180,21 @@ class HealthConnectManager @Inject constructor(
         if (healthConnectClient == null) return com.hellohealth.domain.model.WeeklyStats()
         
         val stats = mutableListOf<com.hellohealth.domain.model.DailyStat>()
-        val now = ZonedDateTime.now()
-        val startOfWeek = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val zoneId = ZoneId.systemDefault()
+        val today = LocalDate.now(zoneId)
+        val startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         
         for (i in 0..6) {
             val date = startOfWeek.plusDays(i.toLong())
-            val startOfDay = date.withHour(0).withMinute(0).withSecond(0).toInstant()
-            val endOfDay = date.withHour(23).withMinute(59).withSecond(59).toInstant()
-            val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfDay)
+            val startOfDay = date.atStartOfDay(zoneId).toInstant()
+            val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
+            val endOfRange = if (date == today) Instant.now() else endOfDay
+            val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfRange)
             
             val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
             val calories = safeAggregate { aggregateActiveCalories(timeRangeFilter) } ?: 0.0
-            val sleep = try { 
-                val response = healthConnectClient.readRecords(
-                    ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = timeRangeFilter)
-                )
-                response.records.sumOf { java.time.Duration.between(it.startTime, it.endTime).toMinutes() }
+            val sleep = try {
+                fetchSleepSummary(startOfDay, endOfRange)?.first ?: 0L
             } catch (e: Exception) { 0L }
             val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt() ?: 0
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
@@ -191,7 +204,7 @@ class HealthConnectManager @Inject constructor(
 
             stats.add(
                 com.hellohealth.domain.model.DailyStat(
-                    date = date.toLocalDate(),
+                    date = date,
                     steps = steps,
                     calories = calories,
                     activeMinutes = activeMinutes,
@@ -253,70 +266,88 @@ class HealthConnectManager @Inject constructor(
         return response?.get(HeartRateRecord.BPM_AVG) ?: 0L
     }
 
-    private suspend fun fetchLatestWeight(): Double? {
+    private suspend fun fetchLatestWeight(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.weight?.inKilograms
     }
 
-    private suspend fun fetchLatestHeight(): Double? {
+    private suspend fun fetchLatestHeight(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = HeightRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = HeightRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.height?.inMeters
     }
 
-    private suspend fun fetchLatestBodyFat(): Double? {
+    private suspend fun fetchLatestBodyFat(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = BodyFatRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = BodyFatRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.percentage?.value
     }
 
-    private suspend fun fetchLatestBasalMetabolicRate(): Double? {
+    private suspend fun fetchLatestBasalMetabolicRate(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = BasalMetabolicRateRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = BasalMetabolicRateRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.basalMetabolicRate?.inKilocaloriesPerDay
     }
 
-    private suspend fun fetchLatestOxygenSaturation(): Double? {
+    private suspend fun fetchLatestOxygenSaturation(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = OxygenSaturationRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = OxygenSaturationRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.percentage?.value
     }
 
-    private suspend fun fetchLatestVo2Max(): Double? {
+    private suspend fun fetchLatestVo2Max(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = Vo2MaxRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = Vo2MaxRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.vo2MillilitersPerMinuteKilogram
     }
 
-    private suspend fun fetchLatestBloodPressure(): Pair<Double, Double>? {
+    private suspend fun fetchLatestBloodPressure(before: Instant): Pair<Double, Double>? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = BloodPressureRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = BloodPressureRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         val record = response?.records?.firstOrNull() ?: return null
         return Pair(record.systolic.inMillimetersOfMercury, record.diastolic.inMillimetersOfMercury)
     }
 
-    private suspend fun fetchLatestBloodGlucose(): Double? {
+    private suspend fun fetchLatestBloodGlucose(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = BloodGlucoseRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(recordType = BloodGlucoseRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.level?.inMilligramsPerDeciliter
     }
 
-    private suspend fun fetchLatestSleepSession(): Triple<Long, Instant, Instant>? {
+    private suspend fun fetchSleepSummary(startOfDay: Instant, endOfRange: Instant): Triple<Long, Instant?, Instant?>? {
         val response = healthConnectClient?.readRecords(
-            ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = TimeRangeFilter.before(Instant.now()), ascendingOrder = false, pageSize = 1)
+            ReadRecordsRequest(
+                recordType = SleepSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.before(endOfRange),
+                ascendingOrder = false,
+                pageSize = 20
+            )
         )
-        val record = response?.records?.firstOrNull() ?: return null
-        val duration = java.time.Duration.between(record.startTime, record.endTime).toMinutes()
-        return Triple(duration, record.startTime, record.endTime)
+        val overlappingSessions = response?.records
+            ?.filter { it.endTime > startOfDay && it.startTime < endOfRange }
+            ?.takeIf { it.isNotEmpty() }
+            ?: return null
+
+        val totalDuration = overlappingSessions.sumOf { record ->
+            val overlapStart = if (record.startTime.isAfter(startOfDay)) record.startTime else startOfDay
+            val overlapEnd = if (record.endTime.isBefore(endOfRange)) record.endTime else endOfRange
+            java.time.Duration.between(overlapStart, overlapEnd).toMinutes().coerceAtLeast(0)
+        }
+
+        return Triple(
+            totalDuration,
+            overlappingSessions.minByOrNull { it.startTime }?.startTime,
+            overlappingSessions.maxByOrNull { it.endTime }?.endTime
+        )
     }
 
     private suspend fun fetchExerciseSessions(timeRangeFilter: TimeRangeFilter): List<ExerciseSession> {
