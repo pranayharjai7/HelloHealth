@@ -31,7 +31,7 @@ fun WorkoutDetailsScreen(
     viewModel: DashboardViewModel,
     onBack: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.collectAsState()
     val summary = uiState.workoutSummary
     
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -78,35 +78,45 @@ fun WorkoutDetailsScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // Activity Rings Section
                 item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(32.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
                     ) {
-                        MultiActivityRings(
-                            stepsProgress = summary.steps.toFloat() / summary.stepsGoal,
-                            caloriesProgress = summary.activeCalories.toFloat() / summary.caloriesGoal.toFloat(),
-                            minutesProgress = summary.activeTimeMinutes.toFloat() / summary.activeTimeGoal.toFloat(),
-                            modifier = Modifier.size(220.dp)
-                        )
-                        
-                        Spacer(modifier = Modifier.height(32.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            RingLegendItem("Steps", primaryColor, summary.steps.toString())
-                            RingLegendItem("Kcal", Color(0xFFFF7043), summary.activeCalories.toInt().toString())
-                            RingLegendItem("Min", Color(0xFF42A5F5), summary.activeTimeMinutes.toString())
+                            Box(
+                                modifier = Modifier.size(220.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                MultiActivityRings(
+                                    stepsProgress = summary.steps.toFloat() / summary.stepsGoal,
+                                    caloriesProgress = summary.activeCalories.toFloat() / summary.caloriesGoal.toFloat(),
+                                    minutesProgress = summary.activeTimeMinutes.toFloat() / summary.activeTimeGoal.toFloat(),
+                                    modifier = Modifier.size(200.dp)
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                RingLegendItem("Steps", primaryColor, summary.steps.toString())
+                                RingLegendItem("Kcal", Color(0xFFFF7043), summary.activeCalories.toInt().toString())
+                                RingLegendItem("Min", Color(0xFF42A5F5), summary.activeTimeMinutes.toString())
+                            }
                         }
                     }
                 }
@@ -158,6 +168,10 @@ fun WorkoutDetailsScreen(
     }
 }
 
+// Extension to fix the collectAsState issue in the previous turn if any
+@Composable
+private fun DashboardViewModel.collectAsState() = this.uiState.collectAsState()
+
 @Composable
 private fun StatCard(
     modifier: Modifier,
@@ -170,7 +184,7 @@ private fun StatCard(
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
@@ -257,8 +271,8 @@ private fun ExerciseSessionItem(session: ExerciseSession) {
 @Composable
 private fun RingLegendItem(label: String, color: Color, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(color))
-        Spacer(modifier = Modifier.height(8.dp))
+        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(color))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
     }
