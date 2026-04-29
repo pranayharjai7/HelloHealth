@@ -1,18 +1,64 @@
 package com.hellohealth.ui.dashboard
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Height
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.Opacity
+import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,19 +72,23 @@ import com.hellohealth.domain.model.ExerciseSession
 import com.hellohealth.ui.common.formatCalories
 import com.hellohealth.ui.common.formatProgress
 import com.hellohealth.ui.dashboard.components.MultiActivityRings
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutDetailsScreen(
     viewModel: DashboardViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenActivityDetail: (ExerciseSession) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val summary = uiState.healthSummary
     val selectedDate = uiState.selectedDate
-    
+
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
@@ -70,7 +120,11 @@ fun WorkoutDetailsScreen(
                         enabled = uiState.hasHealthPermissions
                     ) {
                         if (uiState.isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = primaryColor)
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = primaryColor
+                            )
                         } else {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
@@ -101,7 +155,6 @@ fun WorkoutDetailsScreen(
                 contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // 1. Activity Section (Core Rings)
                 item {
                     SectionHeader("Daily Activity")
                     ElevatedCard(
@@ -130,9 +183,9 @@ fun WorkoutDetailsScreen(
                                     modifier = Modifier.size(200.dp)
                                 )
                             }
-                            
+
                             Spacer(modifier = Modifier.height(24.dp))
-                            
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -141,10 +194,13 @@ fun WorkoutDetailsScreen(
                                 RingLegendItem("Cal", Color(0xFFFF7043), formatProgress(summary.activeCalories.toInt(), summary.caloriesGoal.toInt()))
                                 RingLegendItem("Min", Color(0xFF42A5F5), formatProgress(summary.activeTimeMinutes.toInt(), summary.activeTimeGoal.toInt()))
                             }
-                            
+
                             Spacer(modifier = Modifier.height(24.dp))
-                            
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
                                 MiniStat(Icons.Default.Route, "Distance", String.format("%.2f km", summary.distanceKm), Modifier.weight(1f))
                                 MiniStat(Icons.Default.LocalFireDepartment, "Total Burn", formatCalories(summary.totalCalories), Modifier.weight(1f))
                             }
@@ -152,7 +208,6 @@ fun WorkoutDetailsScreen(
                     }
                 }
 
-                // 2. Body Metrics Section
                 item {
                     SectionHeader("Body Metrics")
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -181,7 +236,6 @@ fun WorkoutDetailsScreen(
                     )
                 }
 
-                // 3. Heart & Vitals Section
                 item {
                     SectionHeader("Heart & Vitals")
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -212,7 +266,6 @@ fun WorkoutDetailsScreen(
                     }
                 }
 
-                // 4. Cardio Fitness Section
                 item {
                     SectionHeader("Cardio Fitness")
                     StatCard(
@@ -224,7 +277,6 @@ fun WorkoutDetailsScreen(
                     )
                 }
 
-                // 5. Sleep Section
                 item {
                     SectionHeader("Sleep")
                     ElevatedCard(
@@ -236,14 +288,21 @@ fun WorkoutDetailsScreen(
                         Column(modifier = Modifier.padding(20.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
-                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF5C6BC0).copy(alpha = 0.1f)),
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF5C6BC0).copy(alpha = 0.1f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(Icons.Default.Bedtime, null, tint = Color(0xFF5C6BC0), modifier = Modifier.size(20.dp))
                                 }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
-                                    Text("Sleep Duration", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                    Text(
+                                        "Sleep Duration",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
                                     Text(
                                         text = formatSleepDuration(summary.sleepDurationMinutes),
                                         style = MaterialTheme.typography.titleMedium,
@@ -258,7 +317,12 @@ fun WorkoutDetailsScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     SleepTimeInfo("Asleep", summary.sleepStartTime)
-                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), modifier = Modifier.size(16.dp))
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowForward,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                     SleepTimeInfo("Awake", summary.sleepEndTime)
                                 }
                             }
@@ -266,7 +330,6 @@ fun WorkoutDetailsScreen(
                     }
                 }
 
-                // 6. Activity Log
                 item {
                     SectionHeader("Activity Log")
                 }
@@ -277,10 +340,14 @@ fun WorkoutDetailsScreen(
                     }
                 } else {
                     itemsIndexed(summary.exerciseSessions) { index, session ->
-                        AnimatedSessionItem(session, index)
+                        AnimatedSessionItem(
+                            session = session,
+                            index = index,
+                            onClick = { onOpenActivityDetail(session) }
+                        )
                     }
                 }
-                
+
                 item { Spacer(modifier = Modifier.height(48.dp)) }
             }
         }
@@ -311,8 +378,8 @@ private fun MiniStat(icon: ImageVector, label: String, value: String, modifier: 
 }
 
 @Composable
-private fun SleepTimeInfo(label: String, time: java.time.Instant) {
-    val formatter = DateTimeFormatter.ofPattern("HH:mm").withZone(java.time.ZoneId.systemDefault())
+private fun SleepTimeInfo(label: String, time: Instant) {
+    val formatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
     Column {
         Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         Text(formatter.format(time), fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -342,23 +409,39 @@ private fun StatCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Box(
-                modifier = Modifier.size(32.dp).clip(CircleShape).background(color.copy(alpha = 0.1f)),
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            Text(
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
 
 @Composable
-private fun AnimatedSessionItem(session: ExerciseSession, index: Int) {
+private fun AnimatedSessionItem(
+    session: ExerciseSession,
+    index: Int,
+    onClick: () -> Unit
+) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(index * 100L)
+        delay(index * 100L)
         visible = true
     }
 
@@ -367,12 +450,17 @@ private fun AnimatedSessionItem(session: ExerciseSession, index: Int) {
         enter = slideInHorizontally() + fadeIn(),
         modifier = Modifier.fillMaxWidth()
     ) {
-        ExerciseSessionItem(session)
+        ExerciseSessionItem(session = session, onClick = onClick)
     }
 }
 
 @Composable
-private fun ExerciseSessionItem(session: ExerciseSession) {
+private fun ExerciseSessionItem(
+    session: ExerciseSession,
+    onClick: () -> Unit
+) {
+    val isClickable = session.id.isNotBlank()
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -380,7 +468,10 @@ private fun ExerciseSessionItem(session: ExerciseSession) {
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = isClickable, onClick = onClick)
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -391,7 +482,7 @@ private fun ExerciseSessionItem(session: ExerciseSession) {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = when(session.typeLabel) {
+                    imageVector = when (session.typeLabel) {
                         "Running" -> Icons.AutoMirrored.Filled.DirectionsRun
                         "Walking" -> Icons.AutoMirrored.Filled.DirectionsWalk
                         "Cycling" -> Icons.AutoMirrored.Filled.DirectionsBike
@@ -410,21 +501,39 @@ private fun ExerciseSessionItem(session: ExerciseSession) {
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "${session.durationMinutes} min • ${session.startTime.atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))}",
+                    text = sessionMetadataLabel(session),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
-            if (session.calories != null) {
-                Text(
-                    text = formatCalories(session.calories),
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFFF7043),
-                    fontSize = 14.sp
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (session.calories != null) {
+                    Text(
+                        text = formatCalories(session.calories),
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFFFF7043),
+                        fontSize = 14.sp
+                    )
+                }
+                if (isClickable) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Open activity detail",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                    )
+                }
             }
         }
     }
+}
+
+private fun sessionMetadataLabel(session: ExerciseSession): String {
+    val startTime = session.startTime.atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("HH:mm"))
+    return "${session.durationMinutes} min - $startTime"
 }
 
 @Composable
@@ -440,10 +549,17 @@ private fun RingLegendItem(label: String, color: Color, value: String) {
 @Composable
 private fun EmptyState(selectedDate: LocalDate) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(32.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(Icons.Default.History, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f))
+        Icon(
+            Icons.Default.History,
+            null,
+            modifier = Modifier.size(48.dp),
+            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
+        )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = if (selectedDate == LocalDate.now()) {

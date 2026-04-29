@@ -3,6 +3,7 @@ package com.hellohealth.data.repository
 import android.content.Context
 import android.content.Intent
 import com.hellohealth.data.health.HealthConnectManager
+import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.DailyHealthSnapshot
 import com.hellohealth.domain.model.ExerciseSession
@@ -24,6 +25,7 @@ import javax.inject.Singleton
 
 @Serializable
 private data class ExerciseSessionSnapshotDto(
+    val id: String = "",
     val title: String? = null,
     val type: Int,
     val type_label: String,
@@ -31,7 +33,9 @@ private data class ExerciseSessionSnapshotDto(
     val end_time: String,
     val duration_minutes: Long,
     val calories: Double? = null,
-    val distance_km: Double? = null
+    val distance_km: Double? = null,
+    val source_package_name: String? = null,
+    val source_app_name: String? = null
 )
 
 @Serializable
@@ -114,6 +118,19 @@ class ActivityRepositoryImpl @Inject constructor(
                 .decodeList<DailyHealthSnapshotDto>()
                 .map { it.toDomain() }
         }.getOrElse { emptyList() }
+    }
+
+    override suspend fun getExerciseSessionDetail(
+        sessionId: String,
+        startTimeHint: Instant?,
+        endTimeHint: Instant?
+    ): ActivityDetail? {
+        if (sessionId.isBlank()) return null
+        return healthConnectManager.fetchExerciseSessionDetail(
+            sessionId = sessionId,
+            startTimeHint = startTimeHint,
+            endTimeHint = endTimeHint
+        )
     }
 
     override suspend fun fetchWeeklyStats(): com.hellohealth.domain.model.WeeklyStats {
@@ -219,6 +236,7 @@ private fun DailyHealthSnapshotDto.toDomain(): DailyHealthSnapshot {
             sleepEndTime = sleep_end_time?.let(::parseInstant),
             exerciseSessions = exercise_sessions.map {
                 ExerciseSession(
+                    id = it.id,
                     title = it.title,
                     type = it.type,
                     typeLabel = it.type_label,
@@ -226,7 +244,9 @@ private fun DailyHealthSnapshotDto.toDomain(): DailyHealthSnapshot {
                     endTime = parseInstant(it.end_time),
                     durationMinutes = it.duration_minutes,
                     calories = it.calories,
-                    distanceKm = it.distance_km
+                    distanceKm = it.distance_km,
+                    sourcePackageName = it.source_package_name,
+                    sourceAppName = it.source_app_name
                 )
             },
             lastUpdated = lastSyncedAt.toEpochMilli()
@@ -268,6 +288,7 @@ private fun dailyHealthSnapshotDtoFrom(
         sleep_end_time = summary.sleepEndTime?.toString(),
         exercise_sessions = summary.exerciseSessions.map {
             ExerciseSessionSnapshotDto(
+                id = it.id,
                 title = it.title,
                 type = it.type,
                 type_label = it.typeLabel,
@@ -275,7 +296,9 @@ private fun dailyHealthSnapshotDtoFrom(
                 end_time = it.endTime.toString(),
                 duration_minutes = it.durationMinutes,
                 calories = it.calories,
-                distance_km = it.distanceKm
+                distance_km = it.distanceKm,
+                source_package_name = it.sourcePackageName,
+                source_app_name = it.sourceAppName
             )
         },
         data_source = SnapshotDataSource.HEALTH_CONNECT.name.lowercase(),

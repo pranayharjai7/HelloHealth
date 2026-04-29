@@ -8,15 +8,21 @@ import androidx.health.connect.client.records.*
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.hellohealth.domain.model.ActivityChartPoint
+import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
+import com.hellohealth.domain.model.ActivityRoutePoint
+import com.hellohealth.domain.model.ActivityTimelineEntry
 import com.hellohealth.domain.model.ExerciseSession
 import com.hellohealth.domain.model.HealthSummary
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
+import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -68,7 +74,9 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(BloodPressureRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(Vo2MaxRecord::class),
-        HealthPermission.getReadPermission(NutritionRecord::class)
+        HealthPermission.getReadPermission(NutritionRecord::class),
+        HealthPermission.getReadPermission(ElevationGainedRecord::class),
+        HealthPermission.getReadPermission(SpeedRecord::class)
     )
 
     suspend fun hasAllPermissions(): Boolean {
@@ -217,6 +225,177 @@ class HealthConnectManager @Inject constructor(
         return com.hellohealth.domain.model.WeeklyStats(dailyStats = stats)
     }
 
+    suspend fun fetchExerciseSessionDetail(
+        sessionId: String,
+        startTimeHint: Instant? = null,
+        endTimeHint: Instant? = null
+    ): ActivityDetail? {
+        val client = healthConnectClient ?: return null
+        if (sessionId.isBlank()) return null
+
+        return try {
+            val session = findExerciseSessionRecord(
+                client = client,
+                sessionId = sessionId,
+                startTimeHint = startTimeHint,
+                endTimeHint = endTimeHint
+            ) ?: return null
+
+            val sessionRange = TimeRangeFilter.between(session.startTime, session.endTime)
+            val aggregates = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(
+                        ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL,
+                        DistanceRecord.DISTANCE_TOTAL,
+                        StepsRecord.COUNT_TOTAL,
+                        ElevationGainedRecord.ELEVATION_GAINED_TOTAL
+                    ),
+                    timeRangeFilter = sessionRange
+                )
+            )
+
+            val heartRateSamples = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = HeartRateRecord::class,
+                    timeRangeFilter = sessionRange
+                )
+            ).records
+                .flatMap { it.samples }
+                .filter { it.time in session.startTime..session.endTime }
+                .sortedBy { it.time }
+
+            val speedSamples = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = SpeedRecord::class,
+                    timeRangeFilter = sessionRange
+                )
+            ).records
+                .flatMap { it.samples }
+                .filter { it.time in session.startTime..session.endTime }
+                .sortedBy { it.time }
+
+            val routeResult = session.exerciseRouteResult
+            val routePoints = when (routeResult) {
+                is ExerciseRouteResult.Data -> downSampleRoutePoints(
+                    routeResult.exerciseRoute.route
+                        .sortedBy { it.time }
+                        .map {
+                            ActivityRoutePoint(
+                                latitude = it.latitude,
+                                longitude = it.longitude,
+                                altitudeMeters = it.altitude?.inMeters,
+                                minutesFromStart = minutesFromSessionStart(session.startTime, it.time)
+                            )
+                        }
+                )
+                else -> emptyList()
+            }
+
+            val routeMessage = when (routeResult) {
+                is ExerciseRouteResult.ConsentRequired ->
+                    "Route access requires Health Connect route permission for this workout."
+                is ExerciseRouteResult.NoData ->
+                    "Route data unavailable for this workout."
+                is ExerciseRouteResult.Data ->
+                    if (routePoints.isEmpty()) "Route data unavailable for this workout." else null
+                else -> "Route data unavailable for this workout."
+            }
+
+            val heartRatePoints = downSampleChartPoints(
+                heartRateSamples.map {
+                    ActivityChartPoint(
+                        minutesFromStart = minutesFromSessionStart(session.startTime, it.time),
+                        value = it.beatsPerMinute.toFloat()
+                    )
+                }
+            )
+
+            val pacePointsFromSpeed = speedSamples.mapNotNull { sample ->
+                speedToPaceSecondsPerKm(sample.speed.inMetersPerSecond)?.let { paceSeconds ->
+                    ActivityChartPoint(
+                        minutesFromStart = minutesFromSessionStart(session.startTime, sample.time),
+                        value = paceSeconds.toFloat()
+                    )
+                }
+            }
+
+            val pacePoints = downSampleChartPoints(
+                if (pacePointsFromSpeed.isNotEmpty()) {
+                    pacePointsFromSpeed
+                } else {
+                    derivePacePointsFromRoute(routePoints, session.durationSeconds())
+                }
+            )
+
+            val elevationPoints = downSampleChartPoints(
+                routePoints.mapNotNull { point ->
+                    point.altitudeMeters?.let { altitude ->
+                        ActivityChartPoint(
+                            minutesFromStart = point.minutesFromStart,
+                            value = altitude.toFloat()
+                        )
+                    }
+                }
+            )
+
+            val distanceKm = aggregates[DistanceRecord.DISTANCE_TOTAL]?.inKilometers
+            val caloriesBurned = aggregates[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories
+            val steps = aggregates[StepsRecord.COUNT_TOTAL]
+            val duration = Duration.between(session.startTime, session.endTime)
+            val activeMinutes = duration.toMinutes()
+            val moveMinutes = (activeMinutes - pausedMinutes(session.segments)).coerceAtLeast(0L)
+            val averageHeartRate = heartRateSamples
+                .takeIf { it.isNotEmpty() }
+                ?.map { it.beatsPerMinute.toDouble() }
+                ?.average()
+                ?.roundToInt()
+            val maxHeartRate = heartRateSamples.maxOfOrNull { it.beatsPerMinute.toInt() }
+            val averagePaceSecondsPerKm = distanceKm
+                ?.takeIf { it > 0.0 }
+                ?.let { duration.seconds / it.toDouble() }
+            val fastestPaceSecondsPerKm = speedSamples
+                .maxOfOrNull { it.speed.inMetersPerSecond }
+                ?.let(::speedToPaceSecondsPerKm)
+            val derivedElevationGain = calculateElevationGain(routePoints)
+            val derivedElevationLoss = calculateElevationLoss(routePoints)
+            val elevationGainMeters = aggregates[ElevationGainedRecord.ELEVATION_GAINED_TOTAL]?.inMeters
+                ?: derivedElevationGain
+
+            ActivityDetail(
+                sessionId = session.metadata.id,
+                title = session.title?.takeIf { it.isNotBlank() }
+                    ?: buildFallbackSessionTitle(getExerciseTypeLabel(session.exerciseType), session.startTime),
+                activityName = getExerciseTypeLabel(session.exerciseType),
+                startTime = session.startTime,
+                endTime = session.endTime,
+                durationSeconds = duration.seconds,
+                caloriesBurned = caloriesBurned,
+                distanceKm = distanceKm,
+                steps = steps,
+                activeMinutes = activeMinutes,
+                moveMinutes = moveMinutes,
+                averageHeartRate = averageHeartRate,
+                maxHeartRate = maxHeartRate,
+                averagePaceSecondsPerKm = averagePaceSecondsPerKm,
+                fastestPaceSecondsPerKm = fastestPaceSecondsPerKm,
+                elevationGainMeters = elevationGainMeters,
+                elevationLossMeters = derivedElevationLoss,
+                heartRatePoints = heartRatePoints,
+                pacePoints = pacePoints,
+                elevationPoints = elevationPoints,
+                routePoints = routePoints,
+                routeMessage = routeMessage,
+                timeline = buildActivityTimeline(session),
+                dataSourceLabel = "Health Connect",
+                syncedFromLabel = resolveSourceAppName(session.metadata.dataOrigin.packageName)
+                    ?: session.metadata.dataOrigin.packageName.takeIf { it.isNotBlank() }
+            )
+        } catch (e: Exception) {
+            Log.e("HealthConnectManager", "Failed to load exercise detail for $sessionId", e)
+            null
+        }
+    }
+
     private suspend fun <T> safeAggregate(block: suspend () -> T): T? {
         return try { block() } catch (e: Exception) { 
             Log.w("HealthConnectManager", "Aggregation failed: ${e.message}")
@@ -360,6 +539,7 @@ class HealthConnectManager @Inject constructor(
                 AggregateRequest(metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, DistanceRecord.DISTANCE_TOTAL), timeRangeFilter = TimeRangeFilter.between(record.startTime, record.endTime))
             )
             ExerciseSession(
+                id = record.metadata.id,
                 title = record.title,
                 type = record.exerciseType,
                 typeLabel = getExerciseTypeLabel(record.exerciseType),
@@ -367,9 +547,84 @@ class HealthConnectManager @Inject constructor(
                 endTime = record.endTime,
                 durationMinutes = java.time.Duration.between(record.startTime, record.endTime).toMinutes(),
                 calories = metrics[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories,
-                distanceKm = metrics[DistanceRecord.DISTANCE_TOTAL]?.inKilometers
+                distanceKm = metrics[DistanceRecord.DISTANCE_TOTAL]?.inKilometers,
+                sourcePackageName = record.metadata.dataOrigin.packageName.takeIf { it.isNotBlank() },
+                sourceAppName = resolveSourceAppName(record.metadata.dataOrigin.packageName)
+            )
+        }.sortedByDescending { it.startTime }
+    }
+
+    private suspend fun findExerciseSessionRecord(
+        client: HealthConnectClient,
+        sessionId: String,
+        startTimeHint: Instant?,
+        endTimeHint: Instant?
+    ): ExerciseSessionRecord? {
+        val zoneId = ZoneId.systemDefault()
+        val fallbackEnd = endTimeHint ?: Instant.now()
+        val fallbackStart = startTimeHint ?: fallbackEnd.minus(Duration.ofDays(2))
+        val request = ReadRecordsRequest(
+            recordType = ExerciseSessionRecord::class,
+            timeRangeFilter = TimeRangeFilter.between(
+                fallbackStart.minus(Duration.ofHours(12)),
+                fallbackEnd.plus(Duration.ofHours(12))
+            ),
+            ascendingOrder = true,
+            pageSize = 200
+        )
+
+        return client.readRecords(request).records.firstOrNull { it.metadata.id == sessionId }
+            ?: client.readRecords(
+                ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(
+                        ZonedDateTime.now(zoneId).minusDays(30).toInstant(),
+                        Instant.now()
+                    ),
+                    ascendingOrder = false,
+                    pageSize = 500
+                )
+            ).records.firstOrNull { it.metadata.id == sessionId }
+    }
+
+    private fun buildActivityTimeline(session: ExerciseSessionRecord): List<ActivityTimelineEntry> {
+        val entries = mutableListOf<ActivityTimelineEntry>()
+        entries += ActivityTimelineEntry(
+            timestamp = session.startTime,
+            title = "Workout started",
+            subtitle = getExerciseTypeLabel(session.exerciseType),
+            value = formatClockTime(session.startTime)
+        )
+
+        session.segments.forEach { segment ->
+            entries += ActivityTimelineEntry(
+                timestamp = segment.startTime,
+                title = getExerciseSegmentLabel(segment.segmentType),
+                subtitle = formatDurationCompact(Duration.between(segment.startTime, segment.endTime)),
+                value = segment.repetitions.takeIf { it > 0 }?.let { "$it reps" }
             )
         }
+
+        session.laps.forEachIndexed { index, lap ->
+            entries += ActivityTimelineEntry(
+                timestamp = lap.endTime,
+                title = "Lap ${index + 1}",
+                subtitle = formatDurationCompact(Duration.between(lap.startTime, lap.endTime)),
+                value = lap.length?.inMeters?.takeIf { it > 0.0 }?.let { meters ->
+                    if (meters >= 1000) String.format("%.2f km", meters / 1000.0)
+                    else "${meters.roundToInt()} m"
+                }
+            )
+        }
+
+        entries += ActivityTimelineEntry(
+            timestamp = session.endTime,
+            title = "Workout finished",
+            subtitle = formatDurationCompact(Duration.between(session.startTime, session.endTime)),
+            value = formatClockTime(session.endTime)
+        )
+
+        return entries.sortedBy { it.timestamp }
     }
 
     private fun getExerciseTypeLabel(type: Int): String {
@@ -386,4 +641,155 @@ class HealthConnectManager @Inject constructor(
             else -> "Workout"
         }
     }
+
+    private fun buildFallbackSessionTitle(activityName: String, startTime: Instant): String {
+        val hour = startTime.atZone(ZoneId.systemDefault()).hour
+        val partOfDay = when {
+            hour < 12 -> "Morning"
+            hour < 17 -> "Afternoon"
+            else -> "Evening"
+        }
+        return "$partOfDay $activityName"
+    }
+
+    private fun pausedMinutes(segments: List<ExerciseSegment>): Long {
+        return segments
+            .filter {
+                it.segmentType == ExerciseSegment.EXERCISE_SEGMENT_TYPE_PAUSE ||
+                    it.segmentType == ExerciseSegment.EXERCISE_SEGMENT_TYPE_REST
+            }
+            .sumOf { Duration.between(it.startTime, it.endTime).toMinutes() }
+    }
+
+    private fun speedToPaceSecondsPerKm(metersPerSecond: Double): Double? {
+        if (metersPerSecond <= 0.0) return null
+        return 1000.0 / metersPerSecond
+    }
+
+    private fun calculateElevationGain(routePoints: List<ActivityRoutePoint>): Double? {
+        val altitudes = routePoints.mapNotNull { it.altitudeMeters }
+        if (altitudes.size < 2) return null
+        return routePoints.zipWithNext().sumOf { (current, next) ->
+            val rise = (next.altitudeMeters ?: return@sumOf 0.0) - (current.altitudeMeters ?: return@sumOf 0.0)
+            rise.takeIf { it > 0.0 } ?: 0.0
+        }.takeIf { it > 0.0 }
+    }
+
+    private fun calculateElevationLoss(routePoints: List<ActivityRoutePoint>): Double? {
+        val altitudes = routePoints.mapNotNull { it.altitudeMeters }
+        if (altitudes.size < 2) return null
+        return routePoints.zipWithNext().sumOf { (current, next) ->
+            val drop = (current.altitudeMeters ?: return@sumOf 0.0) - (next.altitudeMeters ?: return@sumOf 0.0)
+            drop.takeIf { it > 0.0 } ?: 0.0
+        }.takeIf { it > 0.0 }
+    }
+
+    private fun derivePacePointsFromRoute(
+        routePoints: List<ActivityRoutePoint>,
+        durationSeconds: Long
+    ): List<ActivityChartPoint> {
+        if (routePoints.size < 2 || durationSeconds <= 0) return emptyList()
+        return routePoints.zipWithNext().mapNotNull { (current, next) ->
+            val seconds = (next.minutesFromStart - current.minutesFromStart) * 60f
+            if (seconds <= 0f) return@mapNotNull null
+            val meters = haversineMeters(
+                startLat = current.latitude,
+                startLon = current.longitude,
+                endLat = next.latitude,
+                endLon = next.longitude
+            )
+            if (meters <= 2.0) return@mapNotNull null
+            speedToPaceSecondsPerKm(meters / seconds)?.let { paceSeconds ->
+                ActivityChartPoint(
+                    minutesFromStart = next.minutesFromStart,
+                    value = paceSeconds.toFloat()
+                )
+            }
+        }
+    }
+
+    private fun haversineMeters(
+        startLat: Double,
+        startLon: Double,
+        endLat: Double,
+        endLon: Double
+    ): Double {
+        val earthRadiusMeters = 6_371_000.0
+        val latDistance = Math.toRadians(endLat - startLat)
+        val lonDistance = Math.toRadians(endLon - startLon)
+        val a = kotlin.math.sin(latDistance / 2) * kotlin.math.sin(latDistance / 2) +
+            kotlin.math.cos(Math.toRadians(startLat)) * kotlin.math.cos(Math.toRadians(endLat)) *
+            kotlin.math.sin(lonDistance / 2) * kotlin.math.sin(lonDistance / 2)
+        val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+        return earthRadiusMeters * c
+    }
+
+    private fun downSampleChartPoints(
+        points: List<ActivityChartPoint>,
+        maxPoints: Int = 120
+    ): List<ActivityChartPoint> {
+        if (points.size <= maxPoints) return points
+        val step = points.size.toFloat() / maxPoints.toFloat()
+        return buildList {
+            var index = 0f
+            repeat(maxPoints) {
+                add(points[index.toInt().coerceAtMost(points.lastIndex)])
+                index += step
+            }
+        }
+    }
+
+    private fun downSampleRoutePoints(
+        points: List<ActivityRoutePoint>,
+        maxPoints: Int = 300
+    ): List<ActivityRoutePoint> {
+        if (points.size <= maxPoints) return points
+        val step = points.size.toFloat() / maxPoints.toFloat()
+        return buildList {
+            var index = 0f
+            repeat(maxPoints) {
+                add(points[index.toInt().coerceAtMost(points.lastIndex)])
+                index += step
+            }
+        }
+    }
+
+    private fun resolveSourceAppName(packageName: String?): String? {
+        val safePackageName = packageName?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching {
+            val appInfo = context.packageManager.getApplicationInfo(safePackageName, 0)
+            context.packageManager.getApplicationLabel(appInfo).toString()
+        }.getOrNull()
+    }
+
+    private fun minutesFromSessionStart(startTime: Instant, sampleTime: Instant): Float {
+        return Duration.between(startTime, sampleTime).seconds.coerceAtLeast(0).toFloat() / 60f
+    }
+
+    private fun formatDurationCompact(duration: Duration): String {
+        val totalMinutes = duration.toMinutes()
+        val hours = totalMinutes / 60
+        val minutes = totalMinutes % 60
+        return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+    }
+
+    private fun formatClockTime(time: Instant): String {
+        return time.atZone(ZoneId.systemDefault()).toLocalTime().toString().take(5)
+    }
+
+    private fun getExerciseSegmentLabel(type: Int): String {
+        return when (type) {
+            ExerciseSegment.EXERCISE_SEGMENT_TYPE_PAUSE -> "Paused"
+            ExerciseSegment.EXERCISE_SEGMENT_TYPE_REST -> "Recovery"
+            ExerciseSegment.EXERCISE_SEGMENT_TYPE_RUNNING -> "Running interval"
+            ExerciseSegment.EXERCISE_SEGMENT_TYPE_WALKING -> "Walking interval"
+            ExerciseSegment.EXERCISE_SEGMENT_TYPE_BIKING -> "Cycling interval"
+            ExerciseSegment.EXERCISE_SEGMENT_TYPE_STRETCHING -> "Stretch block"
+            ExerciseSegment.EXERCISE_SEGMENT_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "HIIT block"
+            else -> "Workout segment"
+        }
+    }
+
+    private fun ExerciseSessionRecord.durationSeconds(): Long =
+        Duration.between(startTime, endTime).seconds
 }

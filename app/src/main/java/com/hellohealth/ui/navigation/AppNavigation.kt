@@ -4,11 +4,15 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.navigation.NavType
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.hellohealth.ui.activitydetail.ActivityDetailScreen
+import com.hellohealth.ui.activitydetail.ActivityDetailViewModel
 import com.hellohealth.ui.activitysettings.ActivitySettingsScreen
 import com.hellohealth.ui.activitysettings.ActivitySettingsViewModel
 import com.hellohealth.ui.auth.AuthViewModel
@@ -111,6 +115,44 @@ fun AppNavigation(
             val dashboardViewModel: DashboardViewModel = hiltViewModel(parentEntry)
             WorkoutDetailsScreen(
                 viewModel = dashboardViewModel,
+                onBack = { navController.popBackStack() },
+                onOpenActivityDetail = { session ->
+                    if (session.id.isNotBlank()) {
+                        navController.navigate(
+                            Screen.ActivityDetail.createRoute(
+                                activityId = session.id,
+                                sessionStart = session.startTime.toEpochMilli(),
+                                sessionEnd = session.endTime.toEpochMilli()
+                            )
+                        )
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.ActivityDetail.route,
+            arguments = listOf(
+                navArgument(Screen.ActivityDetail.activityIdArg) { type = NavType.StringType },
+                navArgument(Screen.ActivityDetail.sessionStartArg) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+                navArgument(Screen.ActivityDetail.sessionEndArg) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                }
+            ),
+            enterTransition = {
+                fadeIn(tween(350)) + slideInHorizontally(tween(350)) { it / 3 }
+            },
+            exitTransition = {
+                fadeOut(tween(250)) + slideOutHorizontally(tween(250)) { it / 3 }
+            }
+        ) {
+            val viewModel: ActivityDetailViewModel = hiltViewModel()
+            ActivityDetailScreen(
+                viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -150,6 +192,19 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object Dashboard : Screen("dashboard")
     object WorkoutDetails : Screen("workout_details")
+    object ActivityDetail : Screen("activity_detail/{activityId}?sessionStart={sessionStart}&sessionEnd={sessionEnd}") {
+        const val activityIdArg = "activityId"
+        const val sessionStartArg = "sessionStart"
+        const val sessionEndArg = "sessionEnd"
+
+        fun createRoute(
+            activityId: String,
+            sessionStart: Long,
+            sessionEnd: Long
+        ): String {
+            return "activity_detail/$activityId?sessionStart=$sessionStart&sessionEnd=$sessionEnd"
+        }
+    }
     object Profile : Screen("profile")
     object Goals : Screen("goals")
     object ActivitySettings : Screen("activity_settings")
