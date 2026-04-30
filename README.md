@@ -1,60 +1,89 @@
 # 🌿 HelloHealth
 
-[![Android](https://img.shields.io/badge/Platform-Android-brightgreen.svg)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/Language-Kotlin-orange.svg)](https://kotlinlang.org)
-[![Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-blue.svg)](https://developer.android.com/jetpack/compose)
-[![Health Connect](https://img.shields.io/badge/Integration-Health%20Connect-red.svg)](https://developer.android.com/health-and-fitness/guides/health-connect)
+[![Android](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
+[![Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Health Connect](https://img.shields.io/badge/Integration-Health%20Connect-E84135?style=for-the-badge&logo=googlefit&logoColor=white)](https://developer.android.com/health-and-fitness/guides/health-connect)
+[![Supabase](https://img.shields.io/badge/Backend-Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
 
-**HelloHealth** is a modern, privacy-focused health and fitness tracking application for Android. It serves as a unified hub for your wellness journey, leveraging the power of **Health Connect** to aggregate data from your favorite fitness apps and wearables into a single, beautiful interface.
+**HelloHealth** is a premier, privacy-centric health and fitness ecosystem for Android. Designed for the modern user, it transforms fragmented health data into a unified, actionable, and visually stunning experience. By leveraging the **Android Health Connect SDK**, HelloHealth aggregates metrics from diverse wearables and apps, providing deep insights without compromising user privacy.
 
 ---
 
 ## ✨ Key Features
 
--   **🏥 Unified Health Dashboard**: Get a bird's-eye view of your daily activity, including steps, calories burned, and workout summaries.
--   **🔄 Health Connect Integration**: Seamlessly sync and aggregate data from various health providers while maintaining full control over your privacy.
--   **🔐 Secure Authentication**: Fast and secure login using **Google Identity** and **Credential Manager** for a frictionless onboarding experience.
--   **👤 Personalized Profiles**: Manage your health identity with custom avatars and profile settings.
--   **🎨 Modern Material 3 UI**: A fluid, responsive interface built entirely with **Jetpack Compose**, featuring dark mode support and dynamic color.
--   **🚀 Offline-First**: Robust local caching using **Room** ensures your data is always available, even when you're off the grid.
+### 🏥 Unified Health Intelligence
+*   **Centralized Dashboard**: A comprehensive overview of daily steps, calorie expenditure, and active duration.
+*   **Health Connect Sync**: Bi-directional synchronization with the Android health ecosystem, ensuring your data is never siloed.
+
+### 📊 Deep Workout Analytics
+*   **Interactive Sessions**: Detailed breakdown of every workout with interactive time-series charts.
+*   **Performance Metrics**: Track Heart Rate, Pace, and Elevation profiles with scrubbable graph indicators.
+*   **Geospatial Tracking**: Visualized workout routes powered by **Google Maps**, showing start/finish markers and path geometry.
+
+### 🧠 Intelligent Insights
+*   **Weekly Trends**: Comparative analysis of your performance against previous weeks.
+*   **Data-Driven Feedback**: Visual indicators for activity trends (increasing/decreasing) across various health markers.
+
+### 👤 Personalized Wellness
+*   **Dynamic Goal Setting**: Fine-tune your daily targets for steps, calories, and active minutes with intuitive UI controls.
+*   **Dietary Preferences**: Manage food preferences and nutritional focus areas (e.g., Protein-rich, Low-carb).
+*   **Secure Identity**: Frictionless onboarding via **Google Identity** and **Android Credential Manager**.
 
 ---
 
-## 🛠 Tech Stack & Architecture
+## 🏗 Technical Architecture
 
-HelloHealth is built using the latest Android development standards and best practices.
+HelloHealth is engineered with a strict adherence to **Clean Architecture** and **SOLID** principles, ensuring the codebase is modular, testable, and maintainable.
 
-### Core Technologies
--   **Language**: [Kotlin](https://kotlinlang.org/)
--   **UI Framework**: [Jetpack Compose](https://developer.android.com/jetpack/compose)
--   **Dependency Injection**: [Hilt](https://developer.android.com/training/dependency-injection/hilt-android)
--   **Local Database**: [Room](https://developer.android.com/training/data-storage/room)
--   **Networking & Auth**: [Supabase](https://supabase.com/) & [Credential Manager](https://developer.android.com/training/sign-in/credential-manager)
--   **Image Loading**: [Coil](https://coil-kt.github.io/coil/)
--   **Health API**: [Health Connect SDK](https://developer.android.com/health-and-fitness/guides/health-connect)
+```mermaid
+graph TD
+    subgraph "UI Layer (Jetpack Compose)"
+        View[Screens/Composables] --> VM[ViewModels]
+        VM --> State[UI State]
+    end
 
-### Architecture
-The project follows **Clean Architecture** principles combined with the **MVVM (Model-View-ViewModel)** pattern:
--   **Domain Layer**: Contains business logic, models, and repository interfaces.
--   **Data Layer**: Implements repositories, data sources (Room, Supabase), and Health Connect logic.
--   **UI Layer**: Jetpack Compose-based screens and ViewModels that handle UI state management.
+    subgraph "Domain Layer (Business Logic)"
+        VM --> UC[Use Cases]
+        UC --> Models[Domain Models]
+        UC --> Repos[Repository Interfaces]
+    end
+
+    subgraph "Data Layer (Implementation)"
+        Repos --> Impl[Repository Impl]
+        Impl --> HC[Health Connect Manager]
+        Impl --> Remote[Supabase / Ktor]
+        Impl --> Local[Room Database]
+    end
+```
+
+### 🛠 Tech Stack
+*   **Core**: [Kotlin](https://kotlinlang.org/) (Coroutines, Flow, Serialization)
+*   **UI Framework**: [Jetpack Compose](https://developer.android.com/jetpack/compose) (Material 3, Dynamic Color)
+*   **Navigation**: [Compose Navigation](https://developer.android.com/jetpack/compose/navigation) with Type-safe arguments.
+*   **Dependency Injection**: [Hilt](https://developer.android.com/training/dependency-injection/hilt-android)
+*   **Persistence**: [Room](https://developer.android.com/training/data-storage/room) for offline-first caching.
+*   **Backend**: [Supabase](https://supabase.com/) (Auth, Postgrest)
+*   **Health Integration**: [Health Connect SDK](https://developer.android.com/health-and-fitness/guides/health-connect)
+*   **Maps**: [Google Maps Compose SDK](https://github.com/googlemaps/android-maps-compose)
+*   **Image Loading**: [Coil](https://coil-kt.github.io/coil/)
 
 ---
 
-## 📸 Screenshots
+## 📸 UI Showcase
 
-| Login Screen | Dashboard | Profile |
+| Dashboard | Workout Analytics | Health Insights |
 | :---: | :---: | :---: |
-| ![Login Placeholder](https://via.placeholder.com/200x400?text=Login+Screen) | ![Dashboard Placeholder](https://via.placeholder.com/200x400?text=Dashboard) | ![Profile Placeholder](https://via.placeholder.com/200x400?text=Profile) |
+| ![Dashboard](https://via.placeholder.com/300x600?text=Dashboard+Overview) | ![Analytics](https://via.placeholder.com/300x600?text=Workout+Charts+%26+Maps) | ![Insights](https://via.placeholder.com/300x600?text=Weekly+Trends) |
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
--   **Android Studio Koala** or newer.
--   **JDK 17** configured in your environment.
--   An Android device or emulator running **API 26+** (Health Connect requires the app to be installed or integrated in system settings).
+*   **Android Studio Ladybug** (or newer)
+*   **JDK 17**
+*   **Health Connect** installed on the device (Standard on Android 14+, available on Play Store for 9-13)
 
 ### Setup Instructions
 
@@ -63,39 +92,39 @@ The project follows **Clean Architecture** principles combined with the **MVVM (
     git clone https://github.com/Pranay-AntiGravity/HelloHealth.git
     ```
 
-2.  **Configure Environment Variables**
-    Create a `local.properties` file in the root directory and add your keys:
+2.  **Environment Configuration**
+    Create a `local.properties` file in the root directory:
     ```properties
-    SUPABASE_URL=your_supabase_url
-    SUPABASE_ANON_KEY=your_supabase_anon_key
-    GOOGLE_WEB_CLIENT_ID=your_google_web_client_id
+    SUPABASE_URL=https://your-project.supabase.co
+    SUPABASE_ANON_KEY=your-anon-key
+    GOOGLE_WEB_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+    GOOGLE_MAPS_API_KEY=your-maps-api-key
     ```
 
-3.  **Install Health Connect**
-    If testing on an older device (Android 13 or lower), ensure the [Health Connect app](https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata) is installed from the Play Store.
+3.  **Google Cloud Platform Setup**
+    *   Enable **Google Maps SDK for Android**.
+    *   Configure **Google Sign-In** and obtain the Web Client ID for Credential Manager integration.
 
-4.  **Build & Run**
-    Sync the project with Gradle and run the `:app` module.
+4.  **Health Connect Permissions**
+    Upon first launch, the app will request read/write access to various health data types. Ensure these are granted for full functionality.
 
 ---
 
 ## 🗺 Roadmap
 
-We're constantly working to make HelloHealth better. Here's what's coming next:
-
--   [ ] **🥗 Nutrition Tracking**: Log meals and track macro/micronutrient intake.
--   [ ] **🤖 AI Health Coaching**: Get personalized insights and recommendations based on your activity patterns.
--   [ ] **📊 Advanced Analytics**: Detailed weekly and monthly reports on your health trends.
--   [ ] **⌚ Wear OS Companion**: A dedicated app for your wrist to track real-time workouts.
+-   [x] **Core Health Connect Integration**
+-   [x] **Interactive Workout Charts & Maps**
+-   [x] **Weekly Insight Engine**
+-   [ ] **🥗 Nutrition Tracking**: Direct logging of macro/micronutrients.
+-   [ ] **🤖 AI Coaching**: Personalized health advice using LLM-based analysis of activity data.
+-   [ ] **⌚ Wear OS Companion**: Standalone tracking for watches.
 
 ---
 
 ## 📄 License
 
-Copyright (c) 2024 HelloHealth Team. All Rights Reserved.
-
-Unauthorized use, reproduction, or distribution is strictly prohibited. See the [LICENSE](LICENSE) file for more details.
+Copyright (c) 2024 HelloHealth Team.
+Licensed under the [MIT License](LICENSE).
 
 ---
-
-Developed with ❤️ by the HelloHealth Team.
+*Developed with 💚 by the HelloHealth Team.*
