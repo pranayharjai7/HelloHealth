@@ -56,11 +56,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.model.CameraPosition
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -357,21 +362,25 @@ private fun ActivityHeader(detail: ActivityDetail) {
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     DetailPill(
                         icon = Icons.Default.LocalFireDepartment,
-                        label = detail.caloriesBurned?.let(::formatCaloriesValue) ?: "--"
+                        label = detail.caloriesBurned?.let(::formatCaloriesValue) ?: "-- cal",
+                        modifier = Modifier.weight(1f)
                     )
                     DetailPill(
                         icon = Icons.Default.Route,
-                        label = detail.distanceKm?.let(::formatDistanceKm) ?: "--"
+                        label = detail.distanceKm?.let(::formatDistanceKm) ?: "-- km",
+                        modifier = Modifier.weight(1f)
                     )
-                    detail.steps?.let {
-                        DetailPill(
-                            icon = Icons.Default.DirectionsWalk,
-                            label = "$it steps"
-                        )
-                    }
+                    DetailPill(
+                        icon = Icons.Default.DirectionsWalk,
+                        label = detail.steps?.let { "$it steps" } ?: "-- steps",
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -381,25 +390,49 @@ private fun ActivityHeader(detail: ActivityDetail) {
 @Composable
 private fun DetailPill(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String
+    label: String,
+    modifier: Modifier = Modifier
 ) {
+    // Split label into value and unit to stack them for better visibility
+    val parts = label.split(" ")
+    val value = parts.firstOrNull() ?: "--"
+    val unit = if (parts.size > 1) parts.subList(1, parts.size).joinToString(" ") else ""
+
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(20.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(label, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = value,
+                fontWeight = FontWeight.Black,
+                fontSize = 16.sp,
+                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (unit.isNotEmpty()) {
+                Text(
+                    text = unit.uppercase(),
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -686,9 +719,40 @@ private fun AnalyticsChartCard(
     valueFormatter: (Float) -> String,
     markerValue: Float? = null
 ) {
+    var selectedPoint by remember { mutableStateOf<ActivityChartPoint?>(null) }
+    var touchX by remember { mutableStateOf<Float?>(null) }
+
     FrostedCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            SectionTitle(title, subtitle)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                SectionTitle(
+                    title = title,
+                    subtitle = if (selectedPoint != null) {
+                        "${formatDuration(selectedPoint!!.minutesFromStart.toLong() * 60)} • ${valueFormatter(selectedPoint!!.value)}"
+                    } else {
+                        subtitle
+                    }
+                )
+                if (selectedPoint != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(lineColor.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = valueFormatter(selectedPoint!!.value),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Black,
+                            color = lineColor
+                        )
+                    }
+                }
+            }
             if (points.isEmpty()) {
                 EmptyAnalyticsState(emptyMessage)
             } else {
@@ -720,6 +784,24 @@ private fun AnalyticsChartCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(200.dp)
+                        .pointerInput(points) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    touchX = offset.x
+                                },
+                                onDrag = { change, _ ->
+                                    touchX = change.position.x
+                                },
+                                onDragEnd = {
+                                    touchX = null
+                                    selectedPoint = null
+                                },
+                                onDragCancel = {
+                                    touchX = null
+                                    selectedPoint = null
+                                }
+                            )
+                        }
                         .graphicsLayer(
                             alpha = chartProgress,
                             translationY = (1f - chartProgress) * 36f
@@ -788,11 +870,44 @@ private fun AnalyticsChartCard(
                         drawCircle(
                             color = lineColor,
                             radius = 8f,
-                            center = androidx.compose.ui.geometry.Offset(
+                            center = Offset(
                                 mapX(peak.minutesFromStart),
                                 mapY(peak.value)
                             )
                         )
+                    }
+
+                    touchX?.let { tx ->
+                        val xRatio = (tx / chartWidth).coerceIn(0f, 1f)
+                        val targetMinutes = xRatio * safeMaxX
+                        
+                        val closestPoint = points.minByOrNull { abs(it.minutesFromStart - targetMinutes) }
+                        selectedPoint = closestPoint
+                        
+                        closestPoint?.let { cp ->
+                            val cx = mapX(cp.minutesFromStart)
+                            val cy = mapY(cp.value)
+                            
+                            // Draw vertical indicator line
+                            drawLine(
+                                color = lineColor.copy(alpha = 0.4f),
+                                start = Offset(cx, 0f),
+                                end = Offset(cx, chartHeight),
+                                strokeWidth = 2f
+                            )
+                            
+                            // Draw point circle
+                            drawCircle(
+                                color = lineColor,
+                                radius = 10f,
+                                center = Offset(cx, cy)
+                            )
+                            drawCircle(
+                                color = Color.White,
+                                radius = 4f,
+                                center = Offset(cx, cy)
+                            )
+                        }
                     }
                 }
 
@@ -986,7 +1101,7 @@ private fun formatDuration(seconds: Long): String {
 
 private fun formatDistanceKm(distanceKm: Double): String = String.format("%.2f km", distanceKm)
 
-private fun formatCaloriesValue(calories: Double): String = "${calories.roundToInt()} kcal"
+private fun formatCaloriesValue(calories: Double): String = "${calories.roundToInt()} cal"
 
 private fun formatMeters(meters: Double): String =
     if (meters >= 1000) String.format("%.2f km", meters / 1000.0) else "${meters.roundToInt()} m"
