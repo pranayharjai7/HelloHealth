@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -386,7 +388,7 @@ private fun HistoryCalendarPickerContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onPreviousMonth) {
-                Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Previous month")
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous month")
             }
             Text(
                 text = visibleMonth.format(monthLabelFormatter),
@@ -399,7 +401,7 @@ private fun HistoryCalendarPickerContent(
                 onClick = onNextMonth,
                 enabled = visibleMonth.isBefore(YearMonth.from(today))
             ) {
-                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next month")
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next month")
             }
         }
 

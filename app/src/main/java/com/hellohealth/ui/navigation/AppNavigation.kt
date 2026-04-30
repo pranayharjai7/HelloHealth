@@ -108,8 +108,8 @@ fun AppNavigation(
             exitTransition = { 
                 fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 } 
             }
-        ) {
-            val parentEntry = remember(navController) {
+        ) { backStackEntry ->
+            val parentEntry = remember(backStackEntry) {
                 navController.getBackStackEntry(Screen.Dashboard.route)
             }
             val dashboardViewModel: DashboardViewModel = hiltViewModel(parentEntry)

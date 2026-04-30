@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -84,11 +85,10 @@ fun GoalsScreen(
                 )
 
                 GoalAdjuster(
-                    icon = Icons.Default.DirectionsWalk,
+                    icon = Icons.AutoMirrored.Filled.DirectionsWalk,
                     label = "Daily Steps",
                     value = uiState.goals.steps.toFloat(),
                     range = 1000f..30000f,
-                    step = 500f,
                     unit = "steps",
                     color = primaryColor,
                     onValueChange = { viewModel.updateStepsGoal(it.toInt()) }
@@ -99,7 +99,6 @@ fun GoalsScreen(
                     label = "Active Calories",
                     value = uiState.goals.activeCalories.toFloat(),
                     range = 100f..2000f,
-                    step = 50f,
                     unit = "Cal",
                     color = Color(0xFFFF7043),
                     onValueChange = { viewModel.updateCaloriesGoal(it.toInt()) }
@@ -110,7 +109,6 @@ fun GoalsScreen(
                     label = "Active Minutes",
                     value = uiState.goals.activeMinutes.toFloat(),
                     range = 10f..300f,
-                    step = 5f,
                     unit = "min",
                     color = Color(0xFF42A5F5),
                     onValueChange = { viewModel.updateMinutesGoal(it.toInt()) }
@@ -152,7 +150,6 @@ private fun GoalAdjuster(
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
-    step: Float,
     unit: String,
     color: Color,
     onValueChange: (Float) -> Unit

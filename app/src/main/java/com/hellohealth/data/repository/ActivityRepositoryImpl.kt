@@ -85,16 +85,27 @@ class ActivityRepositoryImpl @Inject constructor(
     ): HealthSummary {
         val cachedSnapshot = loadSnapshot(date)
         val hasLivePermissions = healthConnectManager.isAvailable && healthConnectManager.hasAllPermissions()
-        val shouldUseLiveData = hasLivePermissions && (forceRefresh || cachedSnapshot == null || date == LocalDate.now())
+        val shouldUseLiveData = hasLivePermissions && (
+            forceRefresh || 
+            cachedSnapshot == null || 
+            date == LocalDate.now() || 
+            cachedSnapshot.syncStatus == SnapshotSyncStatus.PARTIAL
+        )
 
         if (shouldUseLiveData) {
             val freshSummary = healthConnectManager.fetchHealthSummary(goals, date)
+            
+            // If Health Connect has data, it is the most reliable source of truth
             if (freshSummary.lastUpdated > 0L) {
                 persistSnapshot(
                     date = date,
                     summary = freshSummary,
                     syncStatus = if (date == LocalDate.now()) SnapshotSyncStatus.PARTIAL else SnapshotSyncStatus.COMPLETE
                 )
+                return freshSummary
+            } else if (cachedSnapshot != null) {
+                // If Health Connect has no data (e.g. past 30 days read restriction), fallback to Supabase
+                return cachedSnapshot.summary
             }
             return freshSummary
         }

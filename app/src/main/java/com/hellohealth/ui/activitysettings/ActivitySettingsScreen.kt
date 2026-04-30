@@ -69,8 +69,7 @@ fun ActivitySettingsScreen(
                 // Connection Status Card
                 StatusCard(
                     isAvailable = uiState.healthConnectAvailability == 1, // SDK_AVAILABLE
-                    hasPermissions = uiState.hasPermissions,
-                    primaryColor = primaryColor
+                    hasPermissions = uiState.hasPermissions
                 )
 
                 // Sync Settings
@@ -127,7 +126,7 @@ fun ActivitySettingsScreen(
 }
 
 @Composable
-private fun StatusCard(isAvailable: Boolean, hasPermissions: Boolean, primaryColor: Color) {
+private fun StatusCard(isAvailable: Boolean, hasPermissions: Boolean) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),

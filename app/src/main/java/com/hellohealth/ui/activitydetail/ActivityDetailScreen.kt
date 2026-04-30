@@ -25,7 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Favorite
@@ -900,7 +900,7 @@ private data class StatRowData(
 private fun activityIcon(activityName: String) = when (activityName) {
     "Running" -> Icons.Default.DirectionsRun
     "Walking" -> Icons.Default.DirectionsWalk
-    "Cycling" -> Icons.Default.DirectionsBike
+    "Cycling" -> Icons.AutoMirrored.Filled.DirectionsBike
     else -> Icons.Default.FitnessCenter
 }
 

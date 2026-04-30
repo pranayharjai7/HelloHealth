@@ -107,8 +107,7 @@ class HealthConnectManager @Inject constructor(
         val today = LocalDate.now(zoneId)
         val startOfDay = date.atStartOfDay(zoneId).toInstant()
         val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
-        val endOfRange = if (date == today) Instant.now() else endOfDay
-        val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfRange)
+        val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfDay)
 
         return try {
             val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
@@ -117,7 +116,7 @@ class HealthConnectManager @Inject constructor(
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
             
             val totalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) } ?: activeCalories
-            var bmr = safeFetch { fetchLatestBasalMetabolicRate(endOfRange) } ?: 0.0
+            var bmr = safeFetch { fetchLatestBasalMetabolicRate(endOfDay) } ?: 0.0
             if (bmr == 0.0) bmr = 1800.0 // Default BMR if record missing
             
             val minutesCovered = if (date == today) {
@@ -134,15 +133,15 @@ class HealthConnectManager @Inject constructor(
                 activeCalories
             }
 
-            val weight = safeFetch { fetchLatestWeight(endOfRange) }
-            val height = safeFetch { fetchLatestHeight(endOfRange) }
-            val bodyFat = safeFetch { fetchLatestBodyFat(endOfRange) }
+            val weight = safeFetch { fetchLatestWeight(endOfDay) }
+            val height = safeFetch { fetchLatestHeight(endOfDay) }
+            val bodyFat = safeFetch { fetchLatestBodyFat(endOfDay) }
             val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt()
-            val oxygen = safeFetch { fetchLatestOxygenSaturation(endOfRange) }
-            val vo2max = safeFetch { fetchLatestVo2Max(endOfRange) }
-            val bloodPressure = safeFetch { fetchLatestBloodPressure(endOfRange) }
-            val glucose = safeFetch { fetchLatestBloodGlucose(endOfRange) }
-            val sleep = try { fetchSleepSummary(startOfDay, endOfRange) } catch (e: Exception) { null }
+            val oxygen = safeFetch { fetchLatestOxygenSaturation(endOfDay) }
+            val vo2max = safeFetch { fetchLatestVo2Max(endOfDay) }
+            val bloodPressure = safeFetch { fetchLatestBloodPressure(endOfDay) }
+            val glucose = safeFetch { fetchLatestBloodGlucose(endOfDay) }
+            val sleep = try { fetchSleepSummary(startOfDay, endOfDay) } catch (e: Exception) { null }
 
             val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
                 if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
@@ -196,13 +195,12 @@ class HealthConnectManager @Inject constructor(
             val date = startOfWeek.plusDays(i.toLong())
             val startOfDay = date.atStartOfDay(zoneId).toInstant()
             val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
-            val endOfRange = if (date == today) Instant.now() else endOfDay
-            val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfRange)
+            val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfDay)
             
             val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
             val calories = safeAggregate { aggregateActiveCalories(timeRangeFilter) } ?: 0.0
             val sleep = try {
-                fetchSleepSummary(startOfDay, endOfRange)?.first ?: 0L
+                fetchSleepSummary(startOfDay, endOfDay)?.first ?: 0L
             } catch (e: Exception) { 0L }
             val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt() ?: 0
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
