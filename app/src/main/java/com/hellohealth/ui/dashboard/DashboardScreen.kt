@@ -24,6 +24,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.HealthConnectClient
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -67,6 +70,25 @@ fun DashboardScreen(
     
     val snackbarHostState = remember { SnackbarHostState() }
     val pullRefreshState = rememberPullToRefreshState()
+
+    // Health Connect Permission Launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        if (granted.isNotEmpty()) {
+            dashboardViewModel.checkPermissionsAndLoadData()
+        }
+    }
+
+    // Auto-request Health Connect permissions
+    LaunchedEffect(uiState.hasHealthPermissions, uiState.healthConnectAvailability) {
+        if (!uiState.hasHealthPermissions && uiState.healthConnectAvailability == HealthConnectClient.SDK_AVAILABLE) {
+            val permissions = dashboardViewModel.getHealthPermissions()
+            if (permissions.isNotEmpty()) {
+                permissionLauncher.launch(permissions)
+            }
+        }
+    }
     
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
@@ -260,7 +282,12 @@ fun DashboardScreen(
                     isSyncing = uiState.isLoading,
                     lastSyncTime = uiState.lastSyncTime,
                     error = uiState.error,
-                    onPermissionRequest = { dashboardViewModel.checkPermissionsAndLoadData() },
+                    onPermissionRequest = {
+                        val permissions = dashboardViewModel.getHealthPermissions()
+                        if (permissions.isNotEmpty()) {
+                            permissionLauncher.launch(permissions)
+                        }
+                    },
                     onOpenSettings = { dashboardViewModel.openHealthConnectSettings(context) },
                     onSync = { dashboardViewModel.refreshSelectedDate() },
                     onClick = onNavigateToWorkoutDetails
