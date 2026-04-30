@@ -2,6 +2,7 @@ package com.hellohealth.ui.dashboard.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -64,41 +66,42 @@ fun WorkoutCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = if (selectedDate == LocalDate.now()) {
-                                "Today's Activity"
-                            } else {
-                                "Activity on ${selectedDate.format(DateTimeFormatter.ofPattern("MMM d"))}"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = onSurfaceColor
-                        )
-                        if (lastSyncTime != null) {
-                            Text(
-                                text = "Synced ${formatLastSync(lastSyncTime, selectedDate)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onSurfaceColor.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = onSync,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(primaryColor.copy(alpha = 0.1f), CircleShape)
-                    ) {
-                        if (isSyncing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = primaryColor)
+                    Text(
+                        text = if (selectedDate == LocalDate.now()) {
+                            "Today's Activity"
                         } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Sync",
-                                tint = primaryColor,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            "Activity on ${selectedDate.format(DateTimeFormatter.ofPattern("MMM d"))}"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = onSurfaceColor,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (lastSyncTime != null) {
+                        Surface(
+                            color = primaryColor.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.12f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = null,
+                                    tint = primaryColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = formatLastSync(lastSyncTime, selectedDate),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = primaryColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

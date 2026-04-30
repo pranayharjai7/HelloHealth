@@ -41,6 +41,10 @@ import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.pulltorefresh.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -115,20 +119,7 @@ fun WorkoutDetailsScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { viewModel.refreshSelectedDate() },
-                        enabled = uiState.hasHealthPermissions
-                    ) {
-                        if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = primaryColor
-                            )
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                        }
-                    }
+                    // Removed refresh button
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent
@@ -137,6 +128,20 @@ fun WorkoutDetailsScreen(
         },
         containerColor = Color.Transparent
     ) { padding ->
+        val pullRefreshState = rememberPullToRefreshState()
+        
+        if (pullRefreshState.isRefreshing) {
+            LaunchedEffect(true) {
+                viewModel.refreshSelectedDate()
+            }
+        }
+        
+        LaunchedEffect(uiState.isLoading) {
+            if (!uiState.isLoading && pullRefreshState.isRefreshing) {
+                pullRefreshState.endRefresh()
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -149,7 +154,19 @@ fun WorkoutDetailsScreen(
                     )
                 )
                 .padding(padding)
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
+            if (uiState.isLoading && !pullRefreshState.isRefreshing) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .align(Alignment.TopCenter),
+                    color = primaryColor,
+                    trackColor = Color.Transparent
+                )
+            }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(20.dp),
@@ -349,6 +366,15 @@ fun WorkoutDetailsScreen(
                 }
 
                 item { Spacer(modifier = Modifier.height(48.dp)) }
+            }
+            
+            if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) {
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = primaryColor
+                )
             }
         }
     }

@@ -16,7 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.pulltorefresh.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +57,20 @@ fun InsightsScreen(
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
+    val pullRefreshState = rememberPullToRefreshState()
+    
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            viewModel.loadWeeklyStats()
+        }
+    }
+    
+    LaunchedEffect(uiState.isLoading) {
+        if (!uiState.isLoading && pullRefreshState.isRefreshing) {
+            pullRefreshState.endRefresh()
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -63,9 +81,7 @@ fun InsightsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadWeeklyStats() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
+                    // Refresh button removed in favor of pull-to-refresh
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent
@@ -83,18 +99,27 @@ fun InsightsScreen(
                     )
                 )
                 .padding(padding)
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
-            if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else {
-                Column(
+            if (uiState.isLoading && !pullRefreshState.isRefreshing) {
+                LinearProgressIndicator(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    InsightSummarySection(uiState.weeklyInsights)
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .align(Alignment.TopCenter),
+                    color = primaryColor,
+                    trackColor = Color.Transparent
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                InsightSummarySection(uiState.weeklyInsights)
 
                     InsightChartSection(
                         title = "Weekly Steps",
@@ -130,6 +155,14 @@ fun InsightsScreen(
 
                     InsightCardsSection(uiState.weeklyInsights)
                 }
+            
+            if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) {
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = primaryColor
+                )
             }
         }
     }

@@ -18,7 +18,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +66,19 @@ fun DashboardScreen(
     var showCalendarSheet by remember { mutableStateOf(false) }
     
     val snackbarHostState = remember { SnackbarHostState() }
+    val pullRefreshState = rememberPullToRefreshState()
+    
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            dashboardViewModel.refreshSelectedDate()
+        }
+    }
+    
+    LaunchedEffect(uiState.isLoading) {
+        if (!uiState.isLoading && pullRefreshState.isRefreshing) {
+            pullRefreshState.endRefresh()
+        }
+    }
     
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -167,7 +182,19 @@ fun DashboardScreen(
                     )
                 )
                 .padding(padding)
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
+            if (uiState.isLoading && !pullRefreshState.isRefreshing) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .align(Alignment.TopCenter),
+                    color = primaryColor,
+                    trackColor = Color.Transparent
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -246,6 +273,15 @@ fun DashboardScreen(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
                     modifier = Modifier.padding(bottom = 32.dp)
+                )
+            }
+            
+            if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) {
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = primaryColor
                 )
             }
         }
