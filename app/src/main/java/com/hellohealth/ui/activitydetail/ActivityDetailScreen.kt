@@ -48,6 +48,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.ui.platform.LocalContext
+import com.google.android.gms.location.LocationServices
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.google.android.gms.maps.model.CameraPosition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -136,7 +144,36 @@ fun ActivityDetailScreen(
                     message = currentState.message,
                     onRetry = viewModel::retry
                 )
-                is ActivityDetailState.Success -> ActivityDetailContent(detail = currentState.detail)
+                is ActivityDetailState.Success -> {
+                    val context = LocalContext.current
+                    val permissionLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestMultiplePermissions()
+                    ) { permissions ->
+                        val isGranted = permissions.values.any { it }
+                        if (isGranted) {
+                            viewModel.retry() // Reload to refresh map state if needed
+                        }
+                    }
+
+                    LaunchedEffect(Unit) {
+                        val hasFineLocation = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
+                        val hasCoarseLocation = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.ACCESS_COARSE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (!hasFineLocation && !hasCoarseLocation) {
+                            permissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }
+                    }
+                    ActivityDetailContent(detail = currentState.detail)
+                }
             }
         }
     }
@@ -373,7 +410,6 @@ private fun RouteSection(detail: ActivityDetail) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle("Workout Route", "Follow the path captured during the session.")
             when {
-                detail.routePoints.isEmpty() -> EmptyAnalyticsState(detail.routeMessage ?: "Route data unavailable for this workout.")
                 BuildConfig.GOOGLE_MAPS_API_KEY.isBlank() -> EmptyAnalyticsState("Add GOOGLE_MAPS_API_KEY to local.properties to enable the route map.")
                 else -> ActivityRouteMap(routePoints = detail.routePoints)
             }
@@ -383,17 +419,26 @@ private fun RouteSection(detail: ActivityDetail) {
 
 @Composable
 private fun ActivityRouteMap(routePoints: List<ActivityRoutePoint>) {
+    val context = LocalContext.current
+    val hasLocationPermission = remember(context) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
     val cameraPositionState = rememberCameraPositionState()
     val mapUiSettings = remember {
         MapUiSettings(
             zoomControlsEnabled = false,
-            myLocationButtonEnabled = false,
+            myLocationButtonEnabled = hasLocationPermission,
             mapToolbarEnabled = false,
             compassEnabled = true
         )
     }
-    val mapProperties = remember {
-        MapProperties(mapStyleOptions = MapStyleOptions(DarkMapStyleJson))
+    val mapProperties = remember(hasLocationPermission) {
+        MapProperties(
+            mapStyleOptions = MapStyleOptions(DarkMapStyleJson),
+            isMyLocationEnabled = hasLocationPermission
+        )
     }
     val polylinePoints = remember(routePoints) {
         routePoints.map { LatLng(it.latitude, it.longitude) }
@@ -402,10 +447,27 @@ private fun ActivityRouteMap(routePoints: List<ActivityRoutePoint>) {
     val end = polylinePoints.lastOrNull()
 
     LaunchedEffect(polylinePoints) {
-        if (polylinePoints.isEmpty()) return@LaunchedEffect
-        val boundsBuilder = LatLngBounds.builder()
-        polylinePoints.forEach(boundsBuilder::include)
-        cameraPositionState.move(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 120))
+        if (polylinePoints.isNotEmpty()) {
+            val boundsBuilder = LatLngBounds.builder()
+            polylinePoints.forEach(boundsBuilder::include)
+            cameraPositionState.move(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 120))
+        } else if (hasLocationPermission) {
+            // If no route, try to center on current location
+            try {
+                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                    location?.let {
+                        cameraPositionState.move(
+                            CameraUpdateFactory.newCameraPosition(
+                                CameraPosition.fromLatLngZoom(LatLng(it.latitude, it.longitude), 15f)
+                            )
+                        )
+                    }
+                }
+            } catch (e: SecurityException) {
+                // Should not happen as we checked permission
+            }
+        }
     }
 
     Box(
