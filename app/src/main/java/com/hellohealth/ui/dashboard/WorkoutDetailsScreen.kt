@@ -393,7 +393,11 @@ private fun SectionHeader(title: String) {
 
 @Composable
 private fun MiniStat(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = modifier, 
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
         Icon(icon, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.width(8.dp))
         Column {
