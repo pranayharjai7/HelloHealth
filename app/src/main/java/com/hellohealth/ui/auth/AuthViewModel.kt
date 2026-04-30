@@ -82,10 +82,10 @@ class AuthViewModel @Inject constructor(
     }
 
     fun signOut() {
+        _currentUser.value = null
+        _authState.value = AuthState.Unauthenticated
         viewModelScope.launch {
             authRepository.signOut()
-            _currentUser.value = null
-            _authState.value = AuthState.Unauthenticated
         }
     }
 

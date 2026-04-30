@@ -623,9 +623,9 @@ fun ProfileBottomSheet(
             Column(modifier = Modifier.padding(16.dp)) {
                 ProfileMenuItem(Icons.Default.Person, "Profile", onOptionClick)
                 ProfileMenuItem(Icons.Default.Flag, "Daily Goals", onOptionClick)
-                ProfileMenuItem(Icons.Default.Settings, "Activity Settings", onOptionClick)
                 ProfileMenuItem(Icons.Default.Restaurant, "Food Preferences", onOptionClick)
                 ProfileMenuItem(Icons.Default.Analytics, "Insights", onOptionClick)
+                ProfileMenuItem(Icons.Default.Settings, "Activity Settings", onOptionClick)
                 ProfileMenuItem(Icons.AutoMirrored.Filled.Help, "Help & Support", onOptionClick)
                 Spacer(modifier = Modifier.height(16.dp))
                 ProfileMenuItem(
