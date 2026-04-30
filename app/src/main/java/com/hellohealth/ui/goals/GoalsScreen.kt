@@ -13,6 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -89,9 +93,10 @@ fun GoalsScreen(
                     label = "Daily Steps",
                     value = uiState.goals.steps.toFloat(),
                     range = 1000f..30000f,
+                    step = 500f,
                     unit = "steps",
                     color = primaryColor,
-                    onValueChange = { viewModel.updateStepsGoal(it.toInt()) }
+                    onValueChange = { viewModel.updateStepsGoal(it.roundToInt()) }
                 )
 
                 GoalAdjuster(
@@ -99,9 +104,10 @@ fun GoalsScreen(
                     label = "Active Calories",
                     value = uiState.goals.activeCalories.toFloat(),
                     range = 100f..2000f,
+                    step = 50f,
                     unit = "Cal",
                     color = Color(0xFFFF7043),
-                    onValueChange = { viewModel.updateCaloriesGoal(it.toInt()) }
+                    onValueChange = { viewModel.updateCaloriesGoal(it.roundToInt()) }
                 )
 
                 GoalAdjuster(
@@ -109,9 +115,10 @@ fun GoalsScreen(
                     label = "Active Minutes",
                     value = uiState.goals.activeMinutes.toFloat(),
                     range = 10f..300f,
+                    step = 5f,
                     unit = "min",
                     color = Color(0xFF42A5F5),
-                    onValueChange = { viewModel.updateMinutesGoal(it.toInt()) }
+                    onValueChange = { viewModel.updateMinutesGoal(it.roundToInt()) }
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -150,10 +157,14 @@ private fun GoalAdjuster(
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    step: Float,
     unit: String,
     color: Color,
     onValueChange: (Float) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+    val stepsCount = ((range.endInclusive - range.start) / step).toInt() - 1
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -165,18 +176,54 @@ private fun GoalAdjuster(
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "${value.toInt()} $unit",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    color = color
-                )
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onValueChange((value - step).coerceIn(range))
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Remove, null, tint = color.copy(alpha = 0.7f))
+                    }
+                    
+                    Text(
+                        text = "${value.roundToInt()}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = color,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    
+                    Text(
+                        text = unit,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onValueChange((value + step).coerceIn(range))
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = color.copy(alpha = 0.7f))
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(16.dp))
             Slider(
                 value = value,
-                onValueChange = onValueChange,
+                onValueChange = {
+                    if (it != value) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onValueChange(it)
+                    }
+                },
                 valueRange = range,
+                steps = stepsCount,
                 colors = SliderDefaults.colors(
                     thumbColor = color,
                     activeTrackColor = color,
@@ -184,8 +231,8 @@ private fun GoalAdjuster(
                 )
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${range.start.toInt()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-                Text("${range.endInclusive.toInt()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                Text("${range.start.roundToInt()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                Text("${range.endInclusive.roundToInt()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
             }
         }
     }

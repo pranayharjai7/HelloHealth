@@ -14,6 +14,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -39,6 +41,25 @@ class InsightsViewModel @Inject constructor(
 
     init {
         loadWeeklyStats()
+        observeGoals()
+    }
+
+    private fun observeGoals() {
+        viewModelScope.launch {
+            goalsRepository.getActivityGoals().collectLatest { goals ->
+                _uiState.update { state ->
+                    if (state.weeklyStats.dailyStats.isEmpty()) {
+                        state.copy(goals = goals)
+                    } else {
+                        val insights = buildWeeklyInsights(state.weeklyStats, goals, state.foodPreferences)
+                        state.copy(
+                            goals = goals,
+                            weeklyInsights = insights
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun loadWeeklyStats() {

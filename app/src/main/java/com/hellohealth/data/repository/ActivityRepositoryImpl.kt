@@ -110,7 +110,12 @@ class ActivityRepositoryImpl @Inject constructor(
             return freshSummary
         }
 
-        return cachedSnapshot?.summary ?: defaultSummary(goals)
+        val finalSummary = cachedSnapshot?.summary ?: defaultSummary(goals)
+        return finalSummary.copy(
+            stepsGoal = goals.steps.toLong(),
+            caloriesGoal = goals.activeCalories.toDouble(),
+            activeTimeGoal = goals.activeMinutes.toLong()
+        )
     }
 
     override suspend fun getHistoryForMonth(month: YearMonth): List<DailyHealthSnapshot> {

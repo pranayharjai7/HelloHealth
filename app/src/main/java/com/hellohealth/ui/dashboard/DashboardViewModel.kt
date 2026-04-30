@@ -17,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -50,6 +51,23 @@ class DashboardViewModel @Inject constructor(
     init {
         loadUserInfo()
         checkPermissionsAndLoadData()
+        observeGoals()
+    }
+
+    private fun observeGoals() {
+        viewModelScope.launch {
+            goalsRepository.getActivityGoals().collectLatest { goals ->
+                _uiState.update { state ->
+                    state.copy(
+                        healthSummary = state.healthSummary.copy(
+                            stepsGoal = goals.steps.toLong(),
+                            caloriesGoal = goals.activeCalories.toDouble(),
+                            activeTimeGoal = goals.activeMinutes.toLong()
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun loadUserInfo() {

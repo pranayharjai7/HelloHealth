@@ -9,6 +9,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,16 +30,25 @@ class GoalsRepositoryImpl @Inject constructor(
     private val sessionManager: SupabaseSessionManager
 ) : GoalsRepository {
 
+    private val _goals = MutableStateFlow<ActivityGoals?>(null)
+
     override fun getActivityGoals(): Flow<ActivityGoals> = flow {
-        emit(fetchActivityGoals())
+        if (_goals.value == null) {
+            _goals.value = fetchActivityGoals()
+        }
+        _goals.collect { goals ->
+            if (goals != null) emit(goals)
+        }
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getCurrentActivityGoals(): ActivityGoals {
-        return fetchActivityGoals()
+        return _goals.value ?: fetchActivityGoals().also { _goals.value = it }
     }
 
     override suspend fun updateActivityGoals(goals: ActivityGoals) {
         val userId = sessionManager.getCurrentUserId() ?: return
+        
+        _goals.value = goals
         
         val dto = ActivityGoalsDto(
             user_id = userId,
