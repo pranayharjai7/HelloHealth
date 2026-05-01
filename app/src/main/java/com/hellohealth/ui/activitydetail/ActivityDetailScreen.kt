@@ -444,6 +444,7 @@ private fun RouteSection(detail: ActivityDetail) {
             SectionTitle("Workout Route", "Follow the path captured during the session.")
             when {
                 BuildConfig.GOOGLE_MAPS_API_KEY.isBlank() -> EmptyAnalyticsState("Add GOOGLE_MAPS_API_KEY to local.properties to enable the route map.")
+                detail.routePoints.isEmpty() && detail.routeMessage != null -> EmptyAnalyticsState(detail.routeMessage)
                 else -> ActivityRouteMap(routePoints = detail.routePoints)
             }
         }
@@ -479,7 +480,10 @@ private fun ActivityRouteMap(routePoints: List<ActivityRoutePoint>) {
     val start = polylinePoints.firstOrNull()
     val end = polylinePoints.lastOrNull()
 
-    LaunchedEffect(polylinePoints) {
+    var mapLoaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(polylinePoints, mapLoaded) {
+        if (!mapLoaded) return@LaunchedEffect
         if (polylinePoints.isNotEmpty()) {
             val boundsBuilder = LatLngBounds.builder()
             polylinePoints.forEach(boundsBuilder::include)
@@ -513,7 +517,8 @@ private fun ActivityRouteMap(routePoints: List<ActivityRoutePoint>) {
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             properties = mapProperties,
-            uiSettings = mapUiSettings
+            uiSettings = mapUiSettings,
+            onMapLoaded = { mapLoaded = true }
         ) {
             if (polylinePoints.size >= 2) {
                 Polyline(
