@@ -442,17 +442,20 @@ private fun RouteSection(detail: ActivityDetail) {
     FrostedCard {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle("Workout Route", "Follow the path captured during the session.")
-            when {
-                BuildConfig.GOOGLE_MAPS_API_KEY.isBlank() -> EmptyAnalyticsState("Add GOOGLE_MAPS_API_KEY to local.properties to enable the route map.")
-                detail.routePoints.isEmpty() && detail.routeMessage != null -> EmptyAnalyticsState(detail.routeMessage)
-                else -> ActivityRouteMap(routePoints = detail.routePoints)
+            if (BuildConfig.GOOGLE_MAPS_API_KEY.isBlank()) {
+                EmptyAnalyticsState("Add GOOGLE_MAPS_API_KEY to local.properties to enable the route map.")
+            } else {
+                ActivityRouteMap(
+                    routePoints = detail.routePoints,
+                    routeMessage = detail.routeMessage
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ActivityRouteMap(routePoints: List<ActivityRoutePoint>) {
+private fun ActivityRouteMap(routePoints: List<ActivityRoutePoint>, routeMessage: String? = null) {
     val context = LocalContext.current
     val hasLocationPermission = remember(context) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -539,6 +542,21 @@ private fun ActivityRouteMap(routePoints: List<ActivityRoutePoint>) {
                     state = MarkerState(position = it),
                     title = "Finish",
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+                )
+            }
+        }
+        if (routePoints.isEmpty() && routeMessage != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = routeMessage,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 24.dp)
                 )
             }
         }

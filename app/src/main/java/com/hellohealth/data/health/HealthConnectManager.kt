@@ -86,7 +86,8 @@ class HealthConnectManager @Inject constructor(
         val essentialPermissions = setOf(
             HealthPermission.getReadPermission(StepsRecord::class),
             HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-            HealthPermission.getReadPermission(DistanceRecord::class)
+            HealthPermission.getReadPermission(DistanceRecord::class),
+            "android.permission.health.READ_EXERCISE_ROUTES"
         )
         return granted.containsAll(essentialPermissions)
     }
