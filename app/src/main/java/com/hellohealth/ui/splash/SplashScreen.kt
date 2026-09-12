@@ -25,19 +25,24 @@ import kotlinx.coroutines.delay
 fun SplashScreen(
     viewModel: AuthViewModel,
     onNavigateToLogin: () -> Unit,
-    onNavigateToDashboard: () -> Unit
+    onNavigateToDashboard: () -> Unit,
+    onNavigateToOnboarding: () -> Unit
 ) {
     val authState by viewModel.authState.collectAsState()
-    
+
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
     LaunchedEffect(authState) {
-        if (authState is AuthState.Authenticated || authState is AuthState.Unauthenticated) {
+        if (authState is AuthState.Authenticated ||
+            authState is AuthState.Unauthenticated ||
+            authState is AuthState.NeedsOnboarding
+        ) {
             delay(1500L) // Show the beautiful branding for at least 1.5 seconds
             when (authState) {
                 is AuthState.Authenticated -> onNavigateToDashboard()
                 is AuthState.Unauthenticated -> onNavigateToLogin()
+                is AuthState.NeedsOnboarding -> onNavigateToOnboarding()
                 else -> {}
             }
         }

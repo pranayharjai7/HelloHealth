@@ -56,6 +56,11 @@ fun AppNavigation(
                     navController.navigate(Screen.Dashboard.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
+                },
+                onNavigateToOnboarding = {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
                 }
             )
         }
@@ -69,6 +74,11 @@ fun AppNavigation(
                 viewModel = authViewModel,
                 onLoginSuccess = {
                     navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onNeedsOnboarding = {
+                    navController.navigate(Screen.Onboarding.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
