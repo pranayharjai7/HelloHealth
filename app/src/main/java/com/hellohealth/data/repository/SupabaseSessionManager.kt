@@ -6,15 +6,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SupabaseSessionManager @Inject constructor(
-    private val supabase: SupabaseClient
+open class SupabaseSessionManager @Inject constructor(
+    private val supabase: SupabaseClient?
 ) {
-    suspend fun getCurrentUserId(): String? {
-        supabase.auth.awaitInitialization()
-        return supabase.auth.currentUserOrNull()?.id
-            ?: supabase.auth.currentSessionOrNull()?.user?.id
+    open suspend fun getCurrentUserId(): String? {
+        val client = supabase ?: return null
+        client.auth.awaitInitialization()
+        return client.auth.currentUserOrNull()?.id
+            ?: client.auth.currentSessionOrNull()?.user?.id
             ?: runCatching {
-                supabase.auth.retrieveUserForCurrentSession(updateSession = true).id
+                client.auth.retrieveUserForCurrentSession(updateSession = true).id
             }.getOrNull()
     }
 }
