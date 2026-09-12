@@ -33,8 +33,7 @@ class AuthViewModel @Inject constructor(
     fun checkSession() {
         viewModelScope.launch {
             if (authRepository.isUserLoggedIn()) {
-                _currentUser.value = mergeProfile(authRepository.getCurrentUser())
-                _authState.value = AuthState.Authenticated
+                _authState.value = resolveAuthenticatedState(authRepository.getCurrentUser())
             } else {
                 _currentUser.value = null
                 _authState.value = AuthState.Unauthenticated
@@ -47,8 +46,7 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Loading
             val result = authRepository.signUp(email, password)
             _authState.value = if (result.isSuccess) {
-                _currentUser.value = mergeProfile(authRepository.getCurrentUser())
-                AuthState.Authenticated
+                resolveAuthenticatedState(authRepository.getCurrentUser())
             } else {
                 AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
             }
@@ -60,8 +58,7 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Loading
             val result = authRepository.signIn(email, password)
             _authState.value = if (result.isSuccess) {
-                _currentUser.value = mergeProfile(authRepository.getCurrentUser())
-                AuthState.Authenticated
+                resolveAuthenticatedState(authRepository.getCurrentUser())
             } else {
                 AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
             }
@@ -73,8 +70,7 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Loading
             val result = authRepository.signInWithGoogle(idToken, email, name, avatarUrl)
             _authState.value = if (result.isSuccess) {
-                _currentUser.value = mergeProfile(authRepository.getCurrentUser())
-                AuthState.Authenticated
+                resolveAuthenticatedState(authRepository.getCurrentUser())
             } else {
                 AuthState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
             }
@@ -125,9 +121,24 @@ class AuthViewModel @Inject constructor(
         _profileEditorState.value = ProfileEditorState()
     }
 
-    private suspend fun mergeProfile(authUser: User?): User? {
-        if (authUser == null) return null
+    /**
+     * Fetches the profile once, merges its displayName into [_currentUser], and returns the gate
+     * decision: [AuthState.NeedsOnboarding] for a new/incomplete account (`profile == null ||
+     * !hasOnboarded`), else [AuthState.Authenticated]. A profile read failure degrades to the
+     * onboarding gate rather than crashing — a returning user re-confirms rather than being locked out.
+     */
+    private suspend fun resolveAuthenticatedState(authUser: User?): AuthState {
         val profile = runCatching { profileRepository.getProfile() }.getOrNull()
+        _currentUser.value = mergeProfile(authUser, profile)
+        return if (profile == null || !profile.hasOnboarded) {
+            AuthState.NeedsOnboarding
+        } else {
+            AuthState.Authenticated
+        }
+    }
+
+    private fun mergeProfile(authUser: User?, profile: UserProfile?): User? {
+        if (authUser == null) return null
         return if (profile?.displayName.isNullOrBlank()) {
             authUser
         } else {
@@ -139,6 +150,7 @@ class AuthViewModel @Inject constructor(
 sealed class AuthState {
     object Checking : AuthState()
     object Authenticated : AuthState()
+    object NeedsOnboarding : AuthState()
     object Unauthenticated : AuthState()
     object Loading : AuthState()
     data class Error(val message: String) : AuthState()
