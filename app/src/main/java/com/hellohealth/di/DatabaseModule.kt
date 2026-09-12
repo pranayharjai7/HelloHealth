@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.hellohealth.data.local.AppDatabase
 import com.hellohealth.data.local.MIGRATION_3_4
+import com.hellohealth.data.local.MIGRATION_4_5
 import com.hellohealth.data.local.dao.FoodPrefsDao
 import com.hellohealth.data.local.dao.GoalsDao
 import com.hellohealth.data.local.dao.ProfileDao
@@ -29,8 +30,8 @@ object DatabaseModule {
             AppDatabase::class.java,
             "hello_health.db"
         )
-            // Real migration — no destructive fallback. Never silently wipe user data.
-            .addMigrations(MIGRATION_3_4)
+            // Real migrations — no destructive fallback. Never silently wipe user data.
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
             .build()
     }
 

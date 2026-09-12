@@ -25,6 +25,16 @@ class ProfileSyncer @Inject constructor(
     data class ProfileSyncDto(
         val id: String,
         val display_name: String? = null,
+        val gender: String? = null,
+        val birth_date_epoch_day: Long? = null,
+        val height_cm: Double? = null,
+        val weight_kg: Double? = null,
+        val activity_level: String? = null,
+        val goal_type: String? = null,
+        val target_weight_kg: Double? = null,
+        val target_rate_kg_per_week: Double? = null,
+        val unit_preference: String? = null,
+        val has_onboarded: Boolean? = null,
         val updated_at: String? = null,
         val deleted_at: String? = null
     )
@@ -65,7 +75,17 @@ class ProfileSyncer @Inject constructor(
                 updatedAtEpochMs = remoteUpdatedAt ?: Timestamps.nowEpochMs(),
                 updatedAtTzOffsetMinutes = Timestamps.currentTzOffsetMinutes(),
                 deletedAtEpochMs = Timestamps.parseServerTimestamp(remote.deleted_at),
-                isSynced = true
+                isSynced = true,
+                gender = remote.gender,
+                birthDateEpochDay = remote.birth_date_epoch_day,
+                heightCm = remote.height_cm,
+                weightKg = remote.weight_kg,
+                activityLevel = remote.activity_level,
+                goalType = remote.goal_type,
+                targetWeightKg = remote.target_weight_kg,
+                targetRateKgPerWeek = remote.target_rate_kg_per_week,
+                unitPreference = remote.unit_preference ?: "METRIC",
+                hasOnboarded = remote.has_onboarded ?: false
             )
         )
         AppLogger.d(FeatureTag.PROFILE, "pulled remote profile (remote won LWW)")
@@ -75,6 +95,16 @@ class ProfileSyncer @Inject constructor(
     private fun ProfileEntity.toDto() = ProfileSyncDto(
         id = userId,
         display_name = displayName,
+        gender = gender,
+        birth_date_epoch_day = birthDateEpochDay,
+        height_cm = heightCm,
+        weight_kg = weightKg,
+        activity_level = activityLevel,
+        goal_type = goalType,
+        target_weight_kg = targetWeightKg,
+        target_rate_kg_per_week = targetRateKgPerWeek,
+        unit_preference = unitPreference,
+        has_onboarded = hasOnboarded,
         updated_at = Timestamps.epochMsToServerTimestamp(updatedAtEpochMs),
         deleted_at = deletedAtEpochMs?.let { Timestamps.epochMsToServerTimestamp(it) }
     )

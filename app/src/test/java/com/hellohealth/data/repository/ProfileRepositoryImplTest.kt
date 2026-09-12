@@ -80,4 +80,46 @@ class ProfileRepositoryImplTest {
         repo.upsertProfile(UserProfile(displayName = "   "))
         assertNull(repo.getProfile()?.displayName)
     }
+
+    @Test
+    fun `vitals round-trip through Room including enums and hasOnboarded`() = runTest {
+        val repo = repo("u1")
+        val born = java.time.LocalDate.of(1990, 5, 20).toEpochDay()
+        val profile = UserProfile(
+            displayName = "Ann",
+            gender = com.hellohealth.domain.model.Gender.FEMALE,
+            birthDateEpochDay = born,
+            heightCm = 168.0,
+            weightKg = 62.5,
+            activityLevel = com.hellohealth.domain.model.ActivityLevel.MODERATE,
+            goalType = com.hellohealth.domain.model.GoalType.LOSE,
+            targetWeightKg = 58.0,
+            targetRateKgPerWeek = 0.5,
+            unitPreference = com.hellohealth.domain.model.UnitPreference.IMPERIAL,
+            hasOnboarded = true
+        )
+
+        repo.upsertProfile(profile)
+        val readBack = repo.getProfile()!!
+
+        assertEquals(profile, readBack)
+    }
+
+    @Test
+    fun `unknown stored enum degrades to null rather than crashing`() = runTest {
+        // Simulate a corrupt/forward-compat enum value written directly to Room.
+        profileDao.upsert(
+            com.hellohealth.data.local.entities.ProfileEntity(
+                userId = "u1",
+                displayName = "Ann",
+                updatedAtEpochMs = 1L,
+                updatedAtTzOffsetMinutes = 0,
+                gender = "MARTIAN",
+                activityLevel = "HYPERSONIC"
+            )
+        )
+        val readBack = repo("u1").getProfile()!!
+        assertNull(readBack.gender)
+        assertNull(readBack.activityLevel)
+    }
 }
