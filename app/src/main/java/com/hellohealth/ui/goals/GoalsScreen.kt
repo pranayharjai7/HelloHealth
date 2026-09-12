@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -25,6 +26,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hellohealth.domain.model.GoalType
+import com.hellohealth.domain.model.UnitPreference
+import com.hellohealth.ui.common.MetricNumberField
+import com.hellohealth.ui.common.SingleSelectChips
+import com.hellohealth.ui.common.displayLabel
+import com.hellohealth.ui.common.kgToLb
+import com.hellohealth.ui.common.lbToKg
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,8 +61,14 @@ fun GoalsScreen(
                             color = primaryColor
                         )
                     } else {
-                        TextButton(onClick = { viewModel.saveGoals() }) {
-                            Text("Save", fontWeight = FontWeight.Bold, color = primaryColor)
+                        // Disabled until the profile snapshot has loaded and validation passes —
+                        // saving before the goal-direction fields seed would wipe the stored goal.
+                        TextButton(onClick = { viewModel.saveGoals() }, enabled = uiState.canSave) {
+                            Text(
+                                "Save",
+                                fontWeight = FontWeight.Bold,
+                                color = if (uiState.canSave) primaryColor else primaryColor.copy(alpha = 0.4f)
+                            )
                         }
                     }
                 },
@@ -86,6 +100,19 @@ fun GoalsScreen(
                     text = "Set your daily activity targets to stay motivated and healthy.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+
+                GoalDirectionCard(
+                    goalType = uiState.goalType,
+                    targetWeightKg = uiState.targetWeightKg,
+                    targetRateKgPerWeek = uiState.targetRateKgPerWeek,
+                    unitPreference = uiState.unitPreference,
+                    targetWeightError = uiState.targetWeightError,
+                    targetRateError = uiState.targetRateError,
+                    primaryColor = primaryColor,
+                    onGoalTypeChange = { viewModel.updateGoalType(it) },
+                    onTargetWeightChange = { viewModel.updateTargetWeightKg(it) },
+                    onTargetRateChange = { viewModel.updateTargetRateKgPerWeek(it) }
                 )
 
                 GoalAdjuster(
@@ -145,6 +172,87 @@ fun GoalsScreen(
                     text = "These saved targets become the shared daily limit used throughout the app, including the dashboard card and Health Stats screen.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoalDirectionCard(
+    goalType: GoalType?,
+    targetWeightKg: Double?,
+    targetRateKgPerWeek: Double?,
+    unitPreference: UnitPreference,
+    targetWeightError: String?,
+    targetRateError: String?,
+    primaryColor: Color,
+    onGoalTypeChange: (GoalType) -> Unit,
+    onTargetWeightChange: (Double?) -> Unit,
+    onTargetRateChange: (Double?) -> Unit
+) {
+    val isImperial = unitPreference == UnitPreference.IMPERIAL
+    // Targets only make sense for a directional goal; MAINTAIN hides them (the VM also clears the
+    // stored values on MAINTAIN so a hidden field can't smuggle a stale/out-of-range value to save).
+    val showTargets = goalType == GoalType.LOSE || goalType == GoalType.GAIN
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Flag, null, tint = primaryColor, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("Weight Goal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+
+            SingleSelectChips(
+                options = GoalType.entries,
+                selected = goalType,
+                labelOf = { it.displayLabel() },
+                onSelect = onGoalTypeChange
+            )
+
+            if (showTargets) {
+                Text(
+                    text = "Target weight",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                // key(isImperial): re-seed the field's display text through the right toDisplay when
+                // the stored unit preference loads/flips, so a kg value never lingers under an "lb"
+                // label (the unit-toggle corruption fixed in the profile editor).
+                key(isImperial) {
+                    MetricNumberField(
+                        valueMetric = targetWeightKg,
+                        unitSuffix = if (isImperial) "lb" else "kg",
+                        primaryColor = primaryColor,
+                        toDisplay = { if (isImperial) it.kgToLb() else it },
+                        fromDisplay = { if (isImperial) it.lbToKg() else it },
+                        onMetricChange = onTargetWeightChange,
+                        errorText = targetWeightError
+                    )
+                }
+
+                Text(
+                    text = "Weekly rate",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                // Rate is always stored and shown in kg/week (metric-only, like onboarding).
+                MetricNumberField(
+                    valueMetric = targetRateKgPerWeek,
+                    unitSuffix = "kg / week",
+                    primaryColor = primaryColor,
+                    toDisplay = { it },
+                    fromDisplay = { it },
+                    onMetricChange = onTargetRateChange,
+                    errorText = targetRateError
                 )
             }
         }
