@@ -72,8 +72,12 @@ android {
         }
     }
     // Check in exported Room schemas so migrations have a baseline to validate against.
+    // androidTest gets them for instrumented runs. Robolectric-based MigrationTestHelper reads the
+    // *debug-merged* app assets (android_merged_assets), so the schemas also go on the debug source
+    // set — debug-only, so the release APK never ships them.
     sourceSets {
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("debug").assets.srcDir("$projectDir/schemas")
     }
 }
 

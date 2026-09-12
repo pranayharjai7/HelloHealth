@@ -23,6 +23,10 @@ capture/
 # Secrets
 *.json
 
+# ...but Room's exported schemas are the migration-test baseline and must be tracked.
+!app/schemas/
+!app/schemas/**/*.json
+
 # Mac files
 .DS_Store
 

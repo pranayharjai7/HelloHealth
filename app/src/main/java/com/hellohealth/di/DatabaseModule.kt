@@ -3,6 +3,12 @@ package com.hellohealth.di
 import android.content.Context
 import androidx.room.Room
 import com.hellohealth.data.local.AppDatabase
+import com.hellohealth.data.local.MIGRATION_3_4
+import com.hellohealth.data.local.dao.FoodPrefsDao
+import com.hellohealth.data.local.dao.GoalsDao
+import com.hellohealth.data.local.dao.ProfileDao
+import com.hellohealth.data.local.dao.SnapshotDao
+import com.hellohealth.data.local.dao.SyncLogDao
 import com.hellohealth.data.local.dao.UserDao
 import dagger.Module
 import dagger.Provides
@@ -23,12 +29,26 @@ object DatabaseModule {
             AppDatabase::class.java,
             "hello_health.db"
         )
-        .fallbackToDestructiveMigration()
-        .build()
+            // Real migration — no destructive fallback. Never silently wipe user data.
+            .addMigrations(MIGRATION_3_4)
+            .build()
     }
 
     @Provides
-    fun provideUserDao(database: AppDatabase): UserDao {
-        return database.userDao()
-    }
+    fun provideUserDao(database: AppDatabase): UserDao = database.userDao()
+
+    @Provides
+    fun provideGoalsDao(database: AppDatabase): GoalsDao = database.goalsDao()
+
+    @Provides
+    fun provideProfileDao(database: AppDatabase): ProfileDao = database.profileDao()
+
+    @Provides
+    fun provideFoodPrefsDao(database: AppDatabase): FoodPrefsDao = database.foodPrefsDao()
+
+    @Provides
+    fun provideSnapshotDao(database: AppDatabase): SnapshotDao = database.snapshotDao()
+
+    @Provides
+    fun provideSyncLogDao(database: AppDatabase): SyncLogDao = database.syncLogDao()
 }
