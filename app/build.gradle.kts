@@ -40,7 +40,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -58,6 +59,11 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
@@ -66,6 +72,19 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    // Check in exported Room schemas so migrations have a baseline to validate against.
+    // androidTest gets them for instrumented runs. Robolectric-based MigrationTestHelper reads the
+    // *debug-merged* app assets (android_merged_assets), so the schemas also go on the debug source
+    // set — debug-only, so the release APK never ships them.
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("debug").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+// Export Room schema JSONs to app/schemas for migration testing + version control.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -94,6 +113,11 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
+    // WorkManager + Hilt integration (offline-first sync reconciler)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+
     // Coil for images
     implementation("io.coil-kt:coil-compose:2.6.0")
 
@@ -118,6 +142,11 @@ dependencies {
     implementation("io.ktor:ktor-client-android:2.3.11")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("androidx.room:room-testing:2.6.1")
+    testImplementation("app.cash.turbine:turbine:1.1.0")
+    testImplementation("org.robolectric:robolectric:4.12.2")
+    testImplementation("androidx.test:core:1.5.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

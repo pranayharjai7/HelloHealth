@@ -8,6 +8,8 @@ import androidx.health.connect.client.records.*
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.hellohealth.core.logging.AppLogger
+import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.domain.model.ActivityChartPoint
 import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
@@ -31,21 +33,37 @@ class HealthConnectManager @Inject constructor(
     private val healthConnectClient: HealthConnectClient?,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
+    /**
+     * Resolves Health Connect availability in a version-agnostic way.
+     *
+     * [HealthConnectClient.getSdkStatus] is the single source of truth on ALL API levels: on
+     * API 26-33 it reflects whether the standalone "Health Connect" Play Store app is installed and
+     * up to date; on API 34+ it reflects the built-in system module. It returns one of:
+     *  - [HealthConnectClient.SDK_AVAILABLE]
+     *  - [HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED]
+     *  - [HealthConnectClient.SDK_UNAVAILABLE]
+     *
+     * We do NOT hardcode "available on API 34+" — on 34+ the provider can still require an update,
+     * and blindly returning SDK_AVAILABLE would mask that and break the request/permission flow.
+     */
     fun getAvailability(): Int {
         val status = HealthConnectClient.getSdkStatus(context)
-        if (healthConnectClient != null) return HealthConnectClient.SDK_AVAILABLE
-        if (android.os.Build.VERSION.SDK_INT >= 34) return HealthConnectClient.SDK_AVAILABLE
-        if (status == HealthConnectClient.SDK_UNAVAILABLE) {
-            try {
-                context.packageManager.getPackageInfo("com.google.android.apps.healthdata", 0)
-                return HealthConnectClient.SDK_AVAILABLE
-            } catch (e: Exception) {}
-        }
+        AppLogger.d(
+            FeatureTag.HEALTH,
+            "getSdkStatus=${statusLabel(status)} (raw=$status), clientNonNull=${healthConnectClient != null}, apiLevel=${android.os.Build.VERSION.SDK_INT}"
+        )
         return status
     }
 
+    private fun statusLabel(status: Int): String = when (status) {
+        HealthConnectClient.SDK_AVAILABLE -> "SDK_AVAILABLE"
+        HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED"
+        HealthConnectClient.SDK_UNAVAILABLE -> "SDK_UNAVAILABLE"
+        else -> "UNKNOWN($status)"
+    }
+
     val isAvailable: Boolean
-        get() = getAvailability() == HealthConnectClient.SDK_AVAILABLE || healthConnectClient != null
+        get() = getAvailability() == HealthConnectClient.SDK_AVAILABLE && healthConnectClient != null
 
     fun getHealthConnectSettingsIntent(): Intent {
         return if (android.os.Build.VERSION.SDK_INT >= 34) {
@@ -80,17 +98,54 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(SpeedRecord::class)
     )
 
+    /**
+     * The essential read permissions that gate the dashboard. These are ONLY standard record-type
+     * read permissions, because those are the strings that
+     * [androidx.health.connect.client.PermissionController.getGrantedPermissions] actually returns.
+     *
+     * IMPORTANT: `android.permission.health.READ_EXERCISE_ROUTES` is deliberately NOT in this set.
+     * Reading exercise routes is not a standing granted permission in the health-connect-client
+     * library — it is a per-session consent flow surfaced via [ExerciseRouteResult.ConsentRequired]
+     * (see [fetchExerciseSessionDetail]). `getGrantedPermissions()` never returns the routes string,
+     * so including it in a `containsAll` gate made [hasAllPermissions] permanently false on EVERY
+     * API level even after the user granted everything — the original "Connect Now never works" bug.
+     */
+    private val essentialPermissions = setOf(
+        HealthPermission.getReadPermission(StepsRecord::class),
+        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+    )
+
     suspend fun hasAllPermissions(): Boolean {
-        if (healthConnectClient == null) return false
-        val granted = healthConnectClient.permissionController.getGrantedPermissions()
-        val essentialPermissions = setOf(
-            HealthPermission.getReadPermission(StepsRecord::class),
-            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-            HealthPermission.getReadPermission(DistanceRecord::class),
-            "android.permission.health.READ_EXERCISE_ROUTES"
-        )
-        return granted.containsAll(essentialPermissions)
+        val client = healthConnectClient
+        if (client == null) {
+            AppLogger.w(FeatureTag.HEALTH, "hasAllPermissions=false: HealthConnectClient is null (provider unavailable)")
+            return false
+        }
+        return try {
+            val granted = client.permissionController.getGrantedPermissions()
+            val hasEssential = isConnected(granted)
+            val missing = essentialPermissions - granted
+            AppLogger.d(
+                FeatureTag.HEALTH,
+                "hasAllPermissions=$hasEssential; granted(${granted.size})=$granted; " +
+                    "requiredEssential=$essentialPermissions; missingEssential=$missing"
+            )
+            hasEssential
+        } catch (e: Exception) {
+            // Defined error path: never crash, treat as "not connected" so the UI can prompt.
+            AppLogger.e(FeatureTag.HEALTH, "hasAllPermissions failed; treating as not connected", e)
+            false
+        }
     }
+
+    /**
+     * Pure gate decision, split out so it can be unit-tested without a live [HealthConnectClient].
+     * Connected == all essential record-read permissions are present in [granted]. Version-agnostic:
+     * the exact same comparison is correct on API 26-33 (standalone app) and API 34+ (system module).
+     */
+    fun isConnected(granted: Set<String>): Boolean = granted.containsAll(essentialPermissions)
 
     suspend fun fetchHealthSummary(
         goals: ActivityGoals,

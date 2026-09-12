@@ -1,50 +1,51 @@
 package com.hellohealth.data.repository
 
+import com.hellohealth.core.logging.AppLogger
+import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.core.time.Timestamps
+import com.hellohealth.data.local.dao.ProfileDao
+import com.hellohealth.data.local.entities.ProfileEntity
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ProfileRepository
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
-import kotlinx.serialization.Serializable
+import com.hellohealth.sync.SyncScheduler
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Serializable
-private data class ProfileDto(
-    val id: String,
-    val display_name: String? = null
-)
-
+/**
+ * Room-first profile repository (Supabase `profiles`, conflict key `id`). Reads come from Room;
+ * writes hit Room (`isSynced=false`) then poke [SyncScheduler]. [com.hellohealth.sync.ProfileSyncer]
+ * owns the Supabase push/pull.
+ */
 @Singleton
 class ProfileRepositoryImpl @Inject constructor(
-    private val supabase: SupabaseClient,
-    private val sessionManager: SupabaseSessionManager
+    private val profileDao: ProfileDao,
+    private val sessionManager: SupabaseSessionManager,
+    private val syncScheduler: SyncScheduler
 ) : ProfileRepository {
 
     override suspend fun getProfile(): UserProfile? {
         val userId = sessionManager.getCurrentUserId() ?: return null
-        val response = supabase.postgrest["profiles"]
-            .select {
-                filter {
-                    eq("id", userId)
-                }
-            }
-            .decodeSingleOrNull<ProfileDto>()
-
-        return response?.let {
-            UserProfile(displayName = it.display_name)
-        }
+        return profileDao.get(userId)?.let { UserProfile(displayName = it.displayName) }
     }
 
     override suspend fun upsertProfile(profile: UserProfile) {
-        val userId = sessionManager.getCurrentUserId() ?: return
-        val dto = ProfileDto(
-            id = userId,
-            display_name = profile.displayName?.trim().orEmpty().ifBlank { null }
-        )
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            AppLogger.w(FeatureTag.PROFILE, "upsertProfile with no signed-in user; dropping write")
+            return
+        }
 
-        supabase.postgrest["profiles"].upsert(
-            value = dto,
-            onConflict = "id"
+        profileDao.upsert(
+            ProfileEntity(
+                userId = userId,
+                displayName = profile.displayName?.trim().orEmpty().ifBlank { null },
+                updatedAtEpochMs = Timestamps.nowEpochMs(),
+                updatedAtTzOffsetMinutes = Timestamps.currentTzOffsetMinutes(),
+                deletedAtEpochMs = null,
+                isSynced = false
+            )
         )
+        AppLogger.d(FeatureTag.PROFILE, "profile written locally; requesting sync")
+        syncScheduler.requestSync()
     }
 }

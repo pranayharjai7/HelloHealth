@@ -20,6 +20,7 @@ import com.hellohealth.ui.auth.LoginScreen
 import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
+import com.hellohealth.ui.debug.SyncDebugScreen
 import com.hellohealth.ui.foodpreferences.FoodPreferencesScreen
 import com.hellohealth.ui.foodpreferences.FoodPreferencesViewModel
 import com.hellohealth.ui.goals.GoalsScreen
@@ -158,7 +159,15 @@ fun AppNavigation(
         }
 
         composable(Screen.Profile.route) {
-            ProfileScreen(viewModel = authViewModel, onBack = { navController.popBackStack() })
+            ProfileScreen(
+                viewModel = authViewModel,
+                onBack = { navController.popBackStack() },
+                onOpenSyncDebug = { navController.navigate(Screen.SyncDebug.route) }
+            )
+        }
+
+        composable(Screen.SyncDebug.route) {
+            SyncDebugScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.Goals.route) {
@@ -206,6 +215,7 @@ sealed class Screen(val route: String) {
         }
     }
     object Profile : Screen("profile")
+    object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
     object ActivitySettings : Screen("activity_settings")
     object FoodPreferences : Screen("food_preferences")

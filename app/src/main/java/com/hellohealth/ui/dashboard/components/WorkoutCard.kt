@@ -108,7 +108,12 @@ fun WorkoutCard(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                if (!hasPermissions && lastSyncTime == null) {
+                // "Connected" means Health Connect is available AND permissions are granted, OR we
+                // have a cached snapshot to show (offline-first). Only show the connect prompt when
+                // the user is genuinely NOT connected — a connected-but-empty date must show a
+                // zero/no-data state, never the "Connect now" prompt.
+                val isConnected = hasPermissions || lastSyncTime != null
+                if (!isConnected) {
                     PermissionRequestContent(
                         availability = healthConnectAvailability,
                         error = error,
@@ -116,6 +121,24 @@ fun WorkoutCard(
                         onOpenSettings = onOpenSettings
                     )
                 } else {
+                    val hasAnyData = summary.steps > 0 ||
+                        summary.activeCalories > 0.0 ||
+                        summary.activeTimeMinutes > 0L
+                    if (!hasAnyData && !isSyncing) {
+                        Text(
+                            text = if (selectedDate == LocalDate.now()) {
+                                "No activity recorded yet today."
+                            } else {
+                                "No activity recorded for this day."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onSurfaceColor.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,

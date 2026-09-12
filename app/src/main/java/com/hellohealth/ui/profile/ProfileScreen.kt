@@ -1,6 +1,8 @@
 package com.hellohealth.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,7 +37,8 @@ import java.util.Locale
 @Composable
 fun ProfileScreen(
     viewModel: AuthViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenSyncDebug: () -> Unit = {}
 ) {
     val user by viewModel.currentUser.collectAsState()
     val editorState by viewModel.profileEditorState.collectAsState()
@@ -41,6 +46,11 @@ fun ProfileScreen(
     val backgroundColor = MaterialTheme.colorScheme.background
     var showEditDialog by remember { mutableStateOf(false) }
     var editedName by remember(user?.name) { mutableStateOf(user?.name.orEmpty()) }
+
+    // Hidden developer gesture: 7 quick taps on the "Profile" title opens the sync debug screen.
+    // No visible affordance; the tap streak resets if taps are more than 600ms apart.
+    var tapCount by remember { mutableIntStateOf(0) }
+    var lastTapAt by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(editorState.successMessage) {
         if (editorState.successMessage != null) {
@@ -51,7 +61,24 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Profile", fontWeight = FontWeight.Black) },
+                title = {
+                    Text(
+                        "Profile",
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            val now = System.currentTimeMillis()
+                            tapCount = if (now - lastTapAt <= 600L) tapCount + 1 else 1
+                            lastTapAt = now
+                            if (tapCount >= 7) {
+                                tapCount = 0
+                                onOpenSyncDebug()
+                            }
+                        }
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

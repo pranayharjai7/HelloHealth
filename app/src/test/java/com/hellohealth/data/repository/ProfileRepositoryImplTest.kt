@@ -1,0 +1,83 @@
+package com.hellohealth.data.repository
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.hellohealth.data.local.AppDatabase
+import com.hellohealth.data.local.dao.ProfileDao
+import com.hellohealth.domain.model.UserProfile
+import com.hellohealth.sync.SyncScheduler
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
+class ProfileRepositoryImplTest {
+
+    private lateinit var db: AppDatabase
+    private lateinit var profileDao: ProfileDao
+    private var syncRequests = 0
+
+    private val syncScheduler = object : SyncScheduler(
+        ApplicationProvider.getApplicationContext<Context>()
+    ) {
+        override fun requestSync() { syncRequests++ }
+    }
+
+    @Before
+    fun setUp() {
+        db = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).allowMainThreadQueries().build()
+        profileDao = db.profileDao()
+    }
+
+    @After
+    fun tearDown() = db.close()
+
+    private fun repo(userId: String?) = ProfileRepositoryImpl(
+        profileDao = profileDao,
+        sessionManager = object : SupabaseSessionManager(null) {
+            override suspend fun getCurrentUserId(): String? = userId
+        },
+        syncScheduler = syncScheduler
+    )
+
+    @Test
+    fun `no user returns null profile and drops writes`() = runTest {
+        val repo = repo(null)
+        assertNull(repo.getProfile())
+
+        repo.upsertProfile(UserProfile(displayName = "Ann"))
+        assertEquals(0, syncRequests)
+        assertTrue(profileDao.getUnsynced().isEmpty())
+    }
+
+    @Test
+    fun `upsert writes unsynced row, reads back, requests sync`() = runTest {
+        val repo = repo("u1")
+
+        repo.upsertProfile(UserProfile(displayName = "Ann"))
+
+        assertEquals("Ann", repo.getProfile()?.displayName)
+        val unsynced = profileDao.getUnsynced()
+        assertEquals(1, unsynced.size)
+        assertFalse(unsynced[0].isSynced)
+        assertEquals(1, syncRequests)
+    }
+
+    @Test
+    fun `blank display name is normalized to null`() = runTest {
+        val repo = repo("u1")
+        repo.upsertProfile(UserProfile(displayName = "   "))
+        assertNull(repo.getProfile()?.displayName)
+    }
+}
