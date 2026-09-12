@@ -26,4 +26,8 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindFoodPrefsSyncer(impl: FoodPrefsSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindSnapshotSyncer(impl: SnapshotSyncer): Syncer
 }
