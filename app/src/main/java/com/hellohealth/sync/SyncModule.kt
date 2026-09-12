@@ -18,4 +18,8 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindGoalsSyncer(impl: GoalsSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindProfileSyncer(impl: ProfileSyncer): Syncer
 }
