@@ -28,6 +28,7 @@ import com.hellohealth.ui.goals.GoalsViewModel
 import com.hellohealth.ui.help.HelpScreen
 import com.hellohealth.ui.insights.InsightsScreen
 import com.hellohealth.ui.insights.InsightsViewModel
+import com.hellohealth.ui.onboarding.OnboardingScreen
 import com.hellohealth.ui.profile.ProfileScreen
 import com.hellohealth.ui.splash.SplashScreen
 
@@ -193,6 +194,16 @@ fun AppNavigation(
         composable(Screen.Help.route) {
             HelpScreen(onBack = { navController.popBackStack() })
         }
+
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                onFinished = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -221,4 +232,5 @@ sealed class Screen(val route: String) {
     object FoodPreferences : Screen("food_preferences")
     object Insights : Screen("insights")
     object Help : Screen("help")
+    object Onboarding : Screen("onboarding")
 }
