@@ -80,26 +80,54 @@ class DashboardViewModel @Inject constructor(
     fun checkPermissionsAndLoadData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val availability = activityRepository.getAvailability()
-            Log.d("DashboardViewModel", "Availability check: $availability (Available is ${HealthConnectClient.SDK_AVAILABLE})")
-            _uiState.update { it.copy(healthConnectAvailability = availability) }
-            
-            var hasPermissions = false
-            if (availability == HealthConnectClient.SDK_AVAILABLE) {
-                hasPermissions = activityRepository.hasPermissions()
-                Log.d("DashboardViewModel", "Has permissions: $hasPermissions")
-            }
-
-            _uiState.update {
-                it.copy(
-                    hasHealthPermissions = hasPermissions,
-                    isLoading = false
-                )
-            }
+            val hasPermissions = refreshPermissionStateInternal()
 
             loadMonthSnapshots()
             loadHealthSummary(forceRefresh = hasPermissions && _uiState.value.selectedDate == LocalDate.now())
         }
+    }
+
+    /**
+     * Re-checks Health Connect availability + granted permissions and, if the connection status
+     * changed (e.g. the user just granted permissions in the Health Connect UI and returned to the
+     * app), reloads the selected date so the rings appear immediately without an app restart.
+     *
+     * Safe to call on every ON_RESUME and after the permission dialog returns.
+     */
+    fun refreshPermissionState() {
+        viewModelScope.launch {
+            val wasConnected = _uiState.value.hasHealthPermissions
+            val nowConnected = refreshPermissionStateInternal()
+            // Only trigger a reload when the connection status actually changed, to avoid
+            // hammering Health Connect on every resume.
+            if (nowConnected != wasConnected) {
+                loadMonthSnapshots(silent = true)
+                loadHealthSummary(
+                    forceRefresh = nowConnected && _uiState.value.selectedDate == LocalDate.now()
+                )
+            }
+        }
+    }
+
+    /** Updates availability + permission flags in state and returns the current connected status. */
+    private suspend fun refreshPermissionStateInternal(): Boolean {
+        val availability = activityRepository.getAvailability()
+        Log.d("DashboardViewModel", "Availability check: $availability (Available is ${HealthConnectClient.SDK_AVAILABLE})")
+
+        var hasPermissions = false
+        if (availability == HealthConnectClient.SDK_AVAILABLE) {
+            hasPermissions = activityRepository.hasPermissions()
+            Log.d("DashboardViewModel", "Has permissions: $hasPermissions")
+        }
+
+        _uiState.update {
+            it.copy(
+                healthConnectAvailability = availability,
+                hasHealthPermissions = hasPermissions,
+                isLoading = false
+            )
+        }
+        return hasPermissions
     }
 
     fun loadHealthSummary(forceRefresh: Boolean = false) {

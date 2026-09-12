@@ -32,6 +32,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -71,13 +74,29 @@ fun DashboardScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val pullRefreshState = rememberPullToRefreshState()
 
-    // Health Connect Permission Launcher
+    // Health Connect Permission Launcher.
+    // The result contract can return an empty set when every requested permission was ALREADY
+    // granted (nothing changed), so we must re-check permission state unconditionally on return
+    // rather than only when `granted` is non-empty — otherwise "Connect Now" silently does nothing
+    // for a user who already granted access in the Health Connect UI.
     val permissionLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
-    ) { granted ->
-        if (granted.isNotEmpty()) {
-            dashboardViewModel.checkPermissionsAndLoadData()
+    ) {
+        dashboardViewModel.checkPermissionsAndLoadData()
+    }
+
+    // Re-check permission state whenever the screen resumes. This covers the case where the user
+    // taps "Open Health Settings", grants permissions in the Health Connect app, then returns —
+    // the rings now appear immediately without needing an app restart.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                dashboardViewModel.refreshPermissionState()
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Auto-request Health Connect permissions

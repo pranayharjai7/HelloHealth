@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.HealthConnectClient
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -68,7 +69,7 @@ fun ActivitySettingsScreen(
             ) {
                 // Connection Status Card
                 StatusCard(
-                    isAvailable = uiState.healthConnectAvailability == 1, // SDK_AVAILABLE
+                    isAvailable = uiState.healthConnectAvailability == HealthConnectClient.SDK_AVAILABLE,
                     hasPermissions = uiState.hasPermissions
                 )
 
