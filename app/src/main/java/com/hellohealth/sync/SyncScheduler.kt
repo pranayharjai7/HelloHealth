@@ -29,7 +29,7 @@ import javax.inject.Singleton
  * Repositories depend only on [requestSync]; periodic scheduling is owned by the Application.
  */
 @Singleton
-class SyncScheduler @Inject constructor(
+open class SyncScheduler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val workManager get() = WorkManager.getInstance(context)
@@ -56,7 +56,7 @@ class SyncScheduler @Inject constructor(
     }
 
     /** Fire an expedited one-shot sync after a local write. Bursts collapse into one pending run. */
-    fun requestSync() {
+    open fun requestSync() {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(connectedConstraint)
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)

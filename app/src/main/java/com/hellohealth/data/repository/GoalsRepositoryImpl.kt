@@ -1,94 +1,77 @@
 package com.hellohealth.data.repository
 
+import com.hellohealth.core.logging.AppLogger
+import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.core.time.Timestamps
+import com.hellohealth.data.local.dao.GoalsDao
+import com.hellohealth.data.local.entities.GoalsEntity
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.repository.GoalsRepository
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.postgrest.postgrest
-import kotlinx.coroutines.Dispatchers
+import com.hellohealth.sync.SyncScheduler
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.serialization.Serializable
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Serializable
-data class ActivityGoalsDto(
-    val user_id: String,
-    val steps_goal: Int,
-    val calories_goal: Int,
-    val active_minutes_goal: Int
-)
-
+/**
+ * Room-first goals repository. Room is the source of truth the UI reads; writes hit Room
+ * (`isSynced=false`) and then poke [SyncScheduler] to reconcile with Supabase in the background.
+ * The [GoalsSyncer] handles the actual push/pull, so this class no longer touches Postgrest.
+ *
+ * When there is no signed-in user or no stored row, reads fall back to [ActivityGoals] defaults —
+ * matching the previous behavior so no screen changes.
+ */
 @Singleton
 class GoalsRepositoryImpl @Inject constructor(
-    private val supabase: SupabaseClient,
-    private val sessionManager: SupabaseSessionManager
+    private val goalsDao: GoalsDao,
+    private val sessionManager: SupabaseSessionManager,
+    private val syncScheduler: SyncScheduler
 ) : GoalsRepository {
 
-    private val _goals = MutableStateFlow<ActivityGoals?>(null)
-
     override fun getActivityGoals(): Flow<ActivityGoals> = flow {
-        if (_goals.value == null) {
-            _goals.value = fetchActivityGoals()
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(ActivityGoals())
+            return@flow
         }
-        _goals.collect { goals ->
-            if (goals != null) emit(goals)
-        }
+        emitAll(goalsDao.observe(userId).map { it?.toDomain() ?: ActivityGoals() })
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getCurrentActivityGoals(): ActivityGoals {
-        return _goals.value ?: fetchActivityGoals().also { _goals.value = it }
+        val userId = sessionManager.getCurrentUserId() ?: return ActivityGoals()
+        return goalsDao.get(userId)?.toDomain() ?: ActivityGoals()
     }
 
     override suspend fun updateActivityGoals(goals: ActivityGoals) {
-        val userId = sessionManager.getCurrentUserId() ?: return
-        
-        _goals.value = goals
-        
-        val dto = ActivityGoalsDto(
-            user_id = userId,
-            steps_goal = goals.steps,
-            calories_goal = goals.activeCalories,
-            active_minutes_goal = goals.activeMinutes
-        )
-
-        supabase.postgrest["activity_goals"].upsert(
-            value = dto,
-            onConflict = "user_id"
-        )
-    }
-
-    private suspend fun fetchActivityGoals(): ActivityGoals {
-        val userId = sessionManager.getCurrentUserId().orEmpty()
-        if (userId.isEmpty()) {
-            return ActivityGoals()
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            AppLogger.w(FeatureTag.GOALS, "updateActivityGoals with no signed-in user; dropping write")
+            return
         }
 
-        return try {
-            val response = supabase.postgrest["activity_goals"]
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                    }
-                }
-                .decodeSingleOrNull<ActivityGoalsDto>()
-
-            if (response != null) {
-                ActivityGoals(
-                    steps = response.steps_goal,
-                    activeCalories = response.calories_goal,
-                    activeMinutes = response.active_minutes_goal
-                )
-            } else {
-                ActivityGoals()
-            }
-        } catch (_: Exception) {
-            ActivityGoals()
-        }
+        goalsDao.upsert(
+            GoalsEntity(
+                userId = userId,
+                steps = goals.steps,
+                activeCalories = goals.activeCalories,
+                activeMinutes = goals.activeMinutes,
+                updatedAtEpochMs = Timestamps.nowEpochMs(),
+                updatedAtTzOffsetMinutes = Timestamps.currentTzOffsetMinutes(),
+                deletedAtEpochMs = null,
+                isSynced = false
+            )
+        )
+        AppLogger.d(FeatureTag.GOALS, "goals written locally; requesting sync")
+        syncScheduler.requestSync()
     }
+
+    private fun GoalsEntity.toDomain() = ActivityGoals(
+        steps = steps,
+        activeCalories = activeCalories,
+        activeMinutes = activeMinutes
+    )
 }
