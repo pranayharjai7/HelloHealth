@@ -364,18 +364,17 @@ class OnboardingViewModel @Inject constructor(
     }
 
     companion object {
-        // Metric validation bounds for the Body step. Permissive enough for real human extremes,
-        // tight enough to reject fat-finger entries (a 3 cm height, a 5 kg adult).
-        const val MIN_HEIGHT_CM = 50.0
-        const val MAX_HEIGHT_CM = 272.0
-        const val MIN_WEIGHT_KG = 20.0
-        const val MAX_WEIGHT_KG = 400.0
+        // Metric validation bounds hoisted to [com.hellohealth.domain.health.VitalsBounds] so the
+        // onboarding wizard and the later Profile/Goals editors validate identically. Re-exported
+        // here as aliases so existing references in this file/screen keep working unchanged.
+        const val MIN_HEIGHT_CM = com.hellohealth.domain.health.VitalsBounds.MIN_HEIGHT_CM
+        const val MAX_HEIGHT_CM = com.hellohealth.domain.health.VitalsBounds.MAX_HEIGHT_CM
+        const val MIN_WEIGHT_KG = com.hellohealth.domain.health.VitalsBounds.MIN_WEIGHT_KG
+        const val MAX_WEIGHT_KG = com.hellohealth.domain.health.VitalsBounds.MAX_WEIGHT_KG
 
-        // Age gate (years) and weekly weight-change bounds (kg/week). A rate outside this band would
-        // push the calorie budget into unsafe territory, so the Activity step blocks it.
-        const val MIN_AGE = 13
-        const val MAX_AGE = 120
-        const val MIN_RATE_KG_PER_WEEK = 0.1
-        const val MAX_RATE_KG_PER_WEEK = 1.0
+        const val MIN_AGE = com.hellohealth.domain.health.VitalsBounds.MIN_AGE
+        const val MAX_AGE = com.hellohealth.domain.health.VitalsBounds.MAX_AGE
+        const val MIN_RATE_KG_PER_WEEK = com.hellohealth.domain.health.VitalsBounds.MIN_RATE_KG_PER_WEEK
+        const val MAX_RATE_KG_PER_WEEK = com.hellohealth.domain.health.VitalsBounds.MAX_RATE_KG_PER_WEEK
     }
 }

@@ -1,5 +1,9 @@
 package com.hellohealth.ui.onboarding
 
+import com.hellohealth.ui.common.cmToFeetInches
+import com.hellohealth.ui.common.feetInchesToCm
+import com.hellohealth.ui.common.kgToLb
+import com.hellohealth.ui.common.lbToKg
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
