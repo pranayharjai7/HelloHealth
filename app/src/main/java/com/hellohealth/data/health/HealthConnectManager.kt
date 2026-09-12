@@ -500,6 +500,26 @@ class HealthConnectManager @Inject constructor(
         return response?.get(HeartRateRecord.BPM_AVG) ?: 0L
     }
 
+    /**
+     * Reads the most recent height + weight records for onboarding pre-fill. Never throws: a null
+     * client, a missing read permission, or any read error degrades to `null` fields (the UI then
+     * asks the user to type them). Converts Health Connect's native units into the app's canonical
+     * metric — height meters→cm, weight already kg.
+     */
+    suspend fun fetchLatestBodyMetrics(): com.hellohealth.domain.model.BodyMetrics {
+        if (healthConnectClient == null) {
+            AppLogger.w(FeatureTag.HEALTH, "fetchLatestBodyMetrics: HealthConnectClient null; returning empty")
+            return com.hellohealth.domain.model.BodyMetrics()
+        }
+        val now = Instant.now()
+        val heightCm = runCatching { fetchLatestHeight(now)?.let { it * 100.0 } }
+            .getOrElse { e -> AppLogger.e(FeatureTag.HEALTH, "fetchLatestBodyMetrics: height read failed", e); null }
+        val weightKg = runCatching { fetchLatestWeight(now) }
+            .getOrElse { e -> AppLogger.e(FeatureTag.HEALTH, "fetchLatestBodyMetrics: weight read failed", e); null }
+        AppLogger.d(FeatureTag.HEALTH, "fetchLatestBodyMetrics: heightCm=$heightCm weightKg=$weightKg")
+        return com.hellohealth.domain.model.BodyMetrics(heightCm = heightCm, weightKg = weightKg)
+    }
+
     private suspend fun fetchLatestWeight(before: Instant): Double? {
         val response = healthConnectClient?.readRecords(
             ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)

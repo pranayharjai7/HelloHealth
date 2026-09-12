@@ -1,6 +1,7 @@
 package com.hellohealth.ui.onboarding
 
 import com.hellohealth.domain.model.ActivityGoals
+import com.hellohealth.domain.model.BodyMetrics
 import com.hellohealth.domain.model.Gender
 import com.hellohealth.domain.model.UnitPreference
 import com.hellohealth.domain.model.User
@@ -59,6 +60,33 @@ class OnboardingViewModelTest {
         override suspend fun updateActivityGoals(goals: ActivityGoals) {}
     }
 
+    /**
+     * Health Connect prefill stub. [metrics] is what a "read" returns; default is empty (nothing to
+     * prefill), matching an unconnected device. Only [fetchLatestBodyMetrics] is exercised here.
+     */
+    private class FakeActivityRepository(
+        private val metrics: BodyMetrics = BodyMetrics()
+    ) : com.hellohealth.domain.repository.ActivityRepository {
+        override suspend fun fetchSummary(
+            goals: ActivityGoals,
+            date: java.time.LocalDate,
+            forceRefresh: Boolean
+        ) = com.hellohealth.domain.model.HealthSummary()
+        override suspend fun getHistoryForMonth(month: java.time.YearMonth) =
+            emptyList<com.hellohealth.domain.model.DailyHealthSnapshot>()
+        override suspend fun getExerciseSessionDetail(
+            sessionId: String,
+            startTimeHint: java.time.Instant?,
+            endTimeHint: java.time.Instant?
+        ): com.hellohealth.domain.model.ActivityDetail? = null
+        override suspend fun fetchWeeklyStats() = com.hellohealth.domain.model.WeeklyStats()
+        override suspend fun hasPermissions() = false
+        override suspend fun fetchLatestBodyMetrics(): BodyMetrics = metrics
+        override fun getRequiredPermissions(): Set<String> = emptySet()
+        override fun getAvailability(): Int = 0
+        override fun getSettingsIntent(context: android.content.Context) = android.content.Intent()
+    }
+
     @Before
     fun setUp() = Dispatchers.setMain(dispatcher)
 
@@ -66,7 +94,20 @@ class OnboardingViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun viewModel(name: String?) =
-        OnboardingViewModel(FakeAuthRepository(name), FakeProfileRepository(), FakeGoalsRepository())
+        OnboardingViewModel(
+            FakeAuthRepository(name),
+            FakeProfileRepository(),
+            FakeGoalsRepository(),
+            FakeActivityRepository()
+        )
+
+    private fun viewModelWithMetrics(metrics: BodyMetrics) =
+        OnboardingViewModel(
+            FakeAuthRepository(null),
+            FakeProfileRepository(),
+            FakeGoalsRepository(),
+            FakeActivityRepository(metrics)
+        )
 
     @Test
     fun `prefills display name from the signed-in Google account`() = runTest(dispatcher) {
@@ -142,5 +183,94 @@ class OnboardingViewModelTest {
 
         vm.previousStep()
         assertEquals(OnboardingStep.ACTIVITY, vm.uiState.value.step)
+    }
+
+    // --- Step 7: Body step ---
+
+    @Test
+    fun `body is invalid until height and weight are within bounds`() = runTest(dispatcher) {
+        val vm = viewModel(null)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isBodyValid)
+
+        vm.updateHeightCm(180.0)
+        assertFalse("height alone is not enough", vm.uiState.value.isBodyValid)
+
+        vm.updateWeightKg(75.0)
+        assertTrue(vm.uiState.value.isBodyValid)
+    }
+
+    @Test
+    fun `body rejects out-of-bounds height and weight`() = runTest(dispatcher) {
+        val vm = viewModel(null)
+        advanceUntilIdle()
+
+        vm.updateHeightCm(3.0)   // absurdly short
+        vm.updateWeightKg(75.0)
+        assertFalse(vm.uiState.value.isBodyValid)
+
+        vm.updateHeightCm(180.0)
+        vm.updateWeightKg(5.0)   // absurdly light
+        assertFalse(vm.uiState.value.isBodyValid)
+
+        vm.updateHeightCm(180.0)
+        vm.updateWeightKg(75.0)
+        assertTrue(vm.uiState.value.isBodyValid)
+    }
+
+    @Test
+    fun `body prefills height and weight from Health Connect`() = runTest(dispatcher) {
+        val vm = viewModelWithMetrics(BodyMetrics(heightCm = 175.0, weightKg = 68.0))
+        advanceUntilIdle()
+
+        vm.prefillBodyFromHealthConnect()
+        advanceUntilIdle()
+
+        assertEquals(175.0, vm.uiState.value.heightCm!!, 0.001)
+        assertEquals(68.0, vm.uiState.value.weightKg!!, 0.001)
+    }
+
+    @Test
+    fun `body prefill does not clobber values the user already entered`() = runTest(dispatcher) {
+        val vm = viewModelWithMetrics(BodyMetrics(heightCm = 175.0, weightKg = 68.0))
+        advanceUntilIdle()
+
+        // User types their own height before prefill runs.
+        vm.updateHeightCm(190.0)
+        vm.prefillBodyFromHealthConnect()
+        advanceUntilIdle()
+
+        assertEquals("manual height preserved", 190.0, vm.uiState.value.heightCm!!, 0.001)
+        // Weight was untouched, so prefill fills it.
+        assertEquals(68.0, vm.uiState.value.weightKg!!, 0.001)
+    }
+
+    @Test
+    fun `body prefill runs at most once`() = runTest(dispatcher) {
+        val vm = viewModelWithMetrics(BodyMetrics(heightCm = 175.0, weightKg = 68.0))
+        advanceUntilIdle()
+
+        vm.prefillBodyFromHealthConnect()
+        advanceUntilIdle()
+        // User overrides after the first prefill.
+        vm.updateWeightKg(80.0)
+
+        // A second entry to the step must NOT re-run prefill and clobber the override.
+        vm.prefillBodyFromHealthConnect()
+        advanceUntilIdle()
+        assertEquals(80.0, vm.uiState.value.weightKg!!, 0.001)
+    }
+
+    @Test
+    fun `body prefill with no Health Connect data leaves fields empty`() = runTest(dispatcher) {
+        val vm = viewModel(null) // FakeActivityRepository returns empty metrics
+        advanceUntilIdle()
+
+        vm.prefillBodyFromHealthConnect()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.uiState.value.heightCm)
+        assertEquals(null, vm.uiState.value.weightKg)
+        assertFalse(vm.uiState.value.isPrefillingBody)
     }
 }

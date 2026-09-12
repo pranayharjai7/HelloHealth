@@ -116,6 +116,16 @@ class ActivityRepositoryImpl @Inject constructor(
 
     override suspend fun hasPermissions(): Boolean = healthConnectManager.hasAllPermissions()
 
+    override suspend fun fetchLatestBodyMetrics(): com.hellohealth.domain.model.BodyMetrics {
+        // Only attempt a read when Health Connect is present and connected; otherwise the fields
+        // stay empty and the onboarding UI falls back to manual entry.
+        return if (healthConnectManager.isAvailable && healthConnectManager.hasAllPermissions()) {
+            healthConnectManager.fetchLatestBodyMetrics()
+        } else {
+            com.hellohealth.domain.model.BodyMetrics()
+        }
+    }
+
     override fun getRequiredPermissions(): Set<String> = healthConnectManager.permissions
 
     override fun getAvailability(): Int = healthConnectManager.getAvailability()

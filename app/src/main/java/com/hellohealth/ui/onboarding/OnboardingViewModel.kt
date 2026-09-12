@@ -6,6 +6,7 @@ import com.hellohealth.domain.model.ActivityLevel
 import com.hellohealth.domain.model.Gender
 import com.hellohealth.domain.model.GoalType
 import com.hellohealth.domain.model.UnitPreference
+import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.AuthRepository
 import com.hellohealth.domain.repository.GoalsRepository
 import com.hellohealth.domain.repository.ProfileRepository
@@ -50,6 +51,7 @@ data class OnboardingUiState(
     // Body (Step 7)
     val heightCm: Double? = null,
     val weightKg: Double? = null,
+    val isPrefillingBody: Boolean = false,
     // Activity & goal (Step 8)
     val activityLevel: ActivityLevel? = null,
     val goalType: GoalType? = null,
@@ -59,6 +61,19 @@ data class OnboardingUiState(
     /** Basics is complete once the user has named themselves and picked a birth date. */
     val isBasicsValid: Boolean
         get() = displayName.isNotBlank() && birthDateEpochDay != null
+
+    /**
+     * Body is complete once both height and weight are set and within sane human bounds. The bounds
+     * reject fat-finger entries (a 3 cm height, a 5 kg adult) while staying permissive enough for
+     * real extremes; they mirror the metric ranges checked in [OnboardingViewModel].
+     */
+    val isBodyValid: Boolean
+        get() {
+            val h = heightCm ?: return false
+            val w = weightKg ?: return false
+            return h in OnboardingViewModel.MIN_HEIGHT_CM..OnboardingViewModel.MAX_HEIGHT_CM &&
+                w in OnboardingViewModel.MIN_WEIGHT_KG..OnboardingViewModel.MAX_WEIGHT_KG
+        }
 }
 
 /**
@@ -71,7 +86,8 @@ data class OnboardingUiState(
 class OnboardingViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val profileRepository: ProfileRepository,
-    private val goalsRepository: GoalsRepository
+    private val goalsRepository: GoalsRepository,
+    private val activityRepository: ActivityRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
@@ -83,6 +99,18 @@ class OnboardingViewModel @Inject constructor(
      * thread; the fetch suspends, leaving a window for input).
      */
     private var nameTouched = false
+
+    /**
+     * True once the user edits either body field. Guards the async Health Connect [prefillBody] from
+     * overwriting a value the user typed while the read was in flight (same race as [nameTouched]).
+     * Prefill also only fills fields that are still null, so a manual entry is never clobbered even
+     * within a single field.
+     */
+    private var heightTouched = false
+    private var weightTouched = false
+
+    /** Ensures the one-shot Health Connect prefill runs at most once, on first entry to the Body step. */
+    private var bodyPrefillAttempted = false
 
     init {
         prefillFromAuth()
@@ -124,6 +152,48 @@ class OnboardingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(unitPreference = unit)
     }
 
+    // --- Body mutators (Step 7) ---
+
+    /**
+     * Kicks off a one-shot Health Connect prefill of height/weight when the user first reaches the
+     * Body step. No-op on repeat entries (so re-visiting the step doesn't re-clobber edits) and only
+     * fills fields the user hasn't touched and that are still null. Never crashes: the repository
+     * returns empty metrics when Health Connect is unavailable or unconnected.
+     */
+    fun prefillBodyFromHealthConnect() {
+        if (bodyPrefillAttempted) return
+        bodyPrefillAttempted = true
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isPrefillingBody = true)
+            val metrics = runCatching { activityRepository.fetchLatestBodyMetrics() }.getOrNull()
+            _uiState.value = _uiState.value.copy(
+                heightCm = if (!heightTouched && _uiState.value.heightCm == null) {
+                    metrics?.heightCm ?: _uiState.value.heightCm
+                } else {
+                    _uiState.value.heightCm
+                },
+                weightKg = if (!weightTouched && _uiState.value.weightKg == null) {
+                    metrics?.weightKg ?: _uiState.value.weightKg
+                } else {
+                    _uiState.value.weightKg
+                },
+                isPrefillingBody = false
+            )
+        }
+    }
+
+    /** Stores height in metric (cm). The UI converts imperial ft/in before calling this. */
+    fun updateHeightCm(heightCm: Double?) {
+        heightTouched = true
+        _uiState.value = _uiState.value.copy(heightCm = heightCm)
+    }
+
+    /** Stores weight in metric (kg). The UI converts imperial lb before calling this. */
+    fun updateWeightKg(weightKg: Double?) {
+        weightTouched = true
+        _uiState.value = _uiState.value.copy(weightKg = weightKg)
+    }
+
     // --- Step navigation ---
 
     fun nextStep() {
@@ -136,5 +206,14 @@ class OnboardingViewModel @Inject constructor(
         val current = _uiState.value.step
         val prev = OnboardingStep.entries.getOrNull(current.ordinal - 1) ?: return
         _uiState.value = _uiState.value.copy(step = prev, error = null)
+    }
+
+    companion object {
+        // Metric validation bounds for the Body step. Permissive enough for real human extremes,
+        // tight enough to reject fat-finger entries (a 3 cm height, a 5 kg adult).
+        const val MIN_HEIGHT_CM = 50.0
+        const val MAX_HEIGHT_CM = 272.0
+        const val MIN_WEIGHT_KG = 20.0
+        const val MAX_WEIGHT_KG = 400.0
     }
 }

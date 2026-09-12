@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
+import com.hellohealth.domain.model.BodyMetrics
 import com.hellohealth.domain.model.DailyHealthSnapshot
 import com.hellohealth.domain.model.HealthSummary
 import java.time.Instant
@@ -24,6 +25,11 @@ interface ActivityRepository {
     ): ActivityDetail?
     suspend fun fetchWeeklyStats(): com.hellohealth.domain.model.WeeklyStats
     suspend fun hasPermissions(): Boolean
+    /**
+     * Latest height + weight from Health Connect for onboarding pre-fill (metric). Returns empty
+     * fields when Health Connect is unavailable, unconnected, or holds no such records — never throws.
+     */
+    suspend fun fetchLatestBodyMetrics(): BodyMetrics
     fun getRequiredPermissions(): Set<String>
     fun getAvailability(): Int
     fun getSettingsIntent(context: Context): Intent
