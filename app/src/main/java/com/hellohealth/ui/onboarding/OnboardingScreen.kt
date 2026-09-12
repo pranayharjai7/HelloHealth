@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.hellohealth.domain.model.ActivityLevel
 import com.hellohealth.domain.model.Gender
+import com.hellohealth.domain.model.GoalType
 import com.hellohealth.domain.model.UnitPreference
 import java.time.Instant
 import java.time.LocalDate
@@ -97,6 +99,14 @@ fun OnboardingScreen(
                         onPrefill = viewModel::prefillBodyFromHealthConnect,
                         onHeightCmChange = viewModel::updateHeightCm,
                         onWeightKgChange = viewModel::updateWeightKg
+                    )
+                    OnboardingStep.ACTIVITY -> ActivityStep(
+                        uiState = uiState,
+                        primaryColor = primaryColor,
+                        onActivityLevelChange = viewModel::updateActivityLevel,
+                        onGoalTypeChange = viewModel::updateGoalType,
+                        onTargetWeightKgChange = viewModel::updateTargetWeightKg,
+                        onTargetRateChange = viewModel::updateTargetRateKgPerWeek
                     )
                     else -> PlaceholderStep(step = step)
                 }
@@ -295,6 +305,108 @@ private fun BodyStep(
 }
 
 /**
+ * Activity & goal step: activity level, goal direction, and — only for a directional goal — an
+ * optional target weight and weekly rate. Weight/rate inputs are unit-aware (kg or lb; the rate is
+ * kg/week or lb/week) and stored metric. Targets are optional, so leaving them blank is valid; the
+ * ViewModel bounds any value the user does enter.
+ */
+@Composable
+private fun ActivityStep(
+    uiState: OnboardingUiState,
+    primaryColor: Color,
+    onActivityLevelChange: (ActivityLevel) -> Unit,
+    onGoalTypeChange: (GoalType) -> Unit,
+    onTargetWeightKgChange: (Double?) -> Unit,
+    onTargetRateChange: (Double?) -> Unit
+) {
+    val imperial = uiState.unitPreference == UnitPreference.IMPERIAL
+
+    StepScaffold(
+        title = "Activity & goals",
+        subtitle = "How active are you, and what are you aiming for? This shapes your daily calorie target."
+    ) {
+        FieldLabel("Activity level")
+        SingleSelectChips(
+            options = ActivityLevel.entries,
+            selected = uiState.activityLevel,
+            labelOf = { it.displayLabel() },
+            onSelect = onActivityLevelChange
+        )
+
+        FieldLabel("Goal")
+        SingleSelectChips(
+            options = GoalType.entries,
+            selected = uiState.goalType,
+            labelOf = { it.displayLabel() },
+            onSelect = onGoalTypeChange
+        )
+
+        // Target weight/rate only make sense for a directional goal.
+        if (uiState.goalType == GoalType.LOSE || uiState.goalType == GoalType.GAIN) {
+            // Out-of-range errors are surfaced inline, in the unit the user is typing, so a disabled
+            // Next button always has a visible reason (the gate itself checks the stored metric value).
+            val target = uiState.targetWeightKg
+            val targetError = if (target != null &&
+                target !in OnboardingViewModel.MIN_WEIGHT_KG..OnboardingViewModel.MAX_WEIGHT_KG
+            ) {
+                if (imperial) {
+                    "Enter a weight between ${formatNumber(OnboardingViewModel.MIN_WEIGHT_KG.kgToLb())}" +
+                        " and ${formatNumber(OnboardingViewModel.MAX_WEIGHT_KG.kgToLb())} lb."
+                } else {
+                    "Enter a weight between ${formatNumber(OnboardingViewModel.MIN_WEIGHT_KG)}" +
+                        " and ${formatNumber(OnboardingViewModel.MAX_WEIGHT_KG)} kg."
+                }
+            } else {
+                null
+            }
+
+            FieldLabel("Target weight (optional)")
+            MetricNumberField(
+                valueMetric = uiState.targetWeightKg,
+                unitSuffix = if (imperial) "lb" else "kg",
+                primaryColor = primaryColor,
+                toDisplay = { if (imperial) it.kgToLb() else it },
+                fromDisplay = { if (imperial) it.lbToKg() else it },
+                onMetricChange = onTargetWeightKgChange,
+                errorText = targetError
+            )
+
+            val rateUnit = if (imperial) "lb / week" else "kg / week"
+            val rate = uiState.targetRateKgPerWeek
+            val rateError = if (rate != null &&
+                rate !in OnboardingViewModel.MIN_RATE_KG_PER_WEEK..OnboardingViewModel.MAX_RATE_KG_PER_WEEK
+            ) {
+                if (imperial) {
+                    "Keep it between ${formatNumber(OnboardingViewModel.MIN_RATE_KG_PER_WEEK.kgToLb())}" +
+                        " and ${formatNumber(OnboardingViewModel.MAX_RATE_KG_PER_WEEK.kgToLb())} lb/week."
+                } else {
+                    "Keep it between ${formatNumber(OnboardingViewModel.MIN_RATE_KG_PER_WEEK)}" +
+                        " and ${formatNumber(OnboardingViewModel.MAX_RATE_KG_PER_WEEK)} kg/week."
+                }
+            } else {
+                null
+            }
+
+            FieldLabel("Weekly rate (optional)")
+            MetricNumberField(
+                valueMetric = uiState.targetRateKgPerWeek,
+                unitSuffix = rateUnit,
+                primaryColor = primaryColor,
+                toDisplay = { if (imperial) it.kgToLb() else it },
+                fromDisplay = { if (imperial) it.lbToKg() else it },
+                onMetricChange = onTargetRateChange,
+                errorText = rateError
+            )
+            Text(
+                text = "A steady 0.25–1 kg (about 0.5–2 lb) per week is a healthy pace. Leave blank for our default.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+/**
  * A single numeric field that displays in some unit but reports a metric value. [toDisplay] maps
  * the stored metric value into the display unit for seeding; [fromDisplay] maps a parsed display
  * value back to metric. The raw text is held locally so in-progress edits survive, and re-seeded
@@ -307,7 +419,8 @@ private fun MetricNumberField(
     primaryColor: Color,
     toDisplay: (Double) -> Double,
     fromDisplay: (Double) -> Double,
-    onMetricChange: (Double?) -> Unit
+    onMetricChange: (Double?) -> Unit,
+    errorText: String? = null
 ) {
     // The field owns its raw text so in-progress edits ("70.", "5") survive. We re-seed ONLY when
     // the stored metric changes from an external source (prefill, unit switch) — detected by the
@@ -330,6 +443,8 @@ private fun MetricNumberField(
         },
         label = { Text(unitSuffix) },
         singleLine = true,
+        isError = errorText != null,
+        supportingText = errorText?.let { { Text(it) } },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
@@ -544,6 +659,7 @@ private fun StepControls(
     val nextEnabled = when (uiState.step) {
         OnboardingStep.BASICS -> uiState.isBasicsValid
         OnboardingStep.BODY -> uiState.isBodyValid
+        OnboardingStep.ACTIVITY -> uiState.isActivityValid
         else -> true
     }
 
@@ -579,6 +695,20 @@ private fun Gender.displayLabel() = when (this) {
 private fun UnitPreference.displayLabel() = when (this) {
     UnitPreference.METRIC -> "Metric (kg, cm)"
     UnitPreference.IMPERIAL -> "Imperial (lb, ft)"
+}
+
+private fun ActivityLevel.displayLabel() = when (this) {
+    ActivityLevel.SEDENTARY -> "Sedentary"
+    ActivityLevel.LIGHT -> "Lightly active"
+    ActivityLevel.MODERATE -> "Moderately active"
+    ActivityLevel.ACTIVE -> "Active"
+    ActivityLevel.VERY_ACTIVE -> "Very active"
+}
+
+private fun GoalType.displayLabel() = when (this) {
+    GoalType.LOSE -> "Lose weight"
+    GoalType.MAINTAIN -> "Maintain"
+    GoalType.GAIN -> "Gain weight"
 }
 
 // --- Unit conversions (storage is always metric) ---

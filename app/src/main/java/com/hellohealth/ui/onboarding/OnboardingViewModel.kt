@@ -47,6 +47,8 @@ data class OnboardingUiState(
     val displayName: String = "",
     val gender: Gender? = null,
     val birthDateEpochDay: Long? = null,
+    /** Whole years derived from [birthDateEpochDay] at pick time; drives the 13-120 age gate. */
+    val ageYears: Int? = null,
     val unitPreference: UnitPreference = UnitPreference.METRIC,
     // Body (Step 7)
     val heightCm: Double? = null,
@@ -73,6 +75,29 @@ data class OnboardingUiState(
             val w = weightKg ?: return false
             return h in OnboardingViewModel.MIN_HEIGHT_CM..OnboardingViewModel.MAX_HEIGHT_CM &&
                 w in OnboardingViewModel.MIN_WEIGHT_KG..OnboardingViewModel.MAX_WEIGHT_KG
+        }
+
+    /** Age must be a plausible human range; also drives whether the Body/Activity steps make sense. */
+    val isAgeValid: Boolean
+        get() = ageYears?.let { it in OnboardingViewModel.MIN_AGE..OnboardingViewModel.MAX_AGE } ?: false
+
+    /**
+     * Activity & goal is complete once an activity level and goal direction are chosen and the age is
+     * plausible. Target weight/rate are optional, but when supplied they must be within sane bounds
+     * (an out-of-range rate would corrupt the derived calorie budget).
+     */
+    val isActivityValid: Boolean
+        get() {
+            if (activityLevel == null || goalType == null || !isAgeValid) return false
+            val rate = targetRateKgPerWeek
+            if (rate != null && rate !in OnboardingViewModel.MIN_RATE_KG_PER_WEEK..OnboardingViewModel.MAX_RATE_KG_PER_WEEK) {
+                return false
+            }
+            val target = targetWeightKg
+            if (target != null && target !in OnboardingViewModel.MIN_WEIGHT_KG..OnboardingViewModel.MAX_WEIGHT_KG) {
+                return false
+            }
+            return true
         }
 }
 
@@ -145,7 +170,13 @@ class OnboardingViewModel @Inject constructor(
     }
 
     fun updateBirthDate(epochDay: Long?) {
-        _uiState.value = _uiState.value.copy(birthDateEpochDay = epochDay)
+        // Derive age once here so the 13-120 gate stays a pure getter on the state.
+        val age = epochDay?.let { day ->
+            val birth = java.time.LocalDate.ofEpochDay(day)
+            val today = java.time.LocalDate.now()
+            if (birth.isAfter(today)) null else java.time.Period.between(birth, today).years
+        }
+        _uiState.value = _uiState.value.copy(birthDateEpochDay = epochDay, ageYears = age)
     }
 
     fun updateUnitPreference(unit: UnitPreference) {
@@ -194,6 +225,35 @@ class OnboardingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(weightKg = weightKg)
     }
 
+    // --- Activity & goal mutators (Step 8) ---
+
+    fun updateActivityLevel(level: ActivityLevel) {
+        _uiState.value = _uiState.value.copy(activityLevel = level)
+    }
+
+    /**
+     * Sets the goal direction. Switching to MAINTAIN clears any target weight/rate (they only make
+     * sense for a directional goal), so a leftover out-of-range rate can't linger and corrupt the
+     * budget or block the gate.
+     */
+    fun updateGoalType(goalType: GoalType) {
+        _uiState.value = if (goalType == GoalType.MAINTAIN) {
+            _uiState.value.copy(goalType = goalType, targetWeightKg = null, targetRateKgPerWeek = null)
+        } else {
+            _uiState.value.copy(goalType = goalType)
+        }
+    }
+
+    /** Stores target weight in metric (kg); null clears it. The UI converts imperial lb first. */
+    fun updateTargetWeightKg(weightKg: Double?) {
+        _uiState.value = _uiState.value.copy(targetWeightKg = weightKg)
+    }
+
+    /** Stores the weekly weight-change target (kg/week, always metric); null clears it. */
+    fun updateTargetRateKgPerWeek(rate: Double?) {
+        _uiState.value = _uiState.value.copy(targetRateKgPerWeek = rate)
+    }
+
     // --- Step navigation ---
 
     fun nextStep() {
@@ -215,5 +275,12 @@ class OnboardingViewModel @Inject constructor(
         const val MAX_HEIGHT_CM = 272.0
         const val MIN_WEIGHT_KG = 20.0
         const val MAX_WEIGHT_KG = 400.0
+
+        // Age gate (years) and weekly weight-change bounds (kg/week). A rate outside this band would
+        // push the calorie budget into unsafe territory, so the Activity step blocks it.
+        const val MIN_AGE = 13
+        const val MAX_AGE = 120
+        const val MIN_RATE_KG_PER_WEEK = 0.1
+        const val MAX_RATE_KG_PER_WEEK = 1.0
     }
 }

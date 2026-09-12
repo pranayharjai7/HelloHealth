@@ -1,8 +1,10 @@
 package com.hellohealth.ui.onboarding
 
 import com.hellohealth.domain.model.ActivityGoals
+import com.hellohealth.domain.model.ActivityLevel
 import com.hellohealth.domain.model.BodyMetrics
 import com.hellohealth.domain.model.Gender
+import com.hellohealth.domain.model.GoalType
 import com.hellohealth.domain.model.UnitPreference
 import com.hellohealth.domain.model.User
 import com.hellohealth.domain.model.UserProfile
@@ -272,5 +274,92 @@ class OnboardingViewModelTest {
         assertEquals(null, vm.uiState.value.heightCm)
         assertEquals(null, vm.uiState.value.weightKg)
         assertFalse(vm.uiState.value.isPrefillingBody)
+    }
+
+    // --- Step 8: Activity & goal step ---
+
+    private fun adultBirthDate() = LocalDate.now().minusYears(30).toEpochDay()
+
+    @Test
+    fun `activity is invalid until level, goal, and a valid age are set`() = runTest(dispatcher) {
+        val vm = viewModel(null)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isActivityValid)
+
+        vm.updateBirthDate(adultBirthDate())
+        vm.updateActivityLevel(ActivityLevel.MODERATE)
+        assertFalse("goal still missing", vm.uiState.value.isActivityValid)
+
+        vm.updateGoalType(GoalType.MAINTAIN)
+        assertTrue(vm.uiState.value.isActivityValid)
+    }
+
+    @Test
+    fun `age outside 13 to 120 blocks the activity gate`() = runTest(dispatcher) {
+        val vm = viewModel(null)
+        advanceUntilIdle()
+        vm.updateActivityLevel(ActivityLevel.MODERATE)
+        vm.updateGoalType(GoalType.MAINTAIN)
+
+        // Too young.
+        vm.updateBirthDate(LocalDate.now().minusYears(10).toEpochDay())
+        assertFalse("age 10 must fail", vm.uiState.value.isActivityValid)
+
+        // Implausibly old.
+        vm.updateBirthDate(LocalDate.now().minusYears(130).toEpochDay())
+        assertFalse("age 130 must fail", vm.uiState.value.isActivityValid)
+
+        // In range.
+        vm.updateBirthDate(adultBirthDate())
+        assertTrue(vm.uiState.value.isActivityValid)
+    }
+
+    @Test
+    fun `an out-of-range weekly rate blocks the gate`() = runTest(dispatcher) {
+        val vm = viewModel(null)
+        advanceUntilIdle()
+        vm.updateBirthDate(adultBirthDate())
+        vm.updateActivityLevel(ActivityLevel.MODERATE)
+        vm.updateGoalType(GoalType.LOSE)
+        assertTrue("no target is valid (optional)", vm.uiState.value.isActivityValid)
+
+        vm.updateTargetRateKgPerWeek(3.0) // far above the 1.0 kg/week cap
+        assertFalse(vm.uiState.value.isActivityValid)
+
+        vm.updateTargetRateKgPerWeek(0.5) // sane
+        assertTrue(vm.uiState.value.isActivityValid)
+    }
+
+    @Test
+    fun `switching goal to maintain clears any target weight and rate`() = runTest(dispatcher) {
+        val vm = viewModel(null)
+        advanceUntilIdle()
+        vm.updateBirthDate(adultBirthDate())
+        vm.updateActivityLevel(ActivityLevel.ACTIVE)
+        vm.updateGoalType(GoalType.LOSE)
+        vm.updateTargetWeightKg(70.0)
+        vm.updateTargetRateKgPerWeek(0.5)
+
+        vm.updateGoalType(GoalType.MAINTAIN)
+
+        assertEquals(null, vm.uiState.value.targetWeightKg)
+        assertEquals(null, vm.uiState.value.targetRateKgPerWeek)
+        assertTrue(vm.uiState.value.isActivityValid)
+    }
+
+    @Test
+    fun `activity mutators update the corresponding fields`() = runTest(dispatcher) {
+        val vm = viewModel(null)
+        advanceUntilIdle()
+
+        vm.updateActivityLevel(ActivityLevel.VERY_ACTIVE)
+        vm.updateGoalType(GoalType.GAIN)
+        vm.updateTargetWeightKg(85.0)
+        vm.updateTargetRateKgPerWeek(0.25)
+
+        assertEquals(ActivityLevel.VERY_ACTIVE, vm.uiState.value.activityLevel)
+        assertEquals(GoalType.GAIN, vm.uiState.value.goalType)
+        assertEquals(85.0, vm.uiState.value.targetWeightKg!!, 0.001)
+        assertEquals(0.25, vm.uiState.value.targetRateKgPerWeek!!, 0.001)
     }
 }
