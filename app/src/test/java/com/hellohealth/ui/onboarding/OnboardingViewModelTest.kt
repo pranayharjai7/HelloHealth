@@ -1,5 +1,6 @@
 package com.hellohealth.ui.onboarding
 
+import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.ActivityLevel
 import com.hellohealth.domain.model.BodyMetrics
@@ -40,6 +41,7 @@ class OnboardingViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
     private class FakeAuthRepository(private val currentName: String?) : AuthRepository {
+        var updatedName: String? = null
         override suspend fun signUp(email: String, password: String) = Result.success(Unit)
         override suspend fun signIn(email: String, password: String) = Result.success(Unit)
         override suspend fun signInWithGoogle(idToken: String, email: String?, name: String?, avatarUrl: String?) =
@@ -47,19 +49,36 @@ class OnboardingViewModelTest {
         override suspend fun signOut() = Result.success(Unit)
         override suspend fun isUserLoggedIn() = true
         override suspend fun getCurrentUser(): User? = User(email = "a@b.com", name = currentName)
-        override suspend fun updateCurrentUserName(name: String) = Result.success<User?>(null)
+        override suspend fun updateCurrentUserName(name: String): Result<User?> {
+            updatedName = name
+            return Result.success<User?>(null)
+        }
     }
 
-    private class FakeProfileRepository : ProfileRepository {
+    private class FakeProfileRepository(
+        private val failOnUpsert: Boolean = false,
+        private val silentNoOp: Boolean = false
+    ) : ProfileRepository {
         var saved: UserProfile? = null
+        var upsertCount = 0
         override suspend fun getProfile(): UserProfile? = saved
-        override suspend fun upsertProfile(profile: UserProfile) { saved = profile }
+        override suspend fun upsertProfile(profile: UserProfile) {
+            if (failOnUpsert) throw RuntimeException("disk full")
+            upsertCount++
+            // silentNoOp mirrors the real repo dropping the write when no user is signed in: it
+            // returns normally WITHOUT persisting, so getProfile() still yields null afterward.
+            if (silentNoOp) return
+            saved = profile
+        }
     }
 
     private class FakeGoalsRepository : GoalsRepository {
+        var seeded: ActivityGoals? = null
         override fun getActivityGoals(): Flow<ActivityGoals> = flowOf(ActivityGoals())
         override suspend fun getCurrentActivityGoals(): ActivityGoals = ActivityGoals()
-        override suspend fun updateActivityGoals(goals: ActivityGoals) {}
+        override suspend fun updateActivityGoals(goals: ActivityGoals) {
+            seeded = goals
+        }
     }
 
     /**
@@ -110,6 +129,22 @@ class OnboardingViewModelTest {
             FakeGoalsRepository(),
             FakeActivityRepository(metrics)
         )
+
+    /** Bundle so Step 9 tests can inspect what finish/skip actually persisted. */
+    private class Harness(
+        val vm: OnboardingViewModel,
+        val auth: FakeAuthRepository,
+        val profile: FakeProfileRepository,
+        val goals: FakeGoalsRepository
+    )
+
+    private fun harness(name: String? = null, failOnUpsert: Boolean = false, silentNoOp: Boolean = false): Harness {
+        val auth = FakeAuthRepository(name)
+        val profile = FakeProfileRepository(failOnUpsert = failOnUpsert, silentNoOp = silentNoOp)
+        val goals = FakeGoalsRepository()
+        val vm = OnboardingViewModel(auth, profile, goals, FakeActivityRepository())
+        return Harness(vm, auth, profile, goals)
+    }
 
     @Test
     fun `prefills display name from the signed-in Google account`() = runTest(dispatcher) {
@@ -362,4 +397,133 @@ class OnboardingViewModelTest {
         assertEquals(85.0, vm.uiState.value.targetWeightKg!!, 0.001)
         assertEquals(0.25, vm.uiState.value.targetRateKgPerWeek!!, 0.001)
     }
+
+    // --- Step 9: Confirm + persist + seed goals + skip ---
+
+    /** Drives a fully-completed wizard so finish() has a real profile to persist. */
+    private fun completeBasicsBodyActivity(vm: OnboardingViewModel) {
+        vm.updateDisplayName("Ann")
+        vm.updateGender(Gender.FEMALE)
+        vm.updateBirthDate(adultBirthDate())
+        vm.updateHeightCm(170.0)
+        vm.updateWeightKg(65.0)
+        vm.updateActivityLevel(ActivityLevel.MODERATE)
+        vm.updateGoalType(GoalType.MAINTAIN)
+    }
+
+    @Test
+    fun `finish persists the full profile with hasOnboarded true and seeds suggested goals`() =
+        runTest(dispatcher) {
+            val h = harness()
+            advanceUntilIdle()
+            completeBasicsBodyActivity(h.vm)
+
+            var navigated = false
+            h.vm.finish { navigated = true }
+            advanceUntilIdle()
+
+            val saved = h.profile.saved!!
+            assertTrue("hasOnboarded must be set", saved.hasOnboarded)
+            assertEquals("Ann", saved.displayName)
+            assertEquals(Gender.FEMALE, saved.gender)
+            assertEquals(170.0, saved.heightCm!!, 0.001)
+            assertEquals(65.0, saved.weightKg!!, 0.001)
+            // Goals seeded from the same profile via BodyEnergy.
+            assertEquals(BodyEnergy.suggestedGoals(saved), h.goals.seeded)
+            assertTrue("onDone runs after a successful save", navigated)
+            assertFalse(h.vm.uiState.value.isSaving)
+        }
+
+    @Test
+    fun `finish pushes the display name to the auth account`() = runTest(dispatcher) {
+        val h = harness()
+        advanceUntilIdle()
+        completeBasicsBodyActivity(h.vm)
+
+        h.vm.finish {}
+        advanceUntilIdle()
+
+        assertEquals("Ann", h.auth.updatedName)
+    }
+
+    @Test
+    fun `finish does not navigate and surfaces an error when the save fails`() = runTest(dispatcher) {
+        val h = harness(failOnUpsert = true)
+        advanceUntilIdle()
+        completeBasicsBodyActivity(h.vm)
+
+        var navigated = false
+        h.vm.finish { navigated = true }
+        advanceUntilIdle()
+
+        assertFalse("must not navigate away with nothing saved", navigated)
+        assertFalse(h.vm.uiState.value.isSaving)
+        assertTrue("an error is surfaced", h.vm.uiState.value.error != null)
+    }
+
+    @Test
+    fun `finish does not navigate when the write silently no-ops with no session`() = runTest(dispatcher) {
+        // The real repos log-and-return (no throw) when no user is signed in, so "no exception" does
+        // not prove a row persisted. The read-back guard must catch this and refuse to navigate.
+        val h = harness(silentNoOp = true)
+        advanceUntilIdle()
+        completeBasicsBodyActivity(h.vm)
+
+        var navigated = false
+        h.vm.finish { navigated = true }
+        advanceUntilIdle()
+
+        assertFalse("silent no-op must not be treated as success", navigated)
+        assertEquals("nothing persisted", null, h.profile.saved)
+        assertTrue("an error is surfaced", h.vm.uiState.value.error != null)
+        assertFalse(h.vm.uiState.value.isSaving)
+    }
+
+    @Test
+    fun `skip persists an explicit row with hasOnboarded true and seeds default goals with no vitals`() =
+        runTest(dispatcher) {
+            val h = harness()
+            advanceUntilIdle()
+
+            var navigated = false
+            h.vm.skip { navigated = true }
+            advanceUntilIdle()
+
+            val saved = h.profile.saved!!
+            assertTrue("skip still writes an explicit onboarded row", saved.hasOnboarded)
+            assertEquals("no vitals were entered", null, saved.heightCm)
+            assertEquals(null, saved.weightKg)
+            // With no activity level or goal, suggestedGoals falls back to sedentary defaults.
+            assertEquals(BodyEnergy.suggestedGoals(saved), h.goals.seeded)
+            assertTrue(navigated)
+        }
+
+    @Test
+    fun `finish is a no-op while a save is already in flight`() = runTest(dispatcher) {
+        val h = harness()
+        advanceUntilIdle()
+        completeBasicsBodyActivity(h.vm)
+
+        // First finish sets isSaving=true; a second call before the coroutine drains must be ignored.
+        var navCount = 0
+        h.vm.finish { navCount++ }
+        h.vm.finish { navCount++ }
+        advanceUntilIdle()
+
+        assertEquals("only one persist runs", 1, h.profile.upsertCount)
+        assertEquals("only one navigation", 1, navCount)
+    }
+
+    @Test
+    fun `calorie budget preview is null without vitals and a sane number with a full profile`() =
+        runTest(dispatcher) {
+            val h = harness()
+            advanceUntilIdle()
+            assertEquals("no vitals yet", null, h.vm.calorieBudgetPreview)
+
+            completeBasicsBodyActivity(h.vm)
+            val budget = h.vm.calorieBudgetPreview!!
+            // MAINTAIN → TDEE unchanged; well above the 1200 floor for a moderately-active adult.
+            assertTrue("budget should be a plausible adult maintenance figure, was $budget", budget in 1500..3500)
+        }
 }

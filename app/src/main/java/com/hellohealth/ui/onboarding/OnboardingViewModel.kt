@@ -2,10 +2,15 @@ package com.hellohealth.ui.onboarding
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.logging.AppLogger
+import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.domain.health.BodyEnergy
+import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.ActivityLevel
 import com.hellohealth.domain.model.Gender
 import com.hellohealth.domain.model.GoalType
 import com.hellohealth.domain.model.UnitPreference
+import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.AuthRepository
 import com.hellohealth.domain.repository.GoalsRepository
@@ -252,6 +257,96 @@ class OnboardingViewModel @Inject constructor(
     /** Stores the weekly weight-change target (kg/week, always metric); null clears it. */
     fun updateTargetRateKgPerWeek(rate: Double?) {
         _uiState.value = _uiState.value.copy(targetRateKgPerWeek = rate)
+    }
+
+    // --- Confirm & finish (Step 9) ---
+
+    /**
+     * Snapshots the current wizard state into a [UserProfile] with `hasOnboarded = true`. All vitals
+     * are carried through as-is (nullable), so this is valid for both a fully-completed wizard and a
+     * skip that leaves fields blank. A blank display name collapses to null. Storage is always metric.
+     */
+    fun buildProfile(): UserProfile = UserProfile(
+        displayName = _uiState.value.displayName.trim().ifBlank { null },
+        gender = _uiState.value.gender,
+        birthDateEpochDay = _uiState.value.birthDateEpochDay,
+        heightCm = _uiState.value.heightCm,
+        weightKg = _uiState.value.weightKg,
+        activityLevel = _uiState.value.activityLevel,
+        goalType = _uiState.value.goalType,
+        targetWeightKg = _uiState.value.targetWeightKg,
+        targetRateKgPerWeek = _uiState.value.targetRateKgPerWeek,
+        unitPreference = _uiState.value.unitPreference,
+        hasOnboarded = true
+    )
+
+    /**
+     * Derived daily calorie budget previewed on the Confirm step. Null when the vitals needed for
+     * Mifflin-St Jeor (height/weight/age) are missing — the UI then shows a "we'll estimate from
+     * defaults" note. Recomputed from live state, never stored.
+     */
+    val calorieBudgetPreview: Int?
+        get() = BodyEnergy.calorieBudget(buildProfile())
+
+    /** Suggested activity-ring goals previewed on Confirm and seeded on finish/skip. */
+    val suggestedGoalsPreview: ActivityGoals
+        get() = BodyEnergy.suggestedGoals(buildProfile())
+
+    /**
+     * Persists the collected profile (`hasOnboarded = true`), pushes the display name to the auth
+     * account so the merged Dashboard greeting stays consistent, and seeds the suggested activity
+     * goals — all through the existing sync-wired repositories. Invokes [onDone] (navigation) ONLY on
+     * success; a failure surfaces [OnboardingUiState.error] and keeps the user on the wizard rather
+     * than navigating away with nothing saved. No-op while a save is already in flight (double-tap
+     * guard).
+     */
+    fun finish(onDone: () -> Unit) = persistAndComplete(onDone)
+
+    /**
+     * Skip path: same persistence as [finish] but reachable from any step. The snapshot still carries
+     * `hasOnboarded = true` (with whatever fields the user filled), so a synced row always exists and
+     * nothing later computes against a phantom profile. Goals seed from [BodyEnergy.suggestedGoals],
+     * which falls back to sensible defaults when vitals are absent.
+     */
+    fun skip(onDone: () -> Unit) = persistAndComplete(onDone)
+
+    private fun persistAndComplete(onDone: () -> Unit) {
+        if (_uiState.value.isSaving) return
+        _uiState.value = _uiState.value.copy(isSaving = true, error = null)
+        viewModelScope.launch {
+            val profile = buildProfile()
+            runCatching {
+                profileRepository.upsertProfile(profile)
+                // The name is also stored in the profile row above (local source of truth for the
+                // greeting), so a failed remote name sync is logged, not fatal — don't let it block
+                // completion or navigation.
+                profile.displayName?.let { name ->
+                    authRepository.updateCurrentUserName(name).onFailure { e ->
+                        AppLogger.w(FeatureTag.PROFILE, "onboarding: name sync to auth failed", e)
+                    }
+                }
+                goalsRepository.updateActivityGoals(BodyEnergy.suggestedGoals(profile))
+
+                // upsertProfile/updateActivityGoals silently no-op (log + return, no throw) when no
+                // user is signed in, so "no exception" does NOT prove a row was written. Read it back
+                // and require an onboarded row before we treat this as done — otherwise we'd navigate
+                // to the Dashboard (popping Onboarding) with nothing persisted and silently re-loop
+                // the wizard on next launch. This makes the null-session case a defined failure path.
+                val persisted = profileRepository.getProfile()
+                if (persisted?.hasOnboarded != true) {
+                    throw IllegalStateException("Profile did not persist (no active session).")
+                }
+            }.onSuccess {
+                _uiState.value = _uiState.value.copy(isSaving = false, error = null)
+                onDone()
+            }.onFailure { e ->
+                AppLogger.w(FeatureTag.PROFILE, "onboarding finish/skip failed to persist", e)
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    error = e.message ?: "Couldn't save your profile. Please try again."
+                )
+            }
+        }
     }
 
     // --- Step navigation ---

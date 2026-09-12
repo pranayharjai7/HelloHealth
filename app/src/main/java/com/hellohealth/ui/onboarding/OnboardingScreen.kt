@@ -108,7 +108,12 @@ fun OnboardingScreen(
                         onTargetWeightKgChange = viewModel::updateTargetWeightKg,
                         onTargetRateChange = viewModel::updateTargetRateKgPerWeek
                     )
-                    else -> PlaceholderStep(step = step)
+                    OnboardingStep.CONFIRM -> ConfirmStep(
+                        uiState = uiState,
+                        calorieBudget = viewModel.calorieBudgetPreview,
+                        suggestedGoals = viewModel.suggestedGoalsPreview,
+                        primaryColor = primaryColor
+                    )
                 }
             }
 
@@ -116,14 +121,24 @@ fun OnboardingScreen(
                 uiState = uiState,
                 primaryColor = primaryColor,
                 onBack = viewModel::previousStep,
+                onSkip = { viewModel.skip(onFinished) },
                 onNext = {
                     if (uiState.step == OnboardingStep.entries.last()) {
-                        onFinished()
+                        viewModel.finish(onFinished)
                     } else {
                         viewModel.nextStep()
                     }
                 }
             )
+
+            uiState.error?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -627,21 +642,99 @@ private fun StepScaffold(
     }
 }
 
+/**
+ * Confirm step: a read-only summary of what onboarding collected, the derived daily calorie budget
+ * (or a defaults note when vitals were skipped), and the suggested activity-ring goals that finish
+ * will seed. Values shown in the user's chosen units; everything is editable later from Profile/Goals.
+ */
 @Composable
-private fun PlaceholderStep(step: OnboardingStep) {
+private fun ConfirmStep(
+    uiState: OnboardingUiState,
+    calorieBudget: Int?,
+    suggestedGoals: com.hellohealth.domain.model.ActivityGoals,
+    primaryColor: Color
+) {
+    val imperial = uiState.unitPreference == UnitPreference.IMPERIAL
+
+    val heightSummary = uiState.heightCm?.let { cm ->
+        if (imperial) {
+            val (f, i) = cmToFeetInches(cm)
+            "$f ft ${formatNumber(i)} in"
+        } else {
+            "${formatNumber(cm)} cm"
+        }
+    }
+    val weightSummary = uiState.weightKg?.let { kg ->
+        if (imperial) "${formatNumber(kg.kgToLb())} lb" else "${formatNumber(kg)} kg"
+    }
+
     StepScaffold(
-        title = when (step) {
-            OnboardingStep.BODY -> "Your body"
-            OnboardingStep.ACTIVITY -> "Activity & goals"
-            OnboardingStep.CONFIRM -> "All set"
-            OnboardingStep.BASICS -> "The basics"
-        },
-        subtitle = "Coming soon."
+        title = "You're all set",
+        subtitle = "Here's what we'll use to personalize your day. You can change any of it later in Profile and Goals."
+    ) {
+        // Headline: the derived daily calorie budget.
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "Daily calorie target",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (calorieBudget != null) {
+                Text(
+                    text = "$calorieBudget kcal",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = primaryColor
+                )
+            } else {
+                Text(
+                    text = "We'll estimate this from sensible defaults until you add your height, weight, and birth date.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f))
+
+        // Your details.
+        SummaryRow("Name", uiState.displayName.trim().ifBlank { "—" })
+        SummaryRow("Gender", uiState.gender?.displayLabel() ?: "—")
+        SummaryRow("Height", heightSummary ?: "—")
+        SummaryRow("Weight", weightSummary ?: "—")
+        SummaryRow("Activity", uiState.activityLevel?.displayLabel() ?: "—")
+        SummaryRow("Goal", uiState.goalType?.displayLabel() ?: "—")
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f))
+
+        // Suggested daily goals we'll seed.
+        Text(
+            text = "Suggested daily goals",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        SummaryRow("Steps", "%,d".format(suggestedGoals.steps))
+        SummaryRow("Active calories", "${suggestedGoals.activeCalories} kcal")
+        SummaryRow("Active minutes", "${suggestedGoals.activeMinutes} min")
+    }
+}
+
+/** A label/value line for the Confirm summary. */
+@Composable
+private fun SummaryRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = "This step is under construction.",
+            text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold
         )
     }
 }
@@ -651,36 +744,63 @@ private fun StepControls(
     uiState: OnboardingUiState,
     primaryColor: Color,
     onBack: () -> Unit,
+    onSkip: () -> Unit,
     onNext: () -> Unit
 ) {
     val isFirst = uiState.step == OnboardingStep.entries.first()
     val isLast = uiState.step == OnboardingStep.entries.last()
+    val isSaving = uiState.isSaving
     // Only Basics gates Next today; later steps gate in their own step (7-9).
-    val nextEnabled = when (uiState.step) {
+    val nextEnabled = !isSaving && when (uiState.step) {
         OnboardingStep.BASICS -> uiState.isBasicsValid
         OnboardingStep.BODY -> uiState.isBodyValid
         OnboardingStep.ACTIVITY -> uiState.isActivityValid
         else -> true
     }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (!isFirst) {
-            OutlinedButton(
-                onClick = onBack,
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (!isFirst) {
+                OutlinedButton(
+                    onClick = onBack,
+                    enabled = !isSaving,
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("Back", fontWeight = FontWeight.Bold)
+                }
+            }
+            Button(
+                onClick = onNext,
+                enabled = nextEnabled,
                 modifier = Modifier.weight(1f).height(56.dp),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
             ) {
-                Text("Back", fontWeight = FontWeight.Bold)
+                if (isSaving && isLast) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text(if (isLast) "Finish" else "Next", fontWeight = FontWeight.Bold)
+                }
             }
         }
-        Button(
-            onClick = onNext,
-            enabled = nextEnabled,
-            modifier = Modifier.weight(1f).height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
-        ) {
-            Text(if (isLast) "Finish" else "Next", fontWeight = FontWeight.Bold)
+        // Skip is available from any step (persists an explicit row with whatever's filled so far).
+        // Hidden on the last step, where Finish already commits the same way.
+        if (!isLast) {
+            TextButton(
+                onClick = onSkip,
+                enabled = !isSaving,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (isSaving) "Saving…" else "Skip for now",
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+            }
         }
     }
 }
