@@ -2,8 +2,14 @@ package com.hellohealth.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.logging.AppLogger
+import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.domain.health.BodyEnergy
+import com.hellohealth.domain.model.Gender
+import com.hellohealth.domain.model.UnitPreference
 import com.hellohealth.domain.model.User
 import com.hellohealth.domain.repository.AuthRepository
+import com.hellohealth.domain.repository.GoalsRepository
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.ui.profile.ProfileEditorState
@@ -16,7 +22,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val profileRepository: ProfileRepository
+    private val profileRepository: ProfileRepository,
+    private val goalsRepository: GoalsRepository
 ) : ViewModel() {
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Checking)
@@ -93,25 +100,133 @@ class AuthViewModel @Inject constructor(
         _authState.value = AuthState.Error(message)
     }
 
+    /**
+     * Name-only save from the profile [AlertDialog]. MUST load-then-`copy()` because
+     * [ProfileRepository.upsertProfile] is a full-row replace — building a fresh
+     * `UserProfile(displayName = …)` here would null every vital and reset `hasOnboarded`, wiping
+     * the user's onboarding data (the latent bug this fixes). Preserves all other fields untouched.
+     */
     fun saveProfile(displayName: String) {
         viewModelScope.launch {
             val trimmedName = displayName.trim()
             if (trimmedName.isEmpty()) {
-                _profileEditorState.value = ProfileEditorState(error = "Name cannot be empty.")
+                _profileEditorState.value = _profileEditorState.value.copy(
+                    isSaving = false,
+                    error = "Name cannot be empty.",
+                    successMessage = null
+                )
                 return@launch
             }
 
-            _profileEditorState.value = ProfileEditorState(isSaving = true)
+            _profileEditorState.value = _profileEditorState.value.copy(
+                isSaving = true,
+                error = null,
+                successMessage = null
+            )
 
             runCatching {
-                profileRepository.upsertProfile(UserProfile(displayName = trimmedName))
+                val existing = profileRepository.getProfile() ?: UserProfile()
+                profileRepository.upsertProfile(existing.copy(displayName = trimmedName))
                 authRepository.updateCurrentUserName(trimmedName)
             }.onSuccess {
                 _currentUser.value = _currentUser.value?.copy(name = trimmedName)
-                _profileEditorState.value = ProfileEditorState(successMessage = "Profile updated.")
+                _profileEditorState.value = _profileEditorState.value.copy(
+                    isSaving = false,
+                    successMessage = "Profile updated."
+                )
             }.onFailure { error ->
-                _profileEditorState.value = ProfileEditorState(
+                _profileEditorState.value = _profileEditorState.value.copy(
+                    isSaving = false,
                     error = error.message ?: "Failed to update profile."
+                )
+            }
+        }
+    }
+
+    /**
+     * Loads the stored profile so the full-screen vitals editor (Step 10b) can seed its fields.
+     * Clears any stale save message. A read failure surfaces as [ProfileEditorState.error] with a
+     * null profile — the editor then falls back to empty fields rather than crashing.
+     */
+    fun loadProfileForEditing() {
+        _profileEditorState.value = ProfileEditorState(isLoading = true)
+        viewModelScope.launch {
+            runCatching { profileRepository.getProfile() }
+                .onSuccess { profile ->
+                    _profileEditorState.value = ProfileEditorState(loaded = true, profile = profile)
+                }
+                .onFailure { e ->
+                    AppLogger.w(FeatureTag.PROFILE, "loadProfileForEditing failed", e)
+                    _profileEditorState.value = ProfileEditorState(
+                        error = e.message ?: "Couldn't load your profile."
+                    )
+                }
+        }
+    }
+
+    /**
+     * Full vitals save from the editor screen. Load-then-`copy()` over the stored row so
+     * [hasOnboarded] and any field not surfaced by the editor survive (full-row upsert trap), then
+     * pushes the display name to the auth account, and re-derives ONLY the active-calorie goal from
+     * the new vitals — the user's manual `steps`/`activeMinutes` are preserved (locked decision).
+     * On success surfaces a message; on failure surfaces the error and keeps the editor open.
+     */
+    fun saveVitals(
+        displayName: String,
+        gender: Gender?,
+        birthDateEpochDay: Long?,
+        heightCm: Double?,
+        weightKg: Double?,
+        unitPreference: UnitPreference
+    ) {
+        if (_profileEditorState.value.isSaving) return
+        val editedName = displayName.trim().ifBlank { null }
+        _profileEditorState.value = _profileEditorState.value.copy(
+            isSaving = true,
+            error = null,
+            successMessage = null
+        )
+        viewModelScope.launch {
+            runCatching {
+                val existing = profileRepository.getProfile() ?: UserProfile()
+                // A blank name field must NOT erase the stored name — fall back to what's already
+                // persisted. (Only the name-only dialog path can clear a name, and it rejects blank.)
+                val resolvedName = editedName ?: existing.displayName
+                val updated = existing.copy(
+                    displayName = resolvedName,
+                    gender = gender,
+                    birthDateEpochDay = birthDateEpochDay,
+                    heightCm = heightCm,
+                    weightKg = weightKg,
+                    unitPreference = unitPreference,
+                    hasOnboarded = existing.hasOnboarded
+                )
+                profileRepository.upsertProfile(updated)
+                // Name lives in the profile row (source of truth for the greeting), so a failed
+                // remote name sync is logged, not fatal.
+                resolvedName?.let { name ->
+                    authRepository.updateCurrentUserName(name).onFailure { e ->
+                        AppLogger.w(FeatureTag.PROFILE, "profile edit: name sync to auth failed", e)
+                    }
+                }
+                // Re-derive ONLY active-calories; keep the user's manual steps/active-minutes.
+                val currentGoals = goalsRepository.getCurrentActivityGoals()
+                goalsRepository.updateActivityGoals(
+                    currentGoals.copy(activeCalories = BodyEnergy.suggestedGoals(updated).activeCalories)
+                )
+                updated
+            }.onSuccess { updated ->
+                _currentUser.value = _currentUser.value?.copy(name = updated.displayName)
+                _profileEditorState.value = _profileEditorState.value.copy(
+                    isSaving = false,
+                    successMessage = "Profile updated.",
+                    profile = updated
+                )
+            }.onFailure { e ->
+                AppLogger.w(FeatureTag.PROFILE, "saveVitals failed to persist", e)
+                _profileEditorState.value = _profileEditorState.value.copy(
+                    isSaving = false,
+                    error = e.message ?: "Failed to update profile."
                 )
             }
         }

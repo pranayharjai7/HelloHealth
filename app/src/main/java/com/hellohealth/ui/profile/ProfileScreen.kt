@@ -38,25 +38,17 @@ import java.util.Locale
 fun ProfileScreen(
     viewModel: AuthViewModel,
     onBack: () -> Unit,
-    onOpenSyncDebug: () -> Unit = {}
+    onOpenSyncDebug: () -> Unit = {},
+    onEditProfile: () -> Unit = {}
 ) {
     val user by viewModel.currentUser.collectAsState()
-    val editorState by viewModel.profileEditorState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
-    var showEditDialog by remember { mutableStateOf(false) }
-    var editedName by remember(user?.name) { mutableStateOf(user?.name.orEmpty()) }
 
     // Hidden developer gesture: 7 quick taps on the "Profile" title opens the sync debug screen.
     // No visible affordance; the tap streak resets if taps are more than 600ms apart.
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapAt by remember { mutableLongStateOf(0L) }
-
-    LaunchedEffect(editorState.successMessage) {
-        if (editorState.successMessage != null) {
-            showEditDialog = false
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -173,11 +165,7 @@ fun ProfileScreen(
 
                 // Edit Button
                 Button(
-                    onClick = {
-                        editedName = user?.name.orEmpty()
-                        viewModel.clearProfileEditorMessage()
-                        showEditDialog = true
-                    },
+                    onClick = onEditProfile,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
@@ -186,68 +174,8 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Edit Profile", fontWeight = FontWeight.Bold)
                 }
-
-                if (editorState.successMessage != null) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = editorState.successMessage!!,
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
             }
         }
-    }
-
-    if (showEditDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showEditDialog = false
-                viewModel.clearProfileEditorMessage()
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.saveProfile(editedName) },
-                    enabled = !editorState.isSaving
-                ) {
-                    if (editorState.isSaving) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("Save")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showEditDialog = false
-                        viewModel.clearProfileEditorMessage()
-                    },
-                    enabled = !editorState.isSaving
-                ) {
-                    Text("Cancel")
-                }
-            },
-            title = { Text("Edit Profile") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = editedName,
-                        onValueChange = { editedName = it },
-                        label = { Text("Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (editorState.error != null) {
-                        Text(
-                            text = editorState.error!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-        )
     }
 }
 

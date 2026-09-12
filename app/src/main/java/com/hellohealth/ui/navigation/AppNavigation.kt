@@ -29,6 +29,7 @@ import com.hellohealth.ui.help.HelpScreen
 import com.hellohealth.ui.insights.InsightsScreen
 import com.hellohealth.ui.insights.InsightsViewModel
 import com.hellohealth.ui.onboarding.OnboardingScreen
+import com.hellohealth.ui.profile.EditProfileScreen
 import com.hellohealth.ui.profile.ProfileScreen
 import com.hellohealth.ui.splash.SplashScreen
 
@@ -173,7 +174,15 @@ fun AppNavigation(
             ProfileScreen(
                 viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onOpenSyncDebug = { navController.navigate(Screen.SyncDebug.route) }
+                onOpenSyncDebug = { navController.navigate(Screen.SyncDebug.route) },
+                onEditProfile = { navController.navigate(Screen.EditProfile.route) }
+            )
+        }
+
+        composable(Screen.EditProfile.route) {
+            EditProfileScreen(
+                viewModel = authViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -236,6 +245,7 @@ sealed class Screen(val route: String) {
         }
     }
     object Profile : Screen("profile")
+    object EditProfile : Screen("edit_profile")
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
     object ActivitySettings : Screen("activity_settings")
