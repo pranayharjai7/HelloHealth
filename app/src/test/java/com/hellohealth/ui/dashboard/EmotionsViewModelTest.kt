@@ -30,11 +30,17 @@ class EmotionsViewModelTest {
     @After fun tearDown() = Dispatchers.resetMain()
 
     private class FakeEmotions(private val today: List<EmotionRecord>) : EmotionsRepository {
+        val logged = mutableListOf<EmotionType>()
+        var loggedSource: String? = null
+        val deleted = mutableListOf<String>()
         override fun observeToday(): Flow<List<EmotionRecord>> = flowOf(today)
         override fun observeLatest(): Flow<EmotionRecord?> = flowOf(today.firstOrNull())
         override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(emptyList())
-        override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String) {}
-        override suspend fun delete(id: String) {}
+        override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String) {
+            logged += emotion
+            loggedSource = source
+        }
+        override suspend fun delete(id: String) { deleted += id }
     }
 
     private fun record(id: String, emotion: EmotionType, ts: Long) = EmotionRecord(
@@ -80,5 +86,35 @@ class EmotionsViewModelTest {
             assertEquals(0, state.todayCount)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `today's records are exposed for the mood-dot strip`() = runTest {
+        val today = listOf(
+            record("b", EmotionType.CALM, ts = 10_000),
+            record("a", EmotionType.HAPPINESS, ts = 9_000)
+        )
+        val vm = EmotionsViewModel(FakeEmotions(today))
+        vm.uiState.test {
+            assertEquals(today, awaitItem().today)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `quickLog routes through logEmotion with the manual source`() = runTest {
+        val fake = FakeEmotions(emptyList())
+        val vm = EmotionsViewModel(fake)
+        vm.quickLog(EmotionType.HAPPINESS)
+        assertEquals(listOf(EmotionType.HAPPINESS), fake.logged)
+        assertEquals(EmotionRecord.SOURCE_MANUAL, fake.loggedSource)
+    }
+
+    @Test
+    fun `delete forwards the id to the repository`() = runTest {
+        val fake = FakeEmotions(emptyList())
+        val vm = EmotionsViewModel(fake)
+        vm.delete("rec-42")
+        assertEquals(listOf("rec-42"), fake.deleted)
     }
 }
