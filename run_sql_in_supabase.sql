@@ -224,6 +224,11 @@ CREATE TRIGGER trg_workout_sessions_set_updated_at
 --
 -- Idempotent: ENABLE ROW LEVEL SECURITY is a no-op if already on; each policy is
 -- DROPped IF EXISTS then re-created (CREATE POLICY has no IF NOT EXISTS).
+--
+-- ⚠ RLS IS ONLY HALF THE GATE. Enabling RLS does not grant any base table
+-- privilege — a role with no GRANT gets "permission denied for table ..." before
+-- RLS is ever consulted. See the GRANT block AFTER the policies below; both must
+-- run for a push/pull to succeed.
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS profiles_owner ON public.profiles;
@@ -266,6 +271,32 @@ CREATE POLICY workout_sessions_owner ON public.workout_sessions
     FOR ALL TO authenticated
     USING (user_id::text = auth.uid()::text)
     WITH CHECK (user_id::text = auth.uid()::text);
+
+-- ============================================================================
+-- Table privileges for the `authenticated` role — REQUIRED alongside RLS
+-- ----------------------------------------------------------------------------
+-- RLS and GRANTs are TWO SEPARATE gates and BOTH must pass. Enabling RLS above
+-- only decides WHICH ROWS a role may touch; it does NOT itself grant any table
+-- privilege. Without an explicit GRANT, the `authenticated` role has no base
+-- SELECT/INSERT/UPDATE right, so PostgREST returns:
+--     "permission denied for table <t>
+--      (Grant the required privileges ... GRANT ... TO authenticated;)"
+-- and every push/pull fails even though the RLS policy would have allowed the row.
+--
+-- The pre-existing P0 tables received this grant when the project was first
+-- provisioned (Supabase's default table privileges); the tables ADDED later by
+-- this script (emotion_records, workout_sessions) did not — hence they 403 until
+-- this block runs. Granting all six is idempotent and self-documenting.
+--
+-- We deliberately do NOT grant DELETE: the client never issues a hard DELETE — it
+-- soft-deletes via a `deleted_at` tombstone (an UPDATE), so SELECT/INSERT/UPDATE
+-- is the complete privilege set the sync path needs. Narrower = safer.
+GRANT SELECT, INSERT, UPDATE ON public.profiles               TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.activity_goals         TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.food_preferences       TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.daily_health_snapshots TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.emotion_records        TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.workout_sessions       TO authenticated;
 
 -- --- Refresh PostgREST's schema cache ---------------------------------------
 -- So the just-added profiles columns are visible to the API immediately and the
