@@ -147,9 +147,19 @@ class HealthConnectManager @Inject constructor(
      */
     fun isConnected(granted: Set<String>): Boolean = granted.containsAll(essentialPermissions)
 
+    /**
+     * @param bmrFallback lazily supplies the basal metabolic rate (kcal/day) to use when Health
+     *   Connect has no [androidx.health.connect.client.records.BasalMetabolicRateRecord]. Callers
+     *   pass a supplier that reads the user's profile-derived BMR (Mifflin-St Jeor) so the
+     *   active-calorie net-out reflects the real user; the default supplies 1800.0 as the last-resort
+     *   value when neither HC nor the profile has the data. It is invoked ONLY when the HC record is
+     *   missing/non-positive, so the (possibly DB-backed) read is skipped on the common path.
+     *   Precedence: HC record → [bmrFallback].
+     */
     suspend fun fetchHealthSummary(
         goals: ActivityGoals,
-        date: LocalDate = LocalDate.now()
+        date: LocalDate = LocalDate.now(),
+        bmrFallback: suspend () -> Double = { 1800.0 }
     ): HealthSummary {
         if (healthConnectClient == null) {
             return HealthSummary(
@@ -173,8 +183,9 @@ class HealthConnectManager @Inject constructor(
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
             
             val totalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) } ?: activeCalories
-            var bmr = safeFetch { fetchLatestBasalMetabolicRate(endOfDay) } ?: 0.0
-            if (bmr == 0.0) bmr = 1800.0 // Default BMR if record missing
+            // Prefer the HC BasalMetabolicRateRecord; only when it's missing/non-positive do we
+            // invoke the (possibly DB-backed) fallback supplier — profile-derived BMR → 1800.0.
+            val bmr = selectBmr(safeFetch { fetchLatestBasalMetabolicRate(endOfDay) }, bmrFallback)
             
             val minutesCovered = if (date == today) {
                 val nowCalendar = java.util.Calendar.getInstance()
@@ -498,6 +509,26 @@ class HealthConnectManager @Inject constructor(
             AggregateRequest(metrics = setOf(HeartRateRecord.BPM_AVG), timeRangeFilter = timeRangeFilter)
         )
         return response?.get(HeartRateRecord.BPM_AVG) ?: 0L
+    }
+
+    /**
+     * Reads the most recent height + weight records for onboarding pre-fill. Never throws: a null
+     * client, a missing read permission, or any read error degrades to `null` fields (the UI then
+     * asks the user to type them). Converts Health Connect's native units into the app's canonical
+     * metric — height meters→cm, weight already kg.
+     */
+    suspend fun fetchLatestBodyMetrics(): com.hellohealth.domain.model.BodyMetrics {
+        if (healthConnectClient == null) {
+            AppLogger.w(FeatureTag.HEALTH, "fetchLatestBodyMetrics: HealthConnectClient null; returning empty")
+            return com.hellohealth.domain.model.BodyMetrics()
+        }
+        val now = Instant.now()
+        val heightCm = runCatching { fetchLatestHeight(now)?.let { it * 100.0 } }
+            .getOrElse { e -> AppLogger.e(FeatureTag.HEALTH, "fetchLatestBodyMetrics: height read failed", e); null }
+        val weightKg = runCatching { fetchLatestWeight(now) }
+            .getOrElse { e -> AppLogger.e(FeatureTag.HEALTH, "fetchLatestBodyMetrics: weight read failed", e); null }
+        AppLogger.d(FeatureTag.HEALTH, "fetchLatestBodyMetrics: heightCm=$heightCm weightKg=$weightKg")
+        return com.hellohealth.domain.model.BodyMetrics(heightCm = heightCm, weightKg = weightKg)
     }
 
     private suspend fun fetchLatestWeight(before: Instant): Double? {
@@ -847,4 +878,15 @@ class HealthConnectManager @Inject constructor(
 
     private fun ExerciseSessionRecord.durationSeconds(): Long =
         Duration.between(startTime, endTime).seconds
+
+    companion object {
+        /**
+         * BMR-source selection for [fetchHealthSummary]: prefer the Health Connect basal-rate record
+         * ([hcBmr]) when present and positive, otherwise invoke [fallback] (profile-derived → 1800.0).
+         * The fallback is lazy — evaluated ONLY when the HC record is absent — so a DB-backed profile
+         * read is skipped on the common path. Pure/`internal` so the precedence is unit-testable.
+         */
+        internal suspend fun selectBmr(hcBmr: Double?, fallback: suspend () -> Double): Double =
+            if (hcBmr != null && hcBmr > 0.0) hcBmr else fallback()
+    }
 }

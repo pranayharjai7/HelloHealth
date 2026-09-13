@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
@@ -28,7 +30,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.hellohealth.domain.model.UnitPreference
+import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.ui.auth.AuthViewModel
+import com.hellohealth.ui.common.cmToFeetInches
+import com.hellohealth.ui.common.displayLabel
+import com.hellohealth.ui.common.formatNumber
+import com.hellohealth.ui.common.kgToLb
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,25 +46,23 @@ import java.util.Locale
 fun ProfileScreen(
     viewModel: AuthViewModel,
     onBack: () -> Unit,
-    onOpenSyncDebug: () -> Unit = {}
+    onOpenSyncDebug: () -> Unit = {},
+    onEditProfile: () -> Unit = {}
 ) {
     val user by viewModel.currentUser.collectAsState()
+    // The onboarding vitals live on the stored UserProfile. Reuse the editor's read path
+    // (profileEditorState) to display them read-only here — no new VM plumbing. The pencil action
+    // in the top bar opens EditProfileScreen, which uses this same state to edit and save them.
     val editorState by viewModel.profileEditorState.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadProfileForEditing() }
+    val profile = editorState.profile
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
-    var showEditDialog by remember { mutableStateOf(false) }
-    var editedName by remember(user?.name) { mutableStateOf(user?.name.orEmpty()) }
 
     // Hidden developer gesture: 7 quick taps on the "Profile" title opens the sync debug screen.
     // No visible affordance; the tap streak resets if taps are more than 600ms apart.
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapAt by remember { mutableLongStateOf(0L) }
-
-    LaunchedEffect(editorState.successMessage) {
-        if (editorState.successMessage != null) {
-            showEditDialog = false
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -84,6 +90,13 @@ fun ProfileScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    // Edit affordance lives here (top-right) so it's discoverable without scrolling
+                    // past the cards to a bottom button.
+                    IconButton(onClick = onEditProfile) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Profile")
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent
                 )
@@ -104,6 +117,7 @@ fun ProfileScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -169,85 +183,65 @@ fun ProfileScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // Edit Button
-                Button(
-                    onClick = {
-                        editedName = user?.name.orEmpty()
-                        viewModel.clearProfileEditorMessage()
-                        showEditDialog = true
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                // Body — the onboarding body measurements, shown read-only in a 2×2 tile grid.
+                // Values are formatted in the user's stored unit preference; unset fields read "--"
+                // (a partial profile is valid). Editing happens via the pencil action in the top bar.
+                // Goal-direction fields (activity level, goal type, target weight) intentionally live
+                // on the Preferences screen, which owns them — they are NOT surfaced here.
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Icon(Icons.Default.Edit, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Edit Profile", fontWeight = FontWeight.Bold)
-                }
-
-                if (editorState.successMessage != null) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = editorState.successMessage!!,
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text(
+                            text = "Body",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        // 2×2 grid of metric tiles — fills the card width instead of stacking
+                        // everything on the left. Each tile splits the row evenly via weight(1f);
+                        // IntrinsicSize.Min + fillMaxHeight keeps both tiles in a row the same height
+                        // even when one value wraps to two lines (e.g. imperial "5 ft 11 in").
+                        Row(
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            MetricTile(
+                                label = "Gender",
+                                value = profile?.gender?.displayLabel() ?: "--",
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                            MetricTile(
+                                label = "Age",
+                                value = profile?.ageYears()?.let { "$it yr" } ?: "--",
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            MetricTile(
+                                label = "Height",
+                                value = formatHeight(profile),
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                            MetricTile(
+                                label = "Weight",
+                                value = formatWeight(profile?.weightKg, profile?.unitPreference),
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
-
-    if (showEditDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showEditDialog = false
-                viewModel.clearProfileEditorMessage()
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.saveProfile(editedName) },
-                    enabled = !editorState.isSaving
-                ) {
-                    if (editorState.isSaving) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("Save")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showEditDialog = false
-                        viewModel.clearProfileEditorMessage()
-                    },
-                    enabled = !editorState.isSaving
-                ) {
-                    Text("Cancel")
-                }
-            },
-            title = { Text("Edit Profile") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = editedName,
-                        onValueChange = { editedName = it },
-                        label = { Text("Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (editorState.error != null) {
-                        Text(
-                            text = editorState.error!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-        )
     }
 }
 
@@ -265,5 +259,58 @@ private fun ProfileInfoItem(label: String, value: String) {
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+/**
+ * A single body-metric tile: the value shown prominently with its label beneath, on a subtly
+ * tinted rounded surface. Sized by the caller (weight(1f) in the 2×2 grid) so tiles split the
+ * card width evenly.
+ */
+@Composable
+private fun MetricTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f))
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.onSurface,
+            // Values like "5 ft 11 in" can exceed a half-width tile at titleLarge; allow a second
+            // line rather than hard-truncating. Both tiles in a Row size independently, so a taller
+            // tile just grows its own row.
+            maxLines = 2
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
+    }
+}
+
+/** Height in the profile's stored units: metric → "cm", imperial → "ft in". "--" when unset. */
+private fun formatHeight(profile: UserProfile?): String {
+    val cm = profile?.heightCm ?: return "--"
+    return if (profile.unitPreference == UnitPreference.IMPERIAL) {
+        val (feet, inches) = cmToFeetInches(cm)
+        "$feet ft ${formatNumber(inches)} in"
+    } else {
+        "${formatNumber(cm)} cm"
+    }
+}
+
+/** Weight in the given units: metric → "kg", imperial → "lb". "--" when unset. */
+private fun formatWeight(weightKg: Double?, unitPreference: UnitPreference?): String {
+    val kg = weightKg ?: return "--"
+    return if (unitPreference == UnitPreference.IMPERIAL) {
+        "${formatNumber(kg.kgToLb())} lb"
+    } else {
+        "${formatNumber(kg)} kg"
     }
 }

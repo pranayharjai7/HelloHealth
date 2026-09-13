@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,8 +52,14 @@ fun GoalsScreen(
                             color = primaryColor
                         )
                     } else {
-                        TextButton(onClick = { viewModel.saveGoals() }) {
-                            Text("Save", fontWeight = FontWeight.Bold, color = primaryColor)
+                        // Disabled until the profile snapshot has loaded and validation passes —
+                        // saving before the goal-direction fields seed would wipe the stored goal.
+                        TextButton(onClick = { viewModel.saveGoals() }, enabled = uiState.canSave) {
+                            Text(
+                                "Save",
+                                fontWeight = FontWeight.Bold,
+                                color = if (uiState.canSave) primaryColor else primaryColor.copy(alpha = 0.4f)
+                            )
                         }
                     }
                 },
@@ -78,6 +83,7 @@ fun GoalsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)

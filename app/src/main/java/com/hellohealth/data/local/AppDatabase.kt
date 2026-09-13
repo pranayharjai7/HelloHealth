@@ -25,7 +25,7 @@ import com.hellohealth.data.local.entities.UserEntity
         SnapshotEntity::class,
         SyncLogEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

@@ -83,3 +83,29 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         )
     }
 }
+
+/**
+ * v4 → v5: add the P0.5 onboarding vitals to `profile`.
+ *
+ * Purely additive `ALTER TABLE ... ADD COLUMN` — SQLite appends each column to the end of the
+ * table, matching the field order in [com.hellohealth.data.local.entities.ProfileEntity] (vitals
+ * declared after the Syncable overrides). Existing displayName-only rows keep all data and read
+ * back with null/default vitals. Enum vitals are stored as their `name` string; the NOT NULL
+ * columns (`unitPreference`, `hasOnboarded`) carry defaults so existing rows are valid.
+ *
+ * Column types match Room's generated v5 affinities (validated against 5.json by MigrationTest).
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `gender` TEXT")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `birthDateEpochDay` INTEGER")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `heightCm` REAL")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `weightKg` REAL")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `activityLevel` TEXT")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `goalType` TEXT")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `targetWeightKg` REAL")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `targetRateKgPerWeek` REAL")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `unitPreference` TEXT NOT NULL DEFAULT 'METRIC'")
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `hasOnboarded` INTEGER NOT NULL DEFAULT 0")
+    }
+}

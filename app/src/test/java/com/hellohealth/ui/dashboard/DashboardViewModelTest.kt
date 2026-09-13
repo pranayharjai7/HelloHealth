@@ -59,6 +59,7 @@ class DashboardViewModelTest {
         ) = null
         override suspend fun fetchWeeklyStats() = com.hellohealth.domain.model.WeeklyStats()
         override suspend fun hasPermissions(): Boolean = permissionsGranted
+        override suspend fun fetchLatestBodyMetrics() = com.hellohealth.domain.model.BodyMetrics()
         override fun getRequiredPermissions(): Set<String> = setOf("perm")
         override fun getAvailability(): Int = available
         override fun getSettingsIntent(context: Context): Intent = Intent()

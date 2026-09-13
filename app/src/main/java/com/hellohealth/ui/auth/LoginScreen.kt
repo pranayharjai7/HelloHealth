@@ -35,20 +35,23 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel,
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: () -> Unit,
+    onNeedsOnboarding: () -> Unit
 ) {
     val authState by viewModel.authState.collectAsState()
     var isSignUp by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(authState) {
-        if (authState is AuthState.Authenticated) {
-            onLoginSuccess()
+        when (authState) {
+            is AuthState.Authenticated -> onLoginSuccess()
+            is AuthState.NeedsOnboarding -> onNeedsOnboarding()
+            else -> {}
         }
     }
 

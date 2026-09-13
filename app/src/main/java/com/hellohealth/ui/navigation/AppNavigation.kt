@@ -21,13 +21,15 @@ import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
 import com.hellohealth.ui.debug.SyncDebugScreen
-import com.hellohealth.ui.foodpreferences.FoodPreferencesScreen
-import com.hellohealth.ui.foodpreferences.FoodPreferencesViewModel
+import com.hellohealth.ui.preferences.PreferencesScreen
+import com.hellohealth.ui.preferences.PreferencesViewModel
 import com.hellohealth.ui.goals.GoalsScreen
 import com.hellohealth.ui.goals.GoalsViewModel
 import com.hellohealth.ui.help.HelpScreen
 import com.hellohealth.ui.insights.InsightsScreen
 import com.hellohealth.ui.insights.InsightsViewModel
+import com.hellohealth.ui.onboarding.OnboardingScreen
+import com.hellohealth.ui.profile.EditProfileScreen
 import com.hellohealth.ui.profile.ProfileScreen
 import com.hellohealth.ui.splash.SplashScreen
 
@@ -55,6 +57,11 @@ fun AppNavigation(
                     navController.navigate(Screen.Dashboard.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
+                },
+                onNavigateToOnboarding = {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
                 }
             )
         }
@@ -68,6 +75,11 @@ fun AppNavigation(
                 viewModel = authViewModel,
                 onLoginSuccess = {
                     navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onNeedsOnboarding = {
+                    navController.navigate(Screen.Onboarding.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
@@ -95,7 +107,7 @@ fun AppNavigation(
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                 onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
                 onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },
-                onNavigateToFoodPreferences = { navController.navigate(Screen.FoodPreferences.route) },
+                onNavigateToFoodPreferences = { navController.navigate(Screen.Preferences.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToHelp = { navController.navigate(Screen.Help.route) }
             )
@@ -158,11 +170,31 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.Profile.route) {
+        composable(
+            route = Screen.Profile.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             ProfileScreen(
                 viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onOpenSyncDebug = { navController.navigate(Screen.SyncDebug.route) }
+                onOpenSyncDebug = { navController.navigate(Screen.SyncDebug.route) },
+                onEditProfile = { navController.navigate(Screen.EditProfile.route) }
+            )
+        }
+
+        composable(
+            route = Screen.EditProfile.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            EditProfileScreen(
+                viewModel = authViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -170,28 +202,68 @@ fun AppNavigation(
             SyncDebugScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Goals.route) {
+        composable(
+            route = Screen.Goals.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             val viewModel: GoalsViewModel = hiltViewModel()
             GoalsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.ActivitySettings.route) {
+        composable(
+            route = Screen.ActivitySettings.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             val viewModel: ActivitySettingsViewModel = hiltViewModel()
             ActivitySettingsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.FoodPreferences.route) {
-            val viewModel: FoodPreferencesViewModel = hiltViewModel()
-            FoodPreferencesScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        composable(
+            route = Screen.Preferences.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: PreferencesViewModel = hiltViewModel()
+            PreferencesScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Insights.route) {
+        composable(
+            route = Screen.Insights.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             val viewModel: InsightsViewModel = hiltViewModel()
             InsightsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Help.route) {
+        composable(
+            route = Screen.Help.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             HelpScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                onFinished = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                }
+            )
         }
     }
 }
@@ -215,10 +287,12 @@ sealed class Screen(val route: String) {
         }
     }
     object Profile : Screen("profile")
+    object EditProfile : Screen("edit_profile")
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
     object ActivitySettings : Screen("activity_settings")
-    object FoodPreferences : Screen("food_preferences")
+    object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")
     object Help : Screen("help")
+    object Onboarding : Screen("onboarding")
 }

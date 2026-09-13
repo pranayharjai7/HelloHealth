@@ -8,13 +8,16 @@ import com.hellohealth.core.time.Timestamps
 import com.hellohealth.data.health.HealthConnectManager
 import com.hellohealth.data.local.SnapshotMapper
 import com.hellohealth.data.local.dao.SnapshotDao
+import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.DailyHealthSnapshot
 import com.hellohealth.domain.model.HealthSummary
 import com.hellohealth.domain.model.SnapshotDataSource
 import com.hellohealth.domain.model.SnapshotSyncStatus
+import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.sync.SyncScheduler
 import java.time.Instant
 import java.time.LocalDate
@@ -36,7 +39,8 @@ class ActivityRepositoryImpl @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
     private val snapshotDao: SnapshotDao,
     private val sessionManager: SupabaseSessionManager,
-    private val syncScheduler: SyncScheduler
+    private val syncScheduler: SyncScheduler,
+    private val profileRepository: ProfileRepository
 ) : ActivityRepository {
 
     override suspend fun fetchSummary(
@@ -54,7 +58,9 @@ class ActivityRepositoryImpl @Inject constructor(
         )
 
         if (shouldUseLiveData) {
-            val freshSummary = healthConnectManager.fetchHealthSummary(goals, date)
+            // The profile-derived BMR is supplied lazily — HealthConnectManager only invokes it when
+            // the HC basal-rate record is absent, so no profile read happens on the common path.
+            val freshSummary = healthConnectManager.fetchHealthSummary(goals, date) { resolveBmrFallback() }
 
             // If Health Connect has data, it is the most reliable source of truth.
             if (freshSummary.lastUpdated > 0L) {
@@ -116,6 +122,16 @@ class ActivityRepositoryImpl @Inject constructor(
 
     override suspend fun hasPermissions(): Boolean = healthConnectManager.hasAllPermissions()
 
+    override suspend fun fetchLatestBodyMetrics(): com.hellohealth.domain.model.BodyMetrics {
+        // Only attempt a read when Health Connect is present and connected; otherwise the fields
+        // stay empty and the onboarding UI falls back to manual entry.
+        return if (healthConnectManager.isAvailable && healthConnectManager.hasAllPermissions()) {
+            healthConnectManager.fetchLatestBodyMetrics()
+        } else {
+            com.hellohealth.domain.model.BodyMetrics()
+        }
+    }
+
     override fun getRequiredPermissions(): Set<String> = healthConnectManager.permissions
 
     override fun getAvailability(): Int = healthConnectManager.getAvailability()
@@ -168,4 +184,40 @@ class ActivityRepositoryImpl @Inject constructor(
         activeTimeGoal = goals.activeMinutes.toLong(),
         lastUpdated = 0L
     )
+
+    /**
+     * The BMR (kcal/day) to hand [HealthConnectManager.fetchHealthSummary] as the fallback when
+     * Health Connect has no basal-rate record. Reads the stored profile and derives Mifflin-St Jeor
+     * BMR ([BodyEnergy.bmr], neutral-sex when gender is unset); falls back to 1800.0 only when the
+     * profile is missing/incomplete or the read fails. Precedence downstream: HC record → profile
+     * BMR → 1800.0. `internal` so the profile-read-failure degradation is unit-testable.
+     */
+    internal suspend fun resolveBmrFallback(): Double {
+        val profile = runCatching { profileRepository.getProfile() }.getOrElse { e ->
+            AppLogger.w(FeatureTag.ACTIVITY, "resolveBmrFallback: profile read failed", e)
+            null
+        }
+        return profileBmrOrDefault(profile)
+    }
+
+    companion object {
+        /** Last-resort BMR when neither Health Connect nor the profile can supply one. */
+        internal const val DEFAULT_BMR = 1800.0
+
+        /**
+         * Pure BMR-source selection for the no-HC-record fallback: the profile's Mifflin-St Jeor BMR
+         * ([BodyEnergy.bmr], neutral-sex when gender is unset) when the profile has enough vitals,
+         * else [DEFAULT_BMR]. Kept pure/`internal` so the selection is unit-testable without any
+         * Health Connect plumbing.
+         */
+        internal fun profileBmrOrDefault(profile: UserProfile?): Double {
+            profile ?: return DEFAULT_BMR
+            return BodyEnergy.bmr(
+                weightKg = profile.weightKg,
+                heightCm = profile.heightCm,
+                ageYears = profile.ageYears(),
+                gender = profile.gender
+            ) ?: DEFAULT_BMR
+        }
+    }
 }

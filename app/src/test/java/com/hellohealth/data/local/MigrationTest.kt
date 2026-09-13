@@ -63,4 +63,33 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 4 to 5 adds profile vitals without losing existing rows`() {
+        // Create v4 and seed a displayName-only profile row (pre-onboarding shape).
+        helper.createDatabase(dbName, 4).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_4_5 and validate the resulting schema matches 5.json exactly.
+        val db = helper.runMigrationsAndValidate(dbName, 5, true, MIGRATION_4_5)
+
+        // Existing row survives; new columns read back as null / documented defaults.
+        db.query(
+            "SELECT displayName, gender, heightCm, unitPreference, hasOnboarded FROM profile WHERE userId = 'u1'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+            assertTrue("gender should be null", c.isNull(1))
+            assertTrue("heightCm should be null", c.isNull(2))
+            assertEquals("METRIC", c.getString(3))
+            assertEquals(0, c.getInt(4))
+        }
+        db.close()
+    }
 }
