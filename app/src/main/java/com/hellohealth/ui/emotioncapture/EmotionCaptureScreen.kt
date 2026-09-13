@@ -53,6 +53,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,7 +86,8 @@ import java.util.concurrent.Executors
 fun EmotionCaptureScreen(
     viewModel: EmotionCaptureViewModel,
     onBack: () -> Unit,
-    onLogManually: () -> Unit
+    onLogManually: () -> Unit,
+    startInGallery: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -132,6 +134,19 @@ fun EmotionCaptureScreen(
         if (uri != null) {
             val bitmap = decodeSoftwareBitmap(context, uri)
             if (bitmap != null) viewModel.analyze(bitmap)
+        }
+    }
+
+    // When launched from the dashboard's "Pick a photo" path, auto-open the system picker exactly
+    // once. rememberSaveable survives rotation so we don't re-open it on config change; if the user
+    // cancels, they simply land on this (camera scan) screen — a coherent fallback, not a dead end.
+    var galleryAutoLaunched by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(startInGallery) {
+        if (startInGallery && !galleryAutoLaunched) {
+            galleryAutoLaunched = true
+            galleryLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
         }
     }
 

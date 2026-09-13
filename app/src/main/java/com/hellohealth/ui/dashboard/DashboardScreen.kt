@@ -69,6 +69,7 @@ fun DashboardScreen(
     onNavigateToHelp: () -> Unit,
     onNavigateToLogEmotion: () -> Unit,
     onNavigateToEmotionCapture: () -> Unit,
+    onNavigateToEmotionGallery: () -> Unit,
     onNavigateToMoodTimeline: () -> Unit
 ) {
     val context = LocalContext.current
@@ -379,10 +380,11 @@ fun DashboardScreen(
                     onNavigateToEmotionCapture()
                 },
                 onPickGallery = {
-                    // Gallery lives on the capture screen (no permission needed); Step 6 will route
-                    // the picked Uri straight into its analyze path. For now, land on that screen.
+                    // Route straight to the capture screen's gallery picker — reuses its existing
+                    // decode + analyze ML path (no duplicated glue). Cancelling the picker lands on
+                    // the camera scan screen, a coherent fallback rather than a dead end.
                     showLogMoodSheet = false
-                    onNavigateToEmotionCapture()
+                    onNavigateToEmotionGallery()
                 },
                 onLogManually = {
                     showLogMoodSheet = false

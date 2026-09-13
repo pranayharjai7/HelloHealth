@@ -25,6 +25,8 @@ import com.hellohealth.ui.emotioncapture.EmotionCaptureScreen
 import com.hellohealth.ui.emotioncapture.EmotionCaptureViewModel
 import com.hellohealth.ui.emotioninsights.EmotionInsightsScreen
 import com.hellohealth.ui.emotioninsights.EmotionInsightsViewModel
+import com.hellohealth.ui.moodtimeline.MoodTimelineScreen
+import com.hellohealth.ui.moodtimeline.MoodTimelineViewModel
 import com.hellohealth.ui.debug.SyncDebugScreen
 import com.hellohealth.ui.preferences.PreferencesScreen
 import com.hellohealth.ui.preferences.PreferencesViewModel
@@ -121,8 +123,10 @@ fun AppNavigation(
                 onNavigateToHelp = { navController.navigate(Screen.Help.route) },
                 onNavigateToLogEmotion = { navController.navigate(Screen.LogEmotion.route) },
                 onNavigateToEmotionCapture = { navController.navigate(Screen.EmotionCapture.route) },
-                // Wired to the MoodTimeline route in Step 6 once the screen exists.
-                onNavigateToMoodTimeline = { }
+                onNavigateToEmotionGallery = {
+                    navController.navigate(Screen.EmotionCapture.createRoute(startInGallery = true))
+                },
+                onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) }
             )
         }
         
@@ -243,14 +247,23 @@ fun AppNavigation(
 
         composable(
             route = Screen.EmotionCapture.route,
+            arguments = listOf(
+                navArgument(Screen.EmotionCapture.startInGalleryArg) {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            ),
             enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
             exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
             popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
             popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
-        ) {
+        ) { backStackEntry ->
+            val startInGallery = backStackEntry.arguments
+                ?.getBoolean(Screen.EmotionCapture.startInGalleryArg) ?: false
             val viewModel: EmotionCaptureViewModel = hiltViewModel()
             EmotionCaptureScreen(
                 viewModel = viewModel,
+                startInGallery = startInGallery,
                 onBack = { navController.popBackStack() },
                 onLogManually = {
                     // Replace the scanner on the back stack so "back" from manual logging returns
@@ -270,6 +283,21 @@ fun AppNavigation(
         ) {
             val viewModel: EmotionInsightsViewModel = hiltViewModel()
             EmotionInsightsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Screen.MoodTimeline.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: MoodTimelineViewModel = hiltViewModel()
+            MoodTimelineScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onOpenInsights = { navController.navigate(Screen.EmotionInsights.route) }
+            )
         }
 
         composable(
@@ -350,8 +378,15 @@ sealed class Screen(val route: String) {
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
     object LogEmotion : Screen("log_emotion")
-    object EmotionCapture : Screen("emotion_capture")
+    object EmotionCapture : Screen("emotion_capture?startInGallery={startInGallery}") {
+        const val startInGalleryArg = "startInGallery"
+
+        /** Route with an explicit gallery-on-entry flag; defaults to false (plain camera scan). */
+        fun createRoute(startInGallery: Boolean = false): String =
+            "emotion_capture?startInGallery=$startInGallery"
+    }
     object EmotionInsights : Screen("emotion_insights")
+    object MoodTimeline : Screen("mood_timeline")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")
