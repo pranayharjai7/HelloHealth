@@ -74,6 +74,7 @@ class AuthViewModelTest {
         override suspend fun setDynamicTheme(enabled: Boolean) {
             profile = (profile ?: UserProfile()).copy(isDynamicTheme = enabled)
         }
+        override fun observeDynamicTheme() = flowOf(profile?.isDynamicTheme ?: true)
     }
 
     private class FakeGoalsRepository(

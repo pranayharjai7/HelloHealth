@@ -10,6 +10,7 @@ import com.hellohealth.domain.model.Gender
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.sync.SyncScheduler
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -43,6 +44,7 @@ class ActivityRepositoryImplBmrFallbackTest {
         override suspend fun setDynamicTheme(enabled: Boolean) {
             profile = (profile ?: UserProfile()).copy(isDynamicTheme = enabled)
         }
+        override fun observeDynamicTheme() = flowOf(profile?.isDynamicTheme ?: true)
     }
 
     @Before

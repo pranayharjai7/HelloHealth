@@ -12,6 +12,12 @@ import com.hellohealth.domain.model.UnitPreference
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.sync.SyncScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -78,6 +84,16 @@ class ProfileRepositoryImpl @Inject constructor(
         val current = profileDao.get(userId)?.toDomain() ?: UserProfile()
         upsertProfile(current.copy(isDynamicTheme = enabled))
     }
+
+    override fun observeDynamicTheme(): Flow<Boolean> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(true)
+            return@flow
+        }
+        // No row yet -> default-on; a present row reports its stored flag.
+        emitAll(profileDao.observe(userId).map { it?.isDynamicTheme ?: true })
+    }.flowOn(Dispatchers.IO)
 
     private fun ProfileEntity.toDomain() = UserProfile(
         displayName = displayName,
