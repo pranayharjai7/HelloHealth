@@ -44,6 +44,7 @@ import com.hellohealth.domain.model.DailyHealthSnapshot
 import coil.compose.AsyncImage
 import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
+import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.WorkoutCard
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -56,6 +57,7 @@ import kotlinx.coroutines.launch
 fun DashboardScreen(
     authViewModel: AuthViewModel,
     dashboardViewModel: DashboardViewModel,
+    emotionsViewModel: EmotionsViewModel,
     onLogout: () -> Unit,
     onNavigateToWorkoutDetails: () -> Unit,
     onNavigateToProfile: () -> Unit,
@@ -63,10 +65,12 @@ fun DashboardScreen(
     onNavigateToActivitySettings: () -> Unit,
     onNavigateToFoodPreferences: () -> Unit,
     onNavigateToInsights: () -> Unit,
-    onNavigateToHelp: () -> Unit
+    onNavigateToHelp: () -> Unit,
+    onNavigateToLogEmotion: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
+    val emotionsState by emotionsViewModel.uiState.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -314,7 +318,16 @@ fun DashboardScreen(
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
-                
+
+                EmotionsCard(
+                    latest = emotionsState.latest,
+                    dominantToday = emotionsState.dominantToday,
+                    todayCount = emotionsState.todayCount,
+                    onClick = onNavigateToLogEmotion
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
                 Text(
                     text = "Upcoming: Nutrition & AI Coaching",
                     style = MaterialTheme.typography.labelLarge,
