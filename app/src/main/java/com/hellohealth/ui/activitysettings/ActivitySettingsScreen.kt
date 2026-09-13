@@ -107,6 +107,35 @@ fun ActivitySettingsScreen(
                     }
                 }
 
+                // Appearance — mood-tint theme toggle. Writes immediately (no Save); the app
+                // re-tints live because ThemeViewModel reads the same stored flag.
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Palette, null, tint = primaryColor)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Dynamic mood theme", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Tint the app toward the color of your latest logged mood. Turn off to keep the classic green.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Switch(
+                            checked = uiState.isDynamicTheme,
+                            onCheckedChange = { viewModel.setDynamicTheme(it) }
+                        )
+                    }
+                }
+
                 // Actions
                 SettingsActionItem(
                     icon = Icons.Default.Security,
