@@ -92,6 +92,7 @@ fun GoalsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -100,19 +101,6 @@ fun GoalsScreen(
                     text = "Set your daily activity targets to stay motivated and healthy.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-
-                GoalDirectionCard(
-                    goalType = uiState.goalType,
-                    targetWeightKg = uiState.targetWeightKg,
-                    targetRateKgPerWeek = uiState.targetRateKgPerWeek,
-                    unitPreference = uiState.unitPreference,
-                    targetWeightError = uiState.targetWeightError,
-                    targetRateError = uiState.targetRateError,
-                    primaryColor = primaryColor,
-                    onGoalTypeChange = { viewModel.updateGoalType(it) },
-                    onTargetWeightChange = { viewModel.updateTargetWeightKg(it) },
-                    onTargetRateChange = { viewModel.updateTargetRateKgPerWeek(it) }
                 )
 
                 GoalAdjuster(
@@ -146,6 +134,19 @@ fun GoalsScreen(
                     unit = "min",
                     color = Color(0xFF42A5F5),
                     onValueChange = { viewModel.updateMinutesGoal(it.roundToInt()) }
+                )
+
+                GoalDirectionCard(
+                    goalType = uiState.goalType,
+                    targetWeightKg = uiState.targetWeightKg,
+                    targetRateKgPerWeek = uiState.targetRateKgPerWeek,
+                    unitPreference = uiState.unitPreference,
+                    targetWeightError = uiState.targetWeightError,
+                    targetRateError = uiState.targetRateError,
+                    primaryColor = primaryColor,
+                    onGoalTypeChange = { viewModel.updateGoalType(it) },
+                    onTargetWeightChange = { viewModel.updateTargetWeightKg(it) },
+                    onTargetRateChange = { viewModel.updateTargetRateKgPerWeek(it) }
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
