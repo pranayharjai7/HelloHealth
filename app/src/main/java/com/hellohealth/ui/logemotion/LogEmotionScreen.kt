@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,7 +46,8 @@ import com.hellohealth.ui.common.SingleSelectChips
 @Composable
 fun LogEmotionScreen(
     viewModel: LogEmotionViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onViewInsights: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -68,6 +70,13 @@ fun LogEmotionScreen(
                             color = primaryColor
                         )
                     } else {
+                        IconButton(onClick = onViewInsights) {
+                            Icon(
+                                Icons.Default.Analytics,
+                                contentDescription = "Mood balance",
+                                tint = primaryColor
+                            )
+                        }
                         val canSave = uiState.selectedEmotion != null
                         TextButton(onClick = { viewModel.save() }, enabled = canSave) {
                             Text(

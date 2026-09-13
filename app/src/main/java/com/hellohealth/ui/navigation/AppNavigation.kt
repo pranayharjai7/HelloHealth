@@ -21,6 +21,8 @@ import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.EmotionsViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
+import com.hellohealth.ui.emotioninsights.EmotionInsightsScreen
+import com.hellohealth.ui.emotioninsights.EmotionInsightsViewModel
 import com.hellohealth.ui.debug.SyncDebugScreen
 import com.hellohealth.ui.preferences.PreferencesScreen
 import com.hellohealth.ui.preferences.PreferencesViewModel
@@ -227,7 +229,22 @@ fun AppNavigation(
             popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
         ) {
             val viewModel: LogEmotionViewModel = hiltViewModel()
-            LogEmotionScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+            LogEmotionScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onViewInsights = { navController.navigate(Screen.EmotionInsights.route) }
+            )
+        }
+
+        composable(
+            route = Screen.EmotionInsights.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: EmotionInsightsViewModel = hiltViewModel()
+            EmotionInsightsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
         composable(
@@ -308,6 +325,7 @@ sealed class Screen(val route: String) {
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
     object LogEmotion : Screen("log_emotion")
+    object EmotionInsights : Screen("emotion_insights")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")
