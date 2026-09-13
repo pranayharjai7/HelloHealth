@@ -162,6 +162,41 @@ CREATE TRIGGER trg_emotion_records_set_updated_at
     BEFORE UPDATE ON public.emotion_records
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- --- workout_sessions (Workout Phase A) -------------------------------------
+-- NEW table (does not exist yet) — multi-row per user, conflict key `id` (a
+-- client-generated random UUID string, matching WorkoutSessionSyncer.WorkoutSyncDto).
+-- Additive-new like emotion_records, so it is created in full rather than ALTER-ed.
+-- Columns mirror the DTO 1:1 (snake_case): text/bigint/double/nullable per the
+-- Kotlin types (durationMinutes is Long -> bigint; calories/distanceKm are
+-- Double? -> double precision NULL; title/note are String? -> text NULL).
+--   updated_at / deleted_at carry the same LWW-clock + tombstone semantics as
+--   the other tables; the set_updated_at trigger stamps updated_at on UPDATE.
+-- The client ALWAYS pushes every column, so this must run (and PostgREST reload)
+-- BEFORE relying on pull — else workout upserts return PGRST204. Until it runs,
+-- the syncer degrades to push-only losslessly (updated_at/deleted_at are null).
+CREATE TABLE IF NOT EXISTS public.workout_sessions (
+    id              text PRIMARY KEY,
+    user_id         text NOT NULL,
+    activity_type   text NOT NULL DEFAULT 'OTHER',
+    title           text,
+    start_time_utc  timestamptz NOT NULL,
+    end_time_utc    timestamptz NOT NULL,
+    duration_minutes bigint NOT NULL DEFAULT 0,
+    calories        double precision,
+    distance_km     double precision,
+    note            text,
+    local_date      text NOT NULL,
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    deleted_at      timestamptz
+);
+-- Pull filters by user_id; index it for the per-user select.
+CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_id ON public.workout_sessions (user_id);
+
+DROP TRIGGER IF EXISTS trg_workout_sessions_set_updated_at ON public.workout_sessions;
+CREATE TRIGGER trg_workout_sessions_set_updated_at
+    BEFORE UPDATE ON public.workout_sessions
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 -- ============================================================================
 -- Row Level Security (owner-scoped) — P1 hardening
 -- ----------------------------------------------------------------------------
@@ -173,6 +208,7 @@ CREATE TRIGGER trg_emotion_records_set_updated_at
 --   food_preferences        : user_id   = auth.uid()
 --   daily_health_snapshots  : user_id   = auth.uid()
 --   emotion_records         : user_id   = auth.uid()
+--   workout_sessions        : user_id   = auth.uid()
 -- Ownership-column types vary (emotion_records is `text`; the pre-existing P0
 -- tables may be `uuid`), so we cast BOTH sides to text: `col::text = auth.uid()::text`.
 -- This is `text = text` regardless of the column type — a no-op cast on text
@@ -220,6 +256,13 @@ CREATE POLICY daily_health_snapshots_owner ON public.daily_health_snapshots
 ALTER TABLE public.emotion_records ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS emotion_records_owner ON public.emotion_records;
 CREATE POLICY emotion_records_owner ON public.emotion_records
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+ALTER TABLE public.workout_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS workout_sessions_owner ON public.workout_sessions;
+CREATE POLICY workout_sessions_owner ON public.workout_sessions
     FOR ALL TO authenticated
     USING (user_id::text = auth.uid()::text)
     WITH CHECK (user_id::text = auth.uid()::text);
