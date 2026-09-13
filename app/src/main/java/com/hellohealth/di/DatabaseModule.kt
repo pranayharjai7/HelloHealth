@@ -7,6 +7,7 @@ import com.hellohealth.data.local.MIGRATION_3_4
 import com.hellohealth.data.local.MIGRATION_4_5
 import com.hellohealth.data.local.MIGRATION_5_6
 import com.hellohealth.data.local.MIGRATION_6_7
+import com.hellohealth.data.local.MIGRATION_7_8
 import com.hellohealth.data.local.dao.EmotionRecordsDao
 import com.hellohealth.data.local.dao.FoodPrefsDao
 import com.hellohealth.data.local.dao.GoalsDao
@@ -14,6 +15,7 @@ import com.hellohealth.data.local.dao.ProfileDao
 import com.hellohealth.data.local.dao.SnapshotDao
 import com.hellohealth.data.local.dao.SyncLogDao
 import com.hellohealth.data.local.dao.UserDao
+import com.hellohealth.data.local.dao.WorkoutSessionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -34,7 +36,7 @@ object DatabaseModule {
             "hello_health.db"
         )
             // Real migrations — no destructive fallback. Never silently wipe user data.
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
     }
 
@@ -58,4 +60,7 @@ object DatabaseModule {
 
     @Provides
     fun provideEmotionRecordsDao(database: AppDatabase): EmotionRecordsDao = database.emotionRecordsDao()
+
+    @Provides
+    fun provideWorkoutSessionDao(database: AppDatabase): WorkoutSessionDao = database.workoutSessionDao()
 }

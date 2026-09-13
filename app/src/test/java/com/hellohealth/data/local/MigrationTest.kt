@@ -159,4 +159,52 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 7 to 8 creates workout_sessions and preserves existing rows`() {
+        // Create v7 and seed a profile row so we can prove existing tables survive the new-table add.
+        helper.createDatabase(dbName, 7).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded, isDynamicTheme) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 1, 1)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_7_8 and validate the resulting schema matches 8.json exactly.
+        val db = helper.runMigrationsAndValidate(dbName, 8, true, MIGRATION_7_8)
+
+        // The pre-existing profile row is untouched by the additive new table.
+        db.query("SELECT displayName FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+        }
+
+        // The new workout_sessions table exists, is empty, and accepts an insert (columns/affinities OK).
+        db.query("SELECT count(*) FROM workout_sessions").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(0, c.getInt(0))
+        }
+        // Exercise every affinity, including the nullable REAL calories/distance and null title/note.
+        db.execSQL(
+            "INSERT INTO workout_sessions " +
+                "(id, userId, activityType, title, startTimeUtcEpochMs, endTimeUtcEpochMs, durationMinutes, " +
+                "calories, distanceKm, note, localDate, updatedAtEpochMs, updatedAtTzOffsetMinutes, " +
+                "deletedAtEpochMs, isSynced) " +
+                "VALUES ('w1', 'u1', 'RUN', 'Morning run', 1000, 2800000, 45, " +
+                "320.5, 8.2, NULL, '2026-09-13', 2800000, 0, NULL, 0)"
+        )
+        db.query(
+            "SELECT activityType, durationMinutes, calories, distanceKm FROM workout_sessions WHERE id = 'w1'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("RUN", c.getString(0))
+            assertEquals(45L, c.getLong(1))
+            assertEquals(320.5, c.getDouble(2), 0.0001)
+            assertEquals(8.2, c.getDouble(3), 0.0001)
+        }
+        db.close()
+    }
 }

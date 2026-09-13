@@ -155,3 +155,37 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE `profile` ADD COLUMN `isDynamicTheme` INTEGER NOT NULL DEFAULT 1")
     }
 }
+
+/**
+ * v7 → v8: add the Phase-A `workout_sessions` table (native manual workout logging).
+ *
+ * A new multi-row, syncable table — CREATE only (like MIGRATION_5_6), no change to existing tables,
+ * so the read-only Health Connect activity path is untouched. Column order and affinities must match
+ * Room's generated v8 schema exactly (validated against 8.json by MigrationTest): feature columns
+ * first, the four Syncable sync-meta columns last, to match
+ * [com.hellohealth.data.local.entities.WorkoutSessionEntity]. `Long` → INTEGER, `Double?` → REAL
+ * (nullable → no NOT NULL), nullable `String?` → no NOT NULL.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `workout_sessions` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`activityType` TEXT NOT NULL, " +
+                "`title` TEXT, " +
+                "`startTimeUtcEpochMs` INTEGER NOT NULL, " +
+                "`endTimeUtcEpochMs` INTEGER NOT NULL, " +
+                "`durationMinutes` INTEGER NOT NULL, " +
+                "`calories` REAL, " +
+                "`distanceKm` REAL, " +
+                "`note` TEXT, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+    }
+}

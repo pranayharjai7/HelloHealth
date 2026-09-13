@@ -10,6 +10,7 @@ import com.hellohealth.data.local.dao.ProfileDao
 import com.hellohealth.data.local.dao.SnapshotDao
 import com.hellohealth.data.local.dao.SyncLogDao
 import com.hellohealth.data.local.dao.UserDao
+import com.hellohealth.data.local.dao.WorkoutSessionDao
 import com.hellohealth.data.local.entities.EmotionRecordEntity
 import com.hellohealth.data.local.entities.FoodPrefsEntity
 import com.hellohealth.data.local.entities.GoalsEntity
@@ -17,6 +18,7 @@ import com.hellohealth.data.local.entities.ProfileEntity
 import com.hellohealth.data.local.entities.SnapshotEntity
 import com.hellohealth.data.local.entities.SyncLogEntity
 import com.hellohealth.data.local.entities.UserEntity
+import com.hellohealth.data.local.entities.WorkoutSessionEntity
 
 @Database(
     entities = [
@@ -26,9 +28,10 @@ import com.hellohealth.data.local.entities.UserEntity
         FoodPrefsEntity::class,
         SnapshotEntity::class,
         SyncLogEntity::class,
-        EmotionRecordEntity::class
+        EmotionRecordEntity::class,
+        WorkoutSessionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -40,4 +43,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun snapshotDao(): SnapshotDao
     abstract fun syncLogDao(): SyncLogDao
     abstract fun emotionRecordsDao(): EmotionRecordsDao
+    abstract fun workoutSessionDao(): WorkoutSessionDao
 }
