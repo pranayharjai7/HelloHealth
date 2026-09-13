@@ -59,9 +59,10 @@ class MoodTimelineViewModel @Inject constructor(
     private var latestRecords: List<EmotionRecord> = emptyList()
 
     /**
-     * Ids staged for deletion but not yet committed — hidden from the UI immediately so the row
-     * animates out, but only tombstoned in Room once the Undo window closes ([commitDelete]). Kept
-     * separate from the repository so an Undo is a pure local revert with no orphaned tombstone.
+     * Ids staged for deletion but not yet committed — hidden from the UI immediately (the removed
+     * row disappears and the rows below it slide up to close the gap), but only tombstoned in Room
+     * once the Undo window closes ([commitDelete]). Kept separate from the repository so an Undo is
+     * a pure local revert with no orphaned tombstone.
      */
     private val pendingDeletes = mutableSetOf<String>()
 

@@ -50,8 +50,9 @@ class DetectAndLogEmotionUseCaseTest {
             source: String,
             note: String?,
             visibility: String
-        ) {
+        ): String? {
             logged += Logged(emotion, confidence, source, note, visibility)
+            return "fake-id"
         }
 
         override suspend fun delete(id: String) = Unit

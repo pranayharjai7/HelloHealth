@@ -22,14 +22,17 @@ interface EmotionsRepository {
     /** Live mood logs whose local day falls within the inclusive [startEpochDay, endEpochDay] window. */
     fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>>
 
-    /** Persist a new mood log locally and request a sync. No-op (logged) if no user is signed in. */
+    /**
+     * Persist a new mood log locally and request a sync. No-op if no user is signed in.
+     * @return the stable id of the written record, or null if there was no signed-in user (write dropped).
+     */
     suspend fun logEmotion(
         emotion: EmotionType,
         confidence: Double = 1.0,
         source: String = EmotionRecord.SOURCE_MANUAL,
         note: String? = null,
         visibility: String = EmotionRecord.VISIBILITY_PRIVATE
-    )
+    ): String?
 
     /** Soft-delete a mood log (tombstone) and request a sync. */
     suspend fun delete(id: String)

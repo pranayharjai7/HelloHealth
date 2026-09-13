@@ -32,7 +32,7 @@ class ThemeViewModelTest {
         override fun observeToday(): Flow<List<EmotionRecord>> = flowOf(emptyList())
         override fun observeLatest(): Flow<EmotionRecord?> = flowOf(latest)
         override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(emptyList())
-        override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String) {}
+        override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String): String? = null
         override suspend fun delete(id: String) {}
     }
 

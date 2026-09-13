@@ -70,23 +70,25 @@ class EmotionsRepositoryImpl @Inject constructor(
         source: String,
         note: String?,
         visibility: String
-    ) {
+    ): String? {
         val userId = sessionManager.getCurrentUserId()
         if (userId == null) {
             AppLogger.w(FeatureTag.EMOTIONS, "logEmotion with no signed-in user; dropping write")
-            return
+            return null
         }
 
         val nowMs = Timestamps.nowEpochMs()
         val zone = ZoneId.systemDefault()
         val localDate = Timestamps.epochMsToInstant(nowMs).atZone(zone).toLocalDate().toString()
 
+        // Deterministic id: keyed on user+instant+emotion so re-logging the identical mood at
+        // the same millisecond upserts instead of duplicating, while a different mood in the
+        // same instant is a distinct row. Avoids Math.random()/UUID (non-deterministic).
+        val id = "$userId|$nowMs|${emotion.name}"
+
         emotionRecordsDao.upsert(
             EmotionRecordEntity(
-                // Deterministic id: keyed on user+instant+emotion so re-logging the identical mood at
-                // the same millisecond upserts instead of duplicating, while a different mood in the
-                // same instant is a distinct row. Avoids Math.random()/UUID (non-deterministic).
-                id = "$userId|$nowMs|${emotion.name}",
+                id = id,
                 userId = userId,
                 timestampUtcEpochMs = nowMs,
                 tzOffsetMinutes = Timestamps.currentTzOffsetMinutes(zone),
@@ -104,6 +106,7 @@ class EmotionsRepositoryImpl @Inject constructor(
         )
         AppLogger.d(FeatureTag.EMOTIONS, "mood '${emotion.name}' logged locally; requesting sync")
         syncScheduler.requestSync()
+        return id
     }
 
     override suspend fun delete(id: String) {

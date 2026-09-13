@@ -126,24 +126,35 @@ fun EmotionCaptureScreen(
         permissionRequested = true
     }
 
+    // When launched from the dashboard's "Pick a photo" path, we auto-open the system picker once.
+    // Track that pending auto-launch so its result callback can distinguish it from a manual pick
+    // via the top-bar icon (where cancelling should just leave the user on the camera screen).
+    var awaitingAutoGalleryPick by remember { mutableStateOf(false) }
+
     // Gallery path — no permission needed (PickVisualMedia is a system picker). Decode to a
     // software bitmap so the ML pipeline can read pixels (getPixels needs a non-hardware config).
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
+        val wasAutoLaunch = awaitingAutoGalleryPick
+        awaitingAutoGalleryPick = false
         if (uri != null) {
             val bitmap = decodeSoftwareBitmap(context, uri)
             if (bitmap != null) viewModel.analyze(bitmap)
+        } else if (wasAutoLaunch) {
+            // Cancelling the auto-opened picker means the user only ever asked for "Pick a photo";
+            // don't strand them on the live-camera scan they never chose — go back to the dashboard.
+            onBack()
         }
     }
 
     // When launched from the dashboard's "Pick a photo" path, auto-open the system picker exactly
-    // once. rememberSaveable survives rotation so we don't re-open it on config change; if the user
-    // cancels, they simply land on this (camera scan) screen — a coherent fallback, not a dead end.
+    // once. rememberSaveable survives rotation so we don't re-open it on config change.
     var galleryAutoLaunched by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(startInGallery) {
         if (startInGallery && !galleryAutoLaunched) {
             galleryAutoLaunched = true
+            awaitingAutoGalleryPick = true
             galleryLauncher.launch(
                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
             )

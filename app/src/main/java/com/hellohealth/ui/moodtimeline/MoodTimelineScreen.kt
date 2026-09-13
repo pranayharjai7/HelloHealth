@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -79,7 +80,7 @@ private val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MM
  * stable API). Each delete is staged (the row hides at once) and shown with a mandatory Undo
  * snackbar; the tombstone is only committed when that window closes without an Undo.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MoodTimelineScreen(
     viewModel: MoodTimelineViewModel,
@@ -163,7 +164,10 @@ fun MoodTimelineScreen(
                             MoodTimelineRow(
                                 record = record,
                                 primaryColor = primaryColor,
-                                onDelete = { deleteWithUndo(record.id) }
+                                onDelete = { deleteWithUndo(record.id) },
+                                // Surviving rows slide up to close the gap when one is staged for
+                                // deletion (foundation 1.6 placement animation — not a fade-out).
+                                modifier = Modifier.animateItemPlacement()
                             )
                         }
                     }
@@ -245,13 +249,14 @@ private fun DayHeaderPill(date: LocalDate, primaryColor: Color) {
 private fun MoodTimelineRow(
     record: EmotionRecord,
     primaryColor: Color,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val badgeTint = lerp(primaryColor, moodAccentFor(record.emotion).accent, BADGE_TINT_FRACTION)
 
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {

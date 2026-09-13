@@ -393,14 +393,16 @@ fun DashboardScreen(
                 },
                 onQuickLog = { emotion ->
                     showLogMoodSheet = false
-                    emotionsViewModel.quickLog(emotion)
                     snackbarScope.launch {
+                        // Capture THIS log's id so Undo deletes exactly this record — even if the
+                        // user fires several quick-logs in quick succession.
+                        val loggedId = emotionsViewModel.quickLog(emotion)
                         val result = snackbarHostState.showSnackbar(
                             message = "Logged ${emotion.displayLabel()}",
                             actionLabel = "Undo"
                         )
-                        if (result == SnackbarResult.ActionPerformed) {
-                            emotionsViewModel.undoLastQuickLog()
+                        if (result == SnackbarResult.ActionPerformed && loggedId != null) {
+                            emotionsViewModel.delete(loggedId)
                         }
                     }
                 }
