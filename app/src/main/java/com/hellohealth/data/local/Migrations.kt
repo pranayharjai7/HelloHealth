@@ -109,3 +109,35 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("ALTER TABLE `profile` ADD COLUMN `hasOnboarded` INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/**
+ * v5 → v6: add the P1 `emotion_records` table (manual mood logging + future camera detection).
+ *
+ * A new multi-row, syncable table — CREATE only (like MIGRATION_3_4), no change to existing tables.
+ * Column order and affinities must match Room's generated v6 schema exactly (validated against
+ * 6.json by MigrationTest): feature columns first, the four Syncable sync-meta columns last, to
+ * match [com.hellohealth.data.local.entities.EmotionRecordEntity]. `Double` → REAL, nullable
+ * `Long?`/`String?` → no NOT NULL.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `emotion_records` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`timestampUtcEpochMs` INTEGER NOT NULL, " +
+                "`tzOffsetMinutes` INTEGER NOT NULL, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`emotion` TEXT NOT NULL, " +
+                "`confidence` REAL NOT NULL, " +
+                "`source` TEXT NOT NULL, " +
+                "`note` TEXT, " +
+                "`visibility` TEXT NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+    }
+}

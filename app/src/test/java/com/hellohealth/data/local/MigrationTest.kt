@@ -92,4 +92,46 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 5 to 6 creates emotion_records and preserves existing rows`() {
+        // Create v5 and seed a profile row so we can prove existing tables survive the new-table add.
+        helper.createDatabase(dbName, 5).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 0)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_5_6 and validate the resulting schema matches 6.json exactly.
+        val db = helper.runMigrationsAndValidate(dbName, 6, true, MIGRATION_5_6)
+
+        // The pre-existing profile row is untouched by the additive new table.
+        db.query("SELECT displayName FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+        }
+
+        // The new emotion_records table exists, is empty, and accepts an insert (columns/affinities OK).
+        db.query("SELECT count(*) FROM emotion_records").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(0, c.getInt(0))
+        }
+        db.execSQL(
+            "INSERT INTO emotion_records " +
+                "(id, userId, timestampUtcEpochMs, tzOffsetMinutes, localDate, emotion, confidence, " +
+                "source, note, visibility, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|100|HAPPINESS', 'u1', 100, 0, '2026-09-13', 'HAPPINESS', 1.0, " +
+                "'manual', NULL, 'private', 100, 0, NULL, 0)"
+        )
+        db.query("SELECT emotion, confidence FROM emotion_records WHERE id = 'u1|100|HAPPINESS'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("HAPPINESS", c.getString(0))
+            assertEquals(1.0, c.getDouble(1), 0.0001)
+        }
+        db.close()
+    }
 }
