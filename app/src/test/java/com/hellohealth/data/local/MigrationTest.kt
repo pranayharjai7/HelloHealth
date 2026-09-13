@@ -212,4 +212,154 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 8 to 9 drops flat workout_sessions and creates the planning hierarchy`() {
+        // Create v8 as a genuine legacy user would have it: a profile row plus a flat
+        // workout_sessions row (the vertical this migration removes). We validate the migrated schema
+        // against 9.json — this is the structural guard that MIGRATION_8_9's hand-written CREATE
+        // TABLEs / indices exactly match Room's generated v9 entities.
+        //
+        // NOTE: createDatabase(v8) builds the schema from the CURRENT exported 8.json, which no longer
+        // declares workout_sessions (WorkoutSessionEntity was deleted in Step 0 and 8.json regenerated).
+        // A real legacy v8 user reached v8 via MIGRATION_7_8, which DID create the table — so to model
+        // that user faithfully we recreate the flat table by hand (byte-identical to MIGRATION_7_8's
+        // CREATE) before seeding it. This proves MIGRATION_8_9 drops it even when present.
+        helper.createDatabase(dbName, 8).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded, isDynamicTheme) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 1, 1)"
+            )
+            execSQL(
+                "CREATE TABLE IF NOT EXISTS `workout_sessions` (" +
+                    "`id` TEXT NOT NULL, `userId` TEXT NOT NULL, `activityType` TEXT NOT NULL, " +
+                    "`title` TEXT, `startTimeUtcEpochMs` INTEGER NOT NULL, " +
+                    "`endTimeUtcEpochMs` INTEGER NOT NULL, `durationMinutes` INTEGER NOT NULL, " +
+                    "`calories` REAL, `distanceKm` REAL, `note` TEXT, `localDate` TEXT NOT NULL, " +
+                    "`updatedAtEpochMs` INTEGER NOT NULL, `updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                    "`deletedAtEpochMs` INTEGER, `isSynced` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+            )
+            execSQL(
+                "INSERT INTO workout_sessions " +
+                    "(id, userId, activityType, title, startTimeUtcEpochMs, endTimeUtcEpochMs, durationMinutes, " +
+                    "calories, distanceKm, note, localDate, updatedAtEpochMs, updatedAtTzOffsetMinutes, " +
+                    "deletedAtEpochMs, isSynced) " +
+                    "VALUES ('w1', 'u1', 'RUN', 'Morning run', 1000, 2800000, 45, " +
+                    "320.5, 8.2, NULL, '2026-09-13', 2800000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_8_9 and validate the resulting schema matches 9.json exactly.
+        val db = helper.runMigrationsAndValidate(dbName, 9, true, MIGRATION_8_9)
+
+        // The pre-existing profile row is untouched by the drop + additive creates.
+        db.query("SELECT displayName FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+        }
+
+        // The flat vertical is gone: querying the dropped table throws.
+        var flatTableGone = false
+        try {
+            db.query("SELECT count(*) FROM workout_sessions").use { it.moveToFirst() }
+        } catch (e: Exception) {
+            flatTableGone = true
+        }
+        assertTrue("workout_sessions must be dropped by MIGRATION_8_9", flatTableGone)
+
+        // All four new tables exist and are empty.
+        for (table in listOf("workout_plans", "workout_days", "planned_exercises", "exercises")) {
+            db.query("SELECT count(*) FROM $table").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("$table should be empty after migration", 0, c.getInt(0))
+            }
+        }
+
+        // workout_plans round-trips (Boolean/INTEGER isActive, planType, timestamps).
+        db.execSQL(
+            "INSERT INTO workout_plans " +
+                "(id, userId, name, isActive, planType, createdAtEpochMs, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('p1', 'u1', 'Push/Pull/Legs', 1, 'WEEKLY', 500, 500, 0, NULL, 0)"
+        )
+        db.query("SELECT name, isActive, planType FROM workout_plans WHERE id = 'p1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Push/Pull/Legs", c.getString(0))
+            assertEquals(1, c.getInt(1))
+            assertEquals("WEEKLY", c.getString(2))
+        }
+
+        // workout_days round-trips.
+        db.execSQL(
+            "INSERT INTO workout_days " +
+                "(id, planId, userId, slotKey, name, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('d1', 'p1', 'u1', 'MONDAY', 'Push', 500, 0, NULL, 0)"
+        )
+        db.query("SELECT slotKey, name FROM workout_days WHERE id = 'd1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("MONDAY", c.getString(0))
+            assertEquals("Push", c.getString(1))
+        }
+
+        // planned_exercises: exercise every affinity. Row A has all optional targets set; row B leaves
+        // every nullable target NULL (only targetSets required) — proving the nullable INTEGER/REAL
+        // affinities round-trip both ways.
+        db.execSQL(
+            "INSERT INTO planned_exercises " +
+                "(id, dayId, userId, exerciseId, orderIndex, targetSets, targetReps, targetWeightKg, " +
+                "targetDurationSeconds, targetDistanceKm, targetSpeedKmh, targetIncline, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('pe1', 'd1', 'u1', 'ex-bench', 0, 4, 8, 60.5, " +
+                "NULL, NULL, NULL, NULL, 500, 0, NULL, 0)"
+        )
+        db.execSQL(
+            "INSERT INTO planned_exercises " +
+                "(id, dayId, userId, exerciseId, orderIndex, targetSets, targetReps, targetWeightKg, " +
+                "targetDurationSeconds, targetDistanceKm, targetSpeedKmh, targetIncline, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('pe2', 'd1', 'u1', 'ex-plank', 1, 3, NULL, NULL, " +
+                "NULL, NULL, NULL, NULL, 500, 0, NULL, 0)"
+        )
+        db.query(
+            "SELECT targetSets, targetReps, targetWeightKg FROM planned_exercises WHERE id = 'pe1'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(4, c.getInt(0))
+            assertEquals(8, c.getInt(1))
+            assertEquals(60.5, c.getDouble(2), 0.0001)
+        }
+        db.query(
+            "SELECT targetSets, targetReps, targetWeightKg, targetDurationSeconds, targetDistanceKm, " +
+                "targetSpeedKmh, targetIncline FROM planned_exercises WHERE id = 'pe2'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(3, c.getInt(0))
+            assertTrue("targetReps should be null", c.isNull(1))
+            assertTrue("targetWeightKg should be null", c.isNull(2))
+            assertTrue("targetDurationSeconds should be null", c.isNull(3))
+            assertTrue("targetDistanceKm should be null", c.isNull(4))
+            assertTrue("targetSpeedKmh should be null", c.isNull(5))
+            assertTrue("targetIncline should be null", c.isNull(6))
+        }
+
+        // exercises (read-only catalog, no sync columns) round-trips.
+        db.execSQL(
+            "INSERT INTO exercises " +
+                "(id, name, category, primaryMuscles, secondaryMuscles, equipment, instructions, " +
+                "gifUrl, youtubeQuery) " +
+                "VALUES ('ex-bench', 'Bench Press', 'strength', '[\"chest\"]', '[\"triceps\"]', " +
+                "'barbell', '[\"Lie on the bench\"]', 'https://example/bench.jpg', 'Bench Press tutorial')"
+        )
+        db.query("SELECT name, category, equipment FROM exercises WHERE id = 'ex-bench'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Bench Press", c.getString(0))
+            assertEquals("strength", c.getString(1))
+            assertEquals("barbell", c.getString(2))
+        }
+        db.close()
+    }
 }
