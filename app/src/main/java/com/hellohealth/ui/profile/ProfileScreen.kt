@@ -51,8 +51,8 @@ fun ProfileScreen(
 ) {
     val user by viewModel.currentUser.collectAsState()
     // The onboarding vitals live on the stored UserProfile. Reuse the editor's read path
-    // (profileEditorState) to display them read-only here — no new VM plumbing. The Edit Profile
-    // button opens EditProfileScreen, which uses this same state to edit and save them.
+    // (profileEditorState) to display them read-only here — no new VM plumbing. The pencil action
+    // in the top bar opens EditProfileScreen, which uses this same state to edit and save them.
     val editorState by viewModel.profileEditorState.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadProfileForEditing() }
     val profile = editorState.profile
@@ -88,6 +88,13 @@ fun ProfileScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    // Edit affordance lives here (top-right) so it's discoverable without scrolling
+                    // past the cards to a bottom button.
+                    IconButton(onClick = onEditProfile) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Profile")
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -178,11 +185,11 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Body — the onboarding body measurements, shown read-only. Values are formatted in
-                // the user's stored unit preference; unset fields read "--" (a partial profile is
-                // valid). Editing happens via the Edit Profile button below. Goal-direction fields
-                // (activity level, goal type, target weight) intentionally live on the Preferences
-                // screen, which owns them — they are NOT surfaced here.
+                // Body — the onboarding body measurements, shown read-only in a 2×2 tile grid.
+                // Values are formatted in the user's stored unit preference; unset fields read "--"
+                // (a partial profile is valid). Editing happens via the pencil action in the top bar.
+                // Goal-direction fields (activity level, goal type, target weight) intentionally live
+                // on the Preferences screen, which owns them — they are NOT surfaced here.
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -196,26 +203,42 @@ fun ProfileScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        ProfileInfoItem("Gender", profile?.gender?.displayLabel() ?: "--")
-                        VitalsDivider()
-                        ProfileInfoItem("Age", profile?.ageYears()?.let { "$it yr" } ?: "--")
-                        VitalsDivider()
-                        ProfileInfoItem("Height", formatHeight(profile))
-                        VitalsDivider()
-                        ProfileInfoItem("Weight", formatWeight(profile?.weightKg, profile?.unitPreference))
+                        // 2×2 grid of metric tiles — fills the card width instead of stacking
+                        // everything on the left. Each tile splits the row evenly via weight(1f);
+                        // IntrinsicSize.Min + fillMaxHeight keeps both tiles in a row the same height
+                        // even when one value wraps to two lines (e.g. imperial "5 ft 11 in").
+                        Row(
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            MetricTile(
+                                label = "Gender",
+                                value = profile?.gender?.displayLabel() ?: "--",
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                            MetricTile(
+                                label = "Age",
+                                value = profile?.ageYears()?.let { "$it yr" } ?: "--",
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            MetricTile(
+                                label = "Height",
+                                value = formatHeight(profile),
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                            MetricTile(
+                                label = "Weight",
+                                value = formatWeight(profile?.weightKg, profile?.unitPreference),
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(
-                    onClick = onEditProfile,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Edit Profile", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -239,12 +262,36 @@ private fun ProfileInfoItem(label: String, value: String) {
     }
 }
 
+/**
+ * A single body-metric tile: the value shown prominently with its label beneath, on a subtly
+ * tinted rounded surface. Sized by the caller (weight(1f) in the 2×2 grid) so tiles split the
+ * card width evenly.
+ */
 @Composable
-private fun VitalsDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(vertical = 16.dp),
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
-    )
+private fun MetricTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f))
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.onSurface,
+            // Values like "5 ft 11 in" can exceed a half-width tile at titleLarge; allow a second
+            // line rather than hard-truncating. Both tiles in a Row size independently, so a taller
+            // tile just grows its own row.
+            maxLines = 2
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
+    }
 }
 
 /** Height in the profile's stored units: metric → "cm", imperial → "ft in". "--" when unset. */
