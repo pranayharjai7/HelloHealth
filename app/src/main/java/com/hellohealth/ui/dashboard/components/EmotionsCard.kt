@@ -13,9 +13,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FaceRetouchingNatural
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,16 +31,18 @@ import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.model.EmotionType
 
 /**
- * Dashboard mood card. Stateless (plain data + an onClick lambda), mirroring [WorkoutCard]. Shows
+ * Dashboard mood card. Stateless (plain data + onClick lambdas), mirroring [WorkoutCard]. Shows
  * the latest logged mood as a big emoji + label and, when more than one mood was logged today,
- * today's dominant mood. Tapping opens the manual log screen.
+ * today's dominant mood. Tapping the card opens the manual log screen; the face icon opens the
+ * on-device mood scanner ([onScan]).
  */
 @Composable
 fun EmotionsCard(
     latest: EmotionRecord?,
     dominantToday: EmotionType?,
     todayCount: Int,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onScan: () -> Unit
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
@@ -92,6 +96,14 @@ fun EmotionsCard(
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
+                IconButton(onClick = onScan) {
+                    Icon(
+                        imageVector = Icons.Default.FaceRetouchingNatural,
+                        contentDescription = "Scan your mood",
+                        tint = primaryColor,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .size(44.dp)

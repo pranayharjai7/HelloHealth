@@ -21,6 +21,8 @@ import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.EmotionsViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
+import com.hellohealth.ui.emotioncapture.EmotionCaptureScreen
+import com.hellohealth.ui.emotioncapture.EmotionCaptureViewModel
 import com.hellohealth.ui.emotioninsights.EmotionInsightsScreen
 import com.hellohealth.ui.emotioninsights.EmotionInsightsViewModel
 import com.hellohealth.ui.debug.SyncDebugScreen
@@ -117,7 +119,8 @@ fun AppNavigation(
                 onNavigateToFoodPreferences = { navController.navigate(Screen.Preferences.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToHelp = { navController.navigate(Screen.Help.route) },
-                onNavigateToLogEmotion = { navController.navigate(Screen.LogEmotion.route) }
+                onNavigateToLogEmotion = { navController.navigate(Screen.LogEmotion.route) },
+                onNavigateToEmotionCapture = { navController.navigate(Screen.EmotionCapture.route) }
             )
         }
         
@@ -237,8 +240,28 @@ fun AppNavigation(
         }
 
         composable(
-            route = Screen.EmotionInsights.route,
+            route = Screen.EmotionCapture.route,
             enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: EmotionCaptureViewModel = hiltViewModel()
+            EmotionCaptureScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onLogManually = {
+                    // Replace the scanner on the back stack so "back" from manual logging returns
+                    // to the dashboard, not to the (dismissed) scanner.
+                    navController.navigate(Screen.LogEmotion.route) {
+                        popUpTo(Screen.EmotionCapture.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.EmotionInsights.route,            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
             exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
             popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
             popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
@@ -325,6 +348,7 @@ sealed class Screen(val route: String) {
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
     object LogEmotion : Screen("log_emotion")
+    object EmotionCapture : Screen("emotion_capture")
     object EmotionInsights : Screen("emotion_insights")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")

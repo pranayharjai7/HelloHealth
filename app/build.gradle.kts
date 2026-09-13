@@ -160,6 +160,11 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
+    // Resolvable ListenableFuture + `await()` so we can await ProcessCameraProvider from a coroutine
+    // (camera-lifecycle 1.3.x has no awaitInstance()). Guava provides the ListenableFuture type that
+    // CameraX exposes in its API but only ships as an empty stub transitively.
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.1.0")
+    implementation("com.google.guava:guava:33.2.1-android")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

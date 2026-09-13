@@ -66,7 +66,8 @@ fun DashboardScreen(
     onNavigateToFoodPreferences: () -> Unit,
     onNavigateToInsights: () -> Unit,
     onNavigateToHelp: () -> Unit,
-    onNavigateToLogEmotion: () -> Unit
+    onNavigateToLogEmotion: () -> Unit,
+    onNavigateToEmotionCapture: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -323,7 +324,8 @@ fun DashboardScreen(
                     latest = emotionsState.latest,
                     dominantToday = emotionsState.dominantToday,
                     todayCount = emotionsState.todayCount,
-                    onClick = onNavigateToLogEmotion
+                    onClick = onNavigateToLogEmotion,
+                    onScan = onNavigateToEmotionCapture
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
