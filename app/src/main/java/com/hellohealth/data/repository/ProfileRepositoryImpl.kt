@@ -59,11 +59,24 @@ class ProfileRepositoryImpl @Inject constructor(
                 targetWeightKg = profile.targetWeightKg,
                 targetRateKgPerWeek = profile.targetRateKgPerWeek,
                 unitPreference = profile.unitPreference.name,
-                hasOnboarded = profile.hasOnboarded
+                hasOnboarded = profile.hasOnboarded,
+                isDynamicTheme = profile.isDynamicTheme
             )
         )
         AppLogger.d(FeatureTag.PROFILE, "profile written locally; requesting sync")
         syncScheduler.requestSync()
+    }
+
+    override suspend fun setDynamicTheme(enabled: Boolean) {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            AppLogger.w(FeatureTag.PROFILE, "setDynamicTheme with no signed-in user; dropping write")
+            return
+        }
+        // Single-owner load-then-copy: read the current row and re-persist it with only the theme
+        // flag changed, so no other profile field is clobbered. A missing row starts from defaults.
+        val current = profileDao.get(userId)?.toDomain() ?: UserProfile()
+        upsertProfile(current.copy(isDynamicTheme = enabled))
     }
 
     private fun ProfileEntity.toDomain() = UserProfile(
@@ -77,7 +90,8 @@ class ProfileRepositoryImpl @Inject constructor(
         targetWeightKg = targetWeightKg,
         targetRateKgPerWeek = targetRateKgPerWeek,
         unitPreference = unitPreference.toEnumOrNull<UnitPreference>() ?: UnitPreference.METRIC,
-        hasOnboarded = hasOnboarded
+        hasOnboarded = hasOnboarded,
+        isDynamicTheme = isDynamicTheme
     )
 }
 

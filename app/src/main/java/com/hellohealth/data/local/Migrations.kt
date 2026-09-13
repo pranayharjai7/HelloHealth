@@ -141,3 +141,17 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         )
     }
 }
+
+/**
+ * v6 → v7: add the P1 `isDynamicTheme` flag to `profile`.
+ *
+ * Additive `ALTER TABLE ADD COLUMN` (like MIGRATION_4_5's onboarding columns). SQLite appends the
+ * column, matching [com.hellohealth.data.local.entities.ProfileEntity] where `isDynamicTheme` is
+ * declared last. NOT NULL with DEFAULT 1 (Boolean true) backfills existing rows to the feature's
+ * default-on behavior. Validated against 7.json by MigrationTest.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `isDynamicTheme` INTEGER NOT NULL DEFAULT 1")
+    }
+}

@@ -85,6 +85,10 @@ ALTER TABLE public.profiles
     ADD COLUMN IF NOT EXISTS unit_preference text NOT NULL DEFAULT 'METRIC';
 ALTER TABLE public.profiles
     ADD COLUMN IF NOT EXISTS has_onboarded boolean NOT NULL DEFAULT false;
+-- P1: mood-tint theme toggle. Client (ProfileSyncDto) always pushes is_dynamic_theme; NOT NULL
+-- DEFAULT true backfills existing rows to the feature's default-on behavior.
+ALTER TABLE public.profiles
+    ADD COLUMN IF NOT EXISTS is_dynamic_theme boolean NOT NULL DEFAULT true;
 
 DROP TRIGGER IF EXISTS trg_profiles_set_updated_at ON public.profiles;
 CREATE TRIGGER trg_profiles_set_updated_at

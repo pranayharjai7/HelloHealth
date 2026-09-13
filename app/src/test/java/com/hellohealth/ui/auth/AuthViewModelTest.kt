@@ -71,6 +71,9 @@ class AuthViewModelTest {
             if (throwOnWrite) error("write failed")
             this.profile = profile
         }
+        override suspend fun setDynamicTheme(enabled: Boolean) {
+            profile = (profile ?: UserProfile()).copy(isDynamicTheme = enabled)
+        }
     }
 
     private class FakeGoalsRepository(

@@ -28,7 +28,7 @@ import com.hellohealth.data.local.entities.UserEntity
         SyncLogEntity::class,
         EmotionRecordEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

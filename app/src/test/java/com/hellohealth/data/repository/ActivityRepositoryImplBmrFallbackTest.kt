@@ -40,6 +40,9 @@ class ActivityRepositoryImplBmrFallbackTest {
             return profile
         }
         override suspend fun upsertProfile(profile: UserProfile) { this.profile = profile }
+        override suspend fun setDynamicTheme(enabled: Boolean) {
+            profile = (profile ?: UserProfile()).copy(isDynamicTheme = enabled)
+        }
     }
 
     @Before

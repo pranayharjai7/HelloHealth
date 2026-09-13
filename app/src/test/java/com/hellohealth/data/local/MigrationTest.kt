@@ -134,4 +134,29 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 6 to 7 adds isDynamicTheme defaulting existing rows to on`() {
+        // Create v6 and seed a profile row lacking the new column.
+        helper.createDatabase(dbName, 6).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 1)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_6_7 and validate the resulting schema matches 7.json exactly.
+        val db = helper.runMigrationsAndValidate(dbName, 7, true, MIGRATION_6_7)
+
+        // Existing row survives and the new NOT NULL column backfills to 1 (default-on).
+        db.query("SELECT displayName, isDynamicTheme FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+            assertEquals("existing rows default to dynamic theme on", 1, c.getInt(1))
+        }
+        db.close()
+    }
 }
