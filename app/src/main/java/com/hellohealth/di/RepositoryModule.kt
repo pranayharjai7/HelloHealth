@@ -1,11 +1,13 @@
 package com.hellohealth.di
 
 import com.hellohealth.data.repository.AuthRepositoryImpl
+import com.hellohealth.data.repository.EmotionDetectionRepositoryImpl
 import com.hellohealth.data.repository.EmotionsRepositoryImpl
 import com.hellohealth.data.repository.GoalsRepositoryImpl
 import com.hellohealth.data.repository.ProfileRepositoryImpl
 import com.hellohealth.data.repository.UserRepositoryImpl
 import com.hellohealth.domain.repository.AuthRepository
+import com.hellohealth.domain.repository.EmotionDetectionRepository
 import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.repository.GoalsRepository
 import com.hellohealth.domain.repository.ProfileRepository
@@ -49,4 +51,10 @@ abstract class RepositoryModule {
     abstract fun bindEmotionsRepository(
         emotionsRepositoryImpl: EmotionsRepositoryImpl
     ): EmotionsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindEmotionDetectionRepository(
+        emotionDetectionRepositoryImpl: EmotionDetectionRepositoryImpl
+    ): EmotionDetectionRepository
 }

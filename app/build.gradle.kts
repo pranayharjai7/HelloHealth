@@ -72,6 +72,13 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    // Keep the ML model assets uncompressed. TFLite's FileUtil.loadMappedFile memory-maps the
+    // .tflite graphs straight out of the APK, which REQUIRES them stored uncompressed; the PyTorch
+    // .ptl is copied to filesDir before load but is left uncompressed too to avoid pointless
+    // compress-then-inflate churn on a 15 MB blob.
+    androidResources {
+        noCompress += listOf("tflite", "ptl")
+    }
     // Check in exported Room schemas so migrations have a baseline to validate against.
     // androidTest gets them for instrumented runs. Robolectric-based MigrationTestHelper reads the
     // *debug-merged* app assets (android_merged_assets), so the schemas also go on the debug source
@@ -140,6 +147,24 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:postgrest-kt:$supabaseVersion")
     implementation("io.github.jan-tennert.supabase:gotrue-kt:$supabaseVersion")
     implementation("io.ktor:ktor-client-android:2.3.11")
+
+    // On-device emotion ML (P2): MTCNN face detection (TFLite) + emotion classifier (PyTorch Lite).
+    // Coordinates ported verbatim from the MyEmotions source app.
+    implementation("org.pytorch:pytorch_android_lite:2.1.0")
+    implementation("org.pytorch:pytorch_android_torchvision_lite:2.1.0")
+    implementation("org.tensorflow:tensorflow-lite:2.17.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.5.0")
+
+    // CameraX (P2): front-camera still capture for the face-scan flow.
+    val cameraxVersion = "1.3.1"
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+    // Resolvable ListenableFuture + `await()` so we can await ProcessCameraProvider from a coroutine
+    // (camera-lifecycle 1.3.x has no awaitInstance()). Guava provides the ListenableFuture type that
+    // CameraX exposes in its API but only ships as an empty stub transitively.
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.1.0")
+    implementation("com.google.guava:guava:33.2.1-android")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

@@ -17,7 +17,9 @@ import javax.inject.Inject
 data class EmotionsCardUiState(
     val latest: EmotionRecord? = null,
     val dominantToday: EmotionType? = null,
-    val todayCount: Int = 0
+    val todayCount: Int = 0,
+    /** Today's live logs, newest first — backs the card's "shape of my day" mood-dot strip. */
+    val today: List<EmotionRecord> = emptyList()
 )
 
 /**
@@ -28,7 +30,7 @@ data class EmotionsCardUiState(
  */
 @HiltViewModel
 class EmotionsViewModel @Inject constructor(
-    emotionsRepository: EmotionsRepository
+    private val emotionsRepository: EmotionsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EmotionsCardUiState())
@@ -43,10 +45,27 @@ class EmotionsViewModel @Inject constructor(
         viewModelScope.launch {
             emotionsRepository.observeToday().collectLatest { today ->
                 _uiState.update {
-                    it.copy(dominantToday = dominantOf(today), todayCount = today.size)
+                    it.copy(dominantToday = dominantOf(today), todayCount = today.size, today = today)
                 }
             }
         }
+    }
+
+    /**
+     * Log a mood in one tap from the dashboard log sheet's quick-chips. Routes through the same
+     * source-agnostic [EmotionsRepository.logEmotion] as manual/camera (defaults: manual source,
+     * confidence 1.0), so the theme re-tints and the card/timeline update live.
+     *
+     * Returns the stable id of the written record (or null if there was no signed-in user) so the
+     * caller can bind an "Undo" to exactly THIS record — no shared mutable capture, so concurrent
+     * quick-logs never cross-wire their Undo actions.
+     */
+    suspend fun quickLog(emotion: EmotionType): String? =
+        emotionsRepository.logEmotion(emotion)
+
+    /** Soft-delete a mood log by id — backs the "Undo" action on the quick-log confirmation snackbar. */
+    fun delete(id: String) {
+        viewModelScope.launch { emotionsRepository.delete(id) }
     }
 
     /**

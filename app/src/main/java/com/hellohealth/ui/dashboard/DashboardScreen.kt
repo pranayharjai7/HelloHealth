@@ -45,6 +45,7 @@ import coil.compose.AsyncImage
 import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
+import com.hellohealth.ui.dashboard.components.LogMoodSheet
 import com.hellohealth.ui.dashboard.components.WorkoutCard
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -66,7 +67,10 @@ fun DashboardScreen(
     onNavigateToFoodPreferences: () -> Unit,
     onNavigateToInsights: () -> Unit,
     onNavigateToHelp: () -> Unit,
-    onNavigateToLogEmotion: () -> Unit
+    onNavigateToLogEmotion: () -> Unit,
+    onNavigateToEmotionCapture: () -> Unit,
+    onNavigateToEmotionGallery: () -> Unit,
+    onNavigateToMoodTimeline: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -75,8 +79,10 @@ fun DashboardScreen(
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showCalendarSheet by remember { mutableStateOf(false) }
+    var showLogMoodSheet by remember { mutableStateOf(false) }
     
     val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullToRefreshState()
 
     // Health Connect Permission Launcher.
@@ -323,7 +329,9 @@ fun DashboardScreen(
                     latest = emotionsState.latest,
                     dominantToday = emotionsState.dominantToday,
                     todayCount = emotionsState.todayCount,
-                    onClick = onNavigateToLogEmotion
+                    today = emotionsState.today,
+                    onLog = { showLogMoodSheet = true },
+                    onOpenTimeline = onNavigateToMoodTimeline
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -360,6 +368,42 @@ fun DashboardScreen(
                         "Insights" -> onNavigateToInsights()
                         "Help & Support" -> onNavigateToHelp()
                         "Sign Out" -> showLogoutDialog = true
+                    }
+                }
+            )
+        }
+
+        if (showLogMoodSheet) {
+            LogMoodSheet(
+                onDismiss = { showLogMoodSheet = false },
+                onScan = {
+                    showLogMoodSheet = false
+                    onNavigateToEmotionCapture()
+                },
+                onPickGallery = {
+                    // Route straight to the capture screen's gallery picker — reuses its existing
+                    // decode + analyze ML path (no duplicated glue). Cancelling the picker lands on
+                    // the camera scan screen, a coherent fallback rather than a dead end.
+                    showLogMoodSheet = false
+                    onNavigateToEmotionGallery()
+                },
+                onLogManually = {
+                    showLogMoodSheet = false
+                    onNavigateToLogEmotion()
+                },
+                onQuickLog = { emotion ->
+                    showLogMoodSheet = false
+                    snackbarScope.launch {
+                        // Capture THIS log's id so Undo deletes exactly this record — even if the
+                        // user fires several quick-logs in quick succession.
+                        val loggedId = emotionsViewModel.quickLog(emotion)
+                        val result = snackbarHostState.showSnackbar(
+                            message = "Logged ${emotion.displayLabel()}",
+                            actionLabel = "Undo"
+                        )
+                        if (result == SnackbarResult.ActionPerformed && loggedId != null) {
+                            emotionsViewModel.delete(loggedId)
+                        }
                     }
                 }
             )

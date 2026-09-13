@@ -13,6 +13,7 @@ enum class FeatureTag(val tag: String) {
     HEALTH("HH.Health"),
     FOODPREFS("HH.FoodPrefs"),
     EMOTIONS("HH.Emotions"),
+    EMOTION_ML("HH.EmotionML"),
     DB("HH.Db"),
     AUTH("HH.Auth")
 }
