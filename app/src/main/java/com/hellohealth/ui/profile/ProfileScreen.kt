@@ -178,9 +178,11 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Body & Goals — the onboarding measurements, shown read-only. Values are formatted
-                // in the user's stored unit preference; unset fields read "--" (a partial profile is
-                // valid). Editing happens via the Edit Profile button below.
+                // Body — the onboarding body measurements, shown read-only. Values are formatted in
+                // the user's stored unit preference; unset fields read "--" (a partial profile is
+                // valid). Editing happens via the Edit Profile button below. Goal-direction fields
+                // (activity level, goal type, target weight) intentionally live on the Preferences
+                // screen, which owns them — they are NOT surfaced here.
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -188,7 +190,7 @@ fun ProfileScreen(
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
                         Text(
-                            text = "Body & Goals",
+                            text = "Body",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -201,16 +203,6 @@ fun ProfileScreen(
                         ProfileInfoItem("Height", formatHeight(profile))
                         VitalsDivider()
                         ProfileInfoItem("Weight", formatWeight(profile?.weightKg, profile?.unitPreference))
-                        VitalsDivider()
-                        ProfileInfoItem("Activity Level", profile?.activityLevel?.displayLabel() ?: "--")
-                        VitalsDivider()
-                        ProfileInfoItem("Goal", profile?.goalType?.displayLabel() ?: "--")
-                        profile?.let { p ->
-                            if (p.goalType != null && p.goalType != com.hellohealth.domain.model.GoalType.MAINTAIN) {
-                                VitalsDivider()
-                                ProfileInfoItem("Target Weight", formatWeight(p.targetWeightKg, p.unitPreference))
-                            }
-                        }
                     }
                 }
 

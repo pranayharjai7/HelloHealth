@@ -49,6 +49,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -669,9 +670,29 @@ fun ProfileBottomSheet(
     onDismiss: () -> Unit,
     onOptionClick: (String) -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    // Latch so only the FIRST option tap is honored. The sheet stays composed (and every item
+    // tappable) during the ~300ms slide-down below, so without this a fast tap on a second item
+    // would launch a competing hide() that cancels the first — swallowing the first tap and
+    // navigating to the wrong screen. Once latched, further taps are ignored.
+    var dismissing by remember { mutableStateOf(false) }
+
+    // Animate the sheet closed BEFORE running the option's action. Navigating while the sheet is
+    // still shown (or tearing it down instantly) lets the Dashboard's slide/fade exit transition
+    // play with nothing covering it yet — the user sees the home screen flash for a moment before
+    // the destination arrives. Sliding the sheet down first, then navigating on completion, keeps
+    // the Dashboard covered throughout the hand-off. Only one hide() is ever launched (guarded by
+    // `dismissing`), so invokeOnCompletion can run the action unconditionally.
+    fun dismissThen(action: () -> Unit) {
+        if (dismissing) return
+        dismissing = true
+        scope.launch { sheetState.hide() }.invokeOnCompletion { action() }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
     ) {
@@ -703,19 +724,21 @@ fun ProfileBottomSheet(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
 
-            // Menu Options
+            // Menu Options — each routes through dismissThen so the sheet slides down before the
+            // navigation action fires (see dismissThen above).
             Column(modifier = Modifier.padding(16.dp)) {
-                ProfileMenuItem(Icons.Default.Person, "Profile", onOptionClick)
-                ProfileMenuItem(Icons.Default.Flag, "Daily Goals", onOptionClick)
-                ProfileMenuItem(Icons.Default.Restaurant, "Preferences", onOptionClick)
-                ProfileMenuItem(Icons.Default.Analytics, "Insights", onOptionClick)
-                ProfileMenuItem(Icons.Default.Settings, "Activity Settings", onOptionClick)
-                ProfileMenuItem(Icons.AutoMirrored.Filled.Help, "Help & Support", onOptionClick)
+                val onOption: (String) -> Unit = { option -> dismissThen { onOptionClick(option) } }
+                ProfileMenuItem(Icons.Default.Person, "Profile", onOption)
+                ProfileMenuItem(Icons.Default.Flag, "Daily Goals", onOption)
+                ProfileMenuItem(Icons.Default.Restaurant, "Preferences", onOption)
+                ProfileMenuItem(Icons.Default.Analytics, "Insights", onOption)
+                ProfileMenuItem(Icons.Default.Settings, "Activity Settings", onOption)
+                ProfileMenuItem(Icons.AutoMirrored.Filled.Help, "Help & Support", onOption)
                 Spacer(modifier = Modifier.height(16.dp))
                 ProfileMenuItem(
                     Icons.AutoMirrored.Filled.Logout,
-                    "Sign Out", 
-                    onOptionClick, 
+                    "Sign Out",
+                    onOption,
                     color = MaterialTheme.colorScheme.error
                 )
             }

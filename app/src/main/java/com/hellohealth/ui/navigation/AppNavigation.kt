@@ -170,7 +170,13 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.Profile.route) {
+        composable(
+            route = Screen.Profile.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             ProfileScreen(
                 viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
@@ -179,7 +185,13 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.EditProfile.route) {
+        composable(
+            route = Screen.EditProfile.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             EditProfileScreen(
                 viewModel = authViewModel,
                 onBack = { navController.popBackStack() }
@@ -190,27 +202,57 @@ fun AppNavigation(
             SyncDebugScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Goals.route) {
+        composable(
+            route = Screen.Goals.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             val viewModel: GoalsViewModel = hiltViewModel()
             GoalsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.ActivitySettings.route) {
+        composable(
+            route = Screen.ActivitySettings.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             val viewModel: ActivitySettingsViewModel = hiltViewModel()
             ActivitySettingsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Preferences.route) {
+        composable(
+            route = Screen.Preferences.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             val viewModel: PreferencesViewModel = hiltViewModel()
             PreferencesScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Insights.route) {
+        composable(
+            route = Screen.Insights.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             val viewModel: InsightsViewModel = hiltViewModel()
             InsightsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Help.route) {
+        composable(
+            route = Screen.Help.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
             HelpScreen(onBack = { navController.popBackStack() })
         }
 
