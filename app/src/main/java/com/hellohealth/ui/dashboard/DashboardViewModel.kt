@@ -10,14 +10,18 @@ import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.DailyHealthSnapshot
 import com.hellohealth.domain.model.HealthSummary
 import com.hellohealth.domain.model.User
+import com.hellohealth.domain.model.WorkoutSession
 import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.AuthRepository
 import com.hellohealth.domain.repository.GoalsRepository
+import com.hellohealth.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -42,11 +46,29 @@ data class DashboardUiState(
 class DashboardViewModel @Inject constructor(
     private val activityRepository: ActivityRepository,
     private val authRepository: AuthRepository,
-    private val goalsRepository: GoalsRepository
+    private val goalsRepository: GoalsRepository,
+    private val workoutRepository: WorkoutRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+
+    /**
+     * Manually-logged workouts (Phase A). Kept as an independent stream — NOT folded into the
+     * Health Connect [HealthSummary] — so the separate non-clickable section on the Activity surface
+     * reads it directly and the read-only HC path is untouched. Room is the source of truth; the Flow
+     * is already tombstone-filtered and newest-first.
+     */
+    val workouts: StateFlow<List<WorkoutSession>> =
+        workoutRepository.observeWorkouts()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Soft-deletes a manual workout (tombstone + resync). HC-origin sessions never route here. */
+    fun deleteWorkout(id: String) {
+        viewModelScope.launch {
+            workoutRepository.delete(id)
+        }
+    }
 
     init {
         loadUserInfo()

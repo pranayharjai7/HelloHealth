@@ -82,6 +82,22 @@ class DashboardViewModelTest {
         override suspend fun updateActivityGoals(goals: ActivityGoals) {}
     }
 
+    private class FakeWorkoutRepository : com.hellohealth.domain.repository.WorkoutRepository {
+        override fun observeWorkouts(): Flow<List<com.hellohealth.domain.model.WorkoutSession>> = flowOf(emptyList())
+        override fun observeForDay(localDate: String): Flow<List<com.hellohealth.domain.model.WorkoutSession>> = flowOf(emptyList())
+        override suspend fun saveWorkout(
+            activityType: com.hellohealth.domain.model.WorkoutActivityType,
+            title: String?,
+            startTimeUtcEpochMs: Long,
+            endTimeUtcEpochMs: Long,
+            durationMinutes: Long,
+            calories: Double?,
+            distanceKm: Double?,
+            note: String?
+        ): String? = null
+        override suspend fun delete(id: String) {}
+    }
+
     @Before
     fun setUp() = Dispatchers.setMain(dispatcher)
 
@@ -89,7 +105,7 @@ class DashboardViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun viewModel(repo: FakeActivityRepository) =
-        DashboardViewModel(repo, FakeAuthRepository(), FakeGoalsRepository())
+        DashboardViewModel(repo, FakeAuthRepository(), FakeGoalsRepository(), FakeWorkoutRepository())
 
     @Test
     fun `no permissions leaves dashboard disconnected`() = runTest(dispatcher) {

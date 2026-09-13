@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Height
@@ -43,6 +44,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.pulltorefresh.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.LinearProgressIndicator
@@ -94,6 +97,7 @@ fun WorkoutDetailsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val summary = uiState.healthSummary
     val selectedDate = uiState.selectedDate
+    val workouts by viewModel.workouts.collectAsState()
 
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -369,6 +373,18 @@ fun WorkoutDetailsScreen(
                     }
                 }
 
+                if (workouts.isNotEmpty()) {
+                    item {
+                        SectionHeader("My Logged Workouts")
+                    }
+                    itemsIndexed(workouts, key = { _, w -> w.id }) { _, workout ->
+                        ManualWorkoutItem(
+                            workout = workout,
+                            onDelete = { viewModel.deleteWorkout(workout.id) }
+                        )
+                    }
+                }
+
                 item { Spacer(modifier = Modifier.height(48.dp)) }
             }
             
@@ -393,6 +409,110 @@ private fun SectionHeader(title: String) {
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(bottom = 8.dp)
     )
+}
+
+/**
+ * A single manually-logged workout row. Deliberately NON-clickable (Phase A decision): manual rows
+ * have no HC-backed drill-down, so routing them through ActivityDetail would always hit the error
+ * screen. The only affordance is a delete button, gated behind a confirm dialog since a delete
+ * writes a tombstone.
+ */
+@Composable
+private fun ManualWorkoutItem(
+    workout: com.hellohealth.domain.model.WorkoutSession,
+    onDelete: () -> Unit
+) {
+    var showConfirm by remember { mutableStateOf(false) }
+    val zone = remember { ZoneId.systemDefault() }
+    val timeLabel = remember(workout.startTimeUtcEpochMs) {
+        Instant.ofEpochMilli(workout.startTimeUtcEpochMs)
+            .atZone(zone)
+            .format(DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
+    }
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(workout.activityType.emoji(), fontSize = 20.sp)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = workout.title?.takeIf { it.isNotBlank() } ?: workout.activityType.displayLabel(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                val details = buildList {
+                    add("${workout.durationMinutes} min")
+                    workout.calories?.let { add("${it.toInt()} kcal") }
+                    workout.distanceKm?.let { add(String.format("%.2f km", it)) }
+                }.joinToString(" · ")
+                Text(
+                    text = details,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+                workout.note?.takeIf { it.isNotBlank() }?.let { note ->
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+            IconButton(onClick = { showConfirm = true }) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "Delete workout",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+        }
+    }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("Delete workout?") },
+            text = { Text("This removes the logged workout from all your devices.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showConfirm = false
+                    onDelete()
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
