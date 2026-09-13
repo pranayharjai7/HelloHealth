@@ -189,3 +189,119 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         )
     }
 }
+
+/**
+ * v8 → v9: replace the flat Phase-A `workout_sessions` vertical with the TrackMe planning hierarchy.
+ *
+ * DROPs `workout_sessions` (the flat vertical is removed entirely — nothing shipped on master) and
+ * CREATEs the three synced planning tables (`workout_plans` → `workout_days` → `planned_exercises`)
+ * plus the read-only global `exercises` catalog. The three user tables carry the four Syncable
+ * sync-meta columns LAST; `exercises` is global/read-only and carries NONE (no `userId`, no sync
+ * cols, no Supabase table). Column order and affinities must match Room's generated v9 schema exactly
+ * (validated against 9.json by MigrationTest): `Long`/`Int`/`Boolean` → INTEGER, `Float?`/`Double?` →
+ * REAL nullable, `Int?` → INTEGER nullable, nullable → no NOT NULL.
+ *
+ * A migrated v8 user's `profile`/`emotion_records`/etc. are untouched. Every `CREATE INDEX` matches an
+ * `@Index` on the corresponding entity, on sync/query-critical columns only.
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS `workout_sessions`")
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `workout_plans` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`isActive` INTEGER NOT NULL, " +
+                "`planType` TEXT NOT NULL, " +
+                "`createdAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_workout_plans_userId` ON `workout_plans` (`userId`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_workout_plans_isSynced` ON `workout_plans` (`isSynced`)"
+        )
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `workout_days` (" +
+                "`id` TEXT NOT NULL, " +
+                "`planId` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`slotKey` TEXT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_workout_days_planId_deletedAt` " +
+                "ON `workout_days` (`planId`, `deletedAtEpochMs`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_workout_days_userId` ON `workout_days` (`userId`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_workout_days_isSynced` ON `workout_days` (`isSynced`)"
+        )
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `planned_exercises` (" +
+                "`id` TEXT NOT NULL, " +
+                "`dayId` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`exerciseId` TEXT NOT NULL, " +
+                "`orderIndex` INTEGER NOT NULL, " +
+                "`targetSets` INTEGER NOT NULL, " +
+                "`targetReps` INTEGER, " +
+                "`targetWeightKg` REAL, " +
+                "`targetDurationSeconds` INTEGER, " +
+                "`targetDistanceKm` REAL, " +
+                "`targetSpeedKmh` REAL, " +
+                "`targetIncline` REAL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_planned_exercises_dayId_deletedAt_order` " +
+                "ON `planned_exercises` (`dayId`, `deletedAtEpochMs`, `orderIndex`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_planned_exercises_userId` ON `planned_exercises` (`userId`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_planned_exercises_isSynced` ON `planned_exercises` (`isSynced`)"
+        )
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `exercises` (" +
+                "`id` TEXT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`category` TEXT NOT NULL, " +
+                "`primaryMuscles` TEXT NOT NULL, " +
+                "`secondaryMuscles` TEXT NOT NULL, " +
+                "`equipment` TEXT NOT NULL, " +
+                "`instructions` TEXT NOT NULL, " +
+                "`gifUrl` TEXT NOT NULL, " +
+                "`youtubeQuery` TEXT NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_exercises_name` ON `exercises` (`name`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_exercises_category` ON `exercises` (`category`)"
+        )
+    }
+}
