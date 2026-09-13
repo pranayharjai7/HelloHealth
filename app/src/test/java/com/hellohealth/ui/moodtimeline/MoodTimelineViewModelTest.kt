@@ -106,10 +106,46 @@ class MoodTimelineViewModelTest {
     }
 
     @Test
-    fun `delete forwards the id to the repository`() = runTest {
-        val fake = FakeEmotions(emptyList())
+    fun `stage then commit tombstones the record and hides the staged row immediately`() = runTest {
+        val d1 = LocalDate.of(2026, 3, 10)
+        val window = listOf(
+            record("a", EmotionType.HAPPINESS, d1, hour = 9),
+            record("b", EmotionType.CALM, d1, hour = 10)
+        )
+        val fake = FakeEmotions(window)
         val vm = MoodTimelineViewModel(fake, EmotionInsightsUseCase())
-        vm.delete("rec-7")
-        assertEquals(listOf("rec-7"), fake.deleted)
+        vm.uiState.test {
+            assertEquals(2, awaitItem().daySections[0].records.size)
+            // Staging hides the row immediately, before any Room write.
+            vm.stageDelete("b")
+            assertEquals(listOf("a"), awaitItem().daySections[0].records.map { it.id })
+            assertEquals(emptyList<String>(), fake.deleted)
+            // Committing performs the tombstone.
+            vm.commitDelete("b")
+            assertEquals(listOf("b"), fake.deleted)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `stage then undo restores the row and never writes`() = runTest {
+        val d1 = LocalDate.of(2026, 3, 10)
+        val window = listOf(
+            record("a", EmotionType.HAPPINESS, d1, hour = 9),
+            record("b", EmotionType.CALM, d1, hour = 10)
+        )
+        val fake = FakeEmotions(window)
+        val vm = MoodTimelineViewModel(fake, EmotionInsightsUseCase())
+        vm.uiState.test {
+            assertEquals(2, awaitItem().daySections[0].records.size)
+            vm.stageDelete("b")
+            assertEquals(listOf("a"), awaitItem().daySections[0].records.map { it.id })
+            vm.undoDelete("b")
+            assertEquals(listOf("b", "a"), awaitItem().daySections[0].records.map { it.id })
+            // A later commit for an undone id is a no-op.
+            vm.commitDelete("b")
+            assertEquals(emptyList<String>(), fake.deleted)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

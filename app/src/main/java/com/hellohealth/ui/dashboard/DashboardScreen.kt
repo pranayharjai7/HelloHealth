@@ -82,6 +82,7 @@ fun DashboardScreen(
     var showLogMoodSheet by remember { mutableStateOf(false) }
     
     val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullToRefreshState()
 
     // Health Connect Permission Launcher.
@@ -393,6 +394,15 @@ fun DashboardScreen(
                 onQuickLog = { emotion ->
                     showLogMoodSheet = false
                     emotionsViewModel.quickLog(emotion)
+                    snackbarScope.launch {
+                        val result = snackbarHostState.showSnackbar(
+                            message = "Logged ${emotion.displayLabel()}",
+                            actionLabel = "Undo"
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            emotionsViewModel.undoLastQuickLog()
+                        }
+                    }
                 }
             )
         }

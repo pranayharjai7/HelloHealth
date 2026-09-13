@@ -34,6 +34,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -41,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.usecase.EmotionInsights
 import com.hellohealth.ui.theme.moodAccentFor
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -70,8 +75,9 @@ private val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MM
  * full [com.hellohealth.ui.emotioninsights.EmotionInsightsScreen] breakdown). Each row shows the mood,
  * time, optional note, and a scan/manual source badge, with an overflow-menu Delete.
  *
- * Delete is a plain overflow action here — NOT a SwipeToDismissBox (the pinned Compose BOM predates
- * its stable API). The mandatory Undo snackbar is added in Step 7.
+ * Delete is a plain overflow action — NOT a SwipeToDismissBox (the pinned Compose BOM predates its
+ * stable API). Each delete is staged (the row hides at once) and shown with a mandatory Undo
+ * snackbar; the tombstone is only committed when that window closes without an Undo.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,6 +89,23 @@ fun MoodTimelineScreen(
     val uiState by viewModel.uiState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    // Stage the delete (row hides now), show an Undo snackbar, then commit or revert on its result.
+    fun deleteWithUndo(id: String) {
+        viewModel.stageDelete(id)
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Mood deleted",
+                actionLabel = "Undo"
+            )
+            when (result) {
+                SnackbarResult.ActionPerformed -> viewModel.undoDelete(id)
+                SnackbarResult.Dismissed -> viewModel.commitDelete(id)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -98,6 +121,7 @@ fun MoodTimelineScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent
     ) { padding ->
         Box(
@@ -139,7 +163,7 @@ fun MoodTimelineScreen(
                             MoodTimelineRow(
                                 record = record,
                                 primaryColor = primaryColor,
-                                onDelete = { viewModel.delete(record.id) }
+                                onDelete = { deleteWithUndo(record.id) }
                             )
                         }
                     }

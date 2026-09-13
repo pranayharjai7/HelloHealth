@@ -117,4 +117,35 @@ class EmotionsViewModelTest {
         vm.delete("rec-42")
         assertEquals(listOf("rec-42"), fake.deleted)
     }
+
+    /** Fake whose latest flow is drivable, so a quick-log's captured id can be exercised. */
+    private class DrivableEmotions : EmotionsRepository {
+        val latest = kotlinx.coroutines.flow.MutableStateFlow<EmotionRecord?>(null)
+        val deleted = mutableListOf<String>()
+        override fun observeToday(): Flow<List<EmotionRecord>> = flowOf(emptyList())
+        override fun observeLatest(): Flow<EmotionRecord?> = latest
+        override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(emptyList())
+        override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String) {
+            // Simulate the repo surfacing the new row as the newest.
+            latest.value = EmotionRecord("logged-id", "u1", 100L, 0, emotion)
+        }
+        override suspend fun delete(id: String) { deleted += id }
+    }
+
+    @Test
+    fun `undoLastQuickLog deletes the record captured after a quick-log`() = runTest {
+        val fake = DrivableEmotions()
+        val vm = EmotionsViewModel(fake)
+        vm.quickLog(EmotionType.HAPPINESS)
+        vm.undoLastQuickLog()
+        assertEquals(listOf("logged-id"), fake.deleted)
+    }
+
+    @Test
+    fun `undoLastQuickLog is a no-op with nothing logged`() = runTest {
+        val fake = DrivableEmotions()
+        val vm = EmotionsViewModel(fake)
+        vm.undoLastQuickLog()
+        assertEquals(emptyList<String>(), fake.deleted)
+    }
 }

@@ -36,9 +36,21 @@ class EmotionsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(EmotionsCardUiState())
     val uiState: StateFlow<EmotionsCardUiState> = _uiState.asStateFlow()
 
+    /**
+     * True from a [quickLog] call until the resulting record surfaces as the newest. While set, the
+     * next distinct [EmotionsRepository.observeLatest] emission is captured as [lastQuickLoggedId] so
+     * the dashboard's "Logged … · Undo" snackbar can delete exactly that record.
+     */
+    private var awaitingQuickLogId = false
+    private var lastQuickLoggedId: String? = null
+
     init {
         viewModelScope.launch {
             emotionsRepository.observeLatest().collectLatest { latest ->
+                if (awaitingQuickLogId && latest != null) {
+                    lastQuickLoggedId = latest.id
+                    awaitingQuickLogId = false
+                }
                 _uiState.update { it.copy(latest = latest) }
             }
         }
@@ -54,13 +66,22 @@ class EmotionsViewModel @Inject constructor(
     /**
      * Log a mood in one tap from the dashboard log sheet's quick-chips. Routes through the same
      * source-agnostic [EmotionsRepository.logEmotion] as manual/camera (defaults: manual source,
-     * confidence 1.0), so the theme re-tints and the card/timeline update live.
+     * confidence 1.0), so the theme re-tints and the card/timeline update live. Arms the
+     * latest-capture so [undoLastQuickLog] can revert this exact write.
      */
     fun quickLog(emotion: EmotionType) {
+        awaitingQuickLogId = true
         viewModelScope.launch { emotionsRepository.logEmotion(emotion) }
     }
 
-    /** Soft-delete a mood log — backs the "Undo" action on the quick-log confirmation snackbar. */
+    /** Delete the most recent quick-logged mood — backs the quick-log confirmation snackbar's Undo. */
+    fun undoLastQuickLog() {
+        val id = lastQuickLoggedId ?: return
+        lastQuickLoggedId = null
+        viewModelScope.launch { emotionsRepository.delete(id) }
+    }
+
+    /** Soft-delete a mood log by id. */
     fun delete(id: String) {
         viewModelScope.launch { emotionsRepository.delete(id) }
     }

@@ -55,26 +55,63 @@ class MoodTimelineViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MoodTimelineUiState())
     val uiState: StateFlow<MoodTimelineUiState> = _uiState.asStateFlow()
 
+    /** The latest raw window emission, kept so state can be re-derived when a pending delete changes. */
+    private var latestRecords: List<EmotionRecord> = emptyList()
+
+    /**
+     * Ids staged for deletion but not yet committed — hidden from the UI immediately so the row
+     * animates out, but only tombstoned in Room once the Undo window closes ([commitDelete]). Kept
+     * separate from the repository so an Undo is a pure local revert with no orphaned tombstone.
+     */
+    private val pendingDeletes = mutableSetOf<String>()
+
     init {
         val today = LocalDate.now()
         val startEpochDay = today.minusDays((MoodTimelineUiState.WINDOW_DAYS - 1).toLong()).toEpochDay()
         val endEpochDay = today.toEpochDay()
         viewModelScope.launch {
             emotionsRepository.observeWindow(startEpochDay, endEpochDay).collectLatest { records ->
-                _uiState.update {
-                    it.copy(
-                        daySections = groupIntoDays(records),
-                        insights = emotionInsights(records),
-                        isLoading = false
-                    )
-                }
+                latestRecords = records
+                emitState()
             }
         }
     }
 
-    /** Soft-delete a mood; the live [observeWindow] feed then re-emits without it. */
-    fun delete(id: String) {
-        viewModelScope.launch { emotionsRepository.delete(id) }
+    /**
+     * Stage a delete: hide the record from the UI now, but defer the tombstone. The screen shows an
+     * Undo snackbar and then calls exactly one of [undoDelete] or [commitDelete].
+     */
+    fun stageDelete(id: String) {
+        pendingDeletes += id
+        emitState()
+    }
+
+    /** Undo a staged delete — the record reappears; nothing was ever written to Room. */
+    fun undoDelete(id: String) {
+        if (pendingDeletes.remove(id)) emitState()
+    }
+
+    /** Commit a staged delete — actually tombstone the record. No-op if it was already undone. */
+    fun commitDelete(id: String) {
+        if (id !in pendingDeletes) return
+        viewModelScope.launch {
+            emotionsRepository.delete(id)
+            // The live feed will re-emit without the row; drop it from pending so a late emission
+            // (before that re-emit lands) still filters it out.
+            pendingDeletes.remove(id)
+        }
+    }
+
+    /** Re-derive UI state from the latest records minus any pending (staged-but-not-committed) deletes. */
+    private fun emitState() {
+        val visible = latestRecords.filter { it.id !in pendingDeletes }
+        _uiState.update {
+            it.copy(
+                daySections = groupIntoDays(visible),
+                insights = emotionInsights(visible),
+                isLoading = false
+            )
+        }
     }
 
     /**
