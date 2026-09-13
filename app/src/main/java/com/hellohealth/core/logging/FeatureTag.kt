@@ -12,6 +12,7 @@ enum class FeatureTag(val tag: String) {
     ACTIVITY("HH.Activity"),
     HEALTH("HH.Health"),
     FOODPREFS("HH.FoodPrefs"),
+    EMOTIONS("HH.Emotions"),
     DB("HH.Db"),
     AUTH("HH.Auth")
 }

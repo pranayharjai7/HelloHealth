@@ -30,5 +30,6 @@ data class ProfileEntity(
     val targetWeightKg: Double? = null,
     val targetRateKgPerWeek: Double? = null,
     val unitPreference: String = "METRIC",
-    val hasOnboarded: Boolean = false
+    val hasOnboarded: Boolean = false,
+    val isDynamicTheme: Boolean = true
 ) : Syncable

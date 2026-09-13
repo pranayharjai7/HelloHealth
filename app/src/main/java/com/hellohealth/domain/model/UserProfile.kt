@@ -10,6 +10,10 @@ import java.time.Period
  *
  * [hasOnboarded] gates the first-run wizard: a null profile OR `hasOnboarded == false` means the
  * user still needs onboarding.
+ *
+ * [isDynamicTheme] (P1) toggles the mood-tint theme: when true (default), the app's gradient
+ * re-tints toward the user's latest logged emotion; when false it stays the base green. Stored on
+ * the profile so the preference syncs across devices via the P0 spine, exactly like [hasOnboarded].
  */
 data class UserProfile(
     val displayName: String? = null,
@@ -22,7 +26,8 @@ data class UserProfile(
     val targetWeightKg: Double? = null,
     val targetRateKgPerWeek: Double? = null,
     val unitPreference: UnitPreference = UnitPreference.METRIC,
-    val hasOnboarded: Boolean = false
+    val hasOnboarded: Boolean = false,
+    val isDynamicTheme: Boolean = true
 ) {
     /**
      * Whole years between [birthDateEpochDay] and [today], or null if birth date is unset.

@@ -19,12 +19,17 @@ import com.hellohealth.ui.auth.AuthViewModel
 import com.hellohealth.ui.auth.LoginScreen
 import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
+import com.hellohealth.ui.dashboard.EmotionsViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
+import com.hellohealth.ui.emotioninsights.EmotionInsightsScreen
+import com.hellohealth.ui.emotioninsights.EmotionInsightsViewModel
 import com.hellohealth.ui.debug.SyncDebugScreen
 import com.hellohealth.ui.preferences.PreferencesScreen
 import com.hellohealth.ui.preferences.PreferencesViewModel
 import com.hellohealth.ui.goals.GoalsScreen
 import com.hellohealth.ui.goals.GoalsViewModel
+import com.hellohealth.ui.logemotion.LogEmotionScreen
+import com.hellohealth.ui.logemotion.LogEmotionViewModel
 import com.hellohealth.ui.help.HelpScreen
 import com.hellohealth.ui.insights.InsightsScreen
 import com.hellohealth.ui.insights.InsightsViewModel
@@ -93,9 +98,11 @@ fun AppNavigation(
             popEnterTransition = { fadeIn(tween(400)) + slideInHorizontally(tween(400)) { -it } }
         ) {
             val dashboardViewModel: DashboardViewModel = hiltViewModel()
+            val emotionsViewModel: EmotionsViewModel = hiltViewModel()
             DashboardScreen(
                 authViewModel = authViewModel,
                 dashboardViewModel = dashboardViewModel,
+                emotionsViewModel = emotionsViewModel,
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
@@ -109,7 +116,8 @@ fun AppNavigation(
                 onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },
                 onNavigateToFoodPreferences = { navController.navigate(Screen.Preferences.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
-                onNavigateToHelp = { navController.navigate(Screen.Help.route) }
+                onNavigateToHelp = { navController.navigate(Screen.Help.route) },
+                onNavigateToLogEmotion = { navController.navigate(Screen.LogEmotion.route) }
             )
         }
         
@@ -214,6 +222,32 @@ fun AppNavigation(
         }
 
         composable(
+            route = Screen.LogEmotion.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: LogEmotionViewModel = hiltViewModel()
+            LogEmotionScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onViewInsights = { navController.navigate(Screen.EmotionInsights.route) }
+            )
+        }
+
+        composable(
+            route = Screen.EmotionInsights.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: EmotionInsightsViewModel = hiltViewModel()
+            EmotionInsightsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(
             route = Screen.ActivitySettings.route,
             enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
             exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
@@ -290,6 +324,8 @@ sealed class Screen(val route: String) {
     object EditProfile : Screen("edit_profile")
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
+    object LogEmotion : Screen("log_emotion")
+    object EmotionInsights : Screen("emotion_insights")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")

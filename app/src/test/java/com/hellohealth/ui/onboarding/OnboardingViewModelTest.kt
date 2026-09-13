@@ -70,6 +70,10 @@ class OnboardingViewModelTest {
             if (silentNoOp) return
             saved = profile
         }
+        override suspend fun setDynamicTheme(enabled: Boolean) {
+            upsertProfile((saved ?: UserProfile()).copy(isDynamicTheme = enabled))
+        }
+        override fun observeDynamicTheme() = flowOf(saved?.isDynamicTheme ?: true)
     }
 
     private class FakeGoalsRepository : GoalsRepository {

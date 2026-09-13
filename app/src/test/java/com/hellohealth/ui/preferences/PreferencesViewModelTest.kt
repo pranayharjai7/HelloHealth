@@ -11,6 +11,7 @@ import com.hellohealth.domain.repository.UserRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -69,6 +70,10 @@ class PreferencesViewModelTest {
             if (throwOnWrite) error("write failed")
             this.profile = profile
         }
+        override suspend fun setDynamicTheme(enabled: Boolean) {
+            profile = (profile ?: UserProfile()).copy(isDynamicTheme = enabled)
+        }
+        override fun observeDynamicTheme() = flowOf(profile?.isDynamicTheme ?: true)
     }
 
     private class FakeGoalsRepository(

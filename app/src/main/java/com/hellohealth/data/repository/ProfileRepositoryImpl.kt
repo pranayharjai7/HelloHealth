@@ -12,6 +12,12 @@ import com.hellohealth.domain.model.UnitPreference
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.sync.SyncScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -59,12 +65,35 @@ class ProfileRepositoryImpl @Inject constructor(
                 targetWeightKg = profile.targetWeightKg,
                 targetRateKgPerWeek = profile.targetRateKgPerWeek,
                 unitPreference = profile.unitPreference.name,
-                hasOnboarded = profile.hasOnboarded
+                hasOnboarded = profile.hasOnboarded,
+                isDynamicTheme = profile.isDynamicTheme
             )
         )
         AppLogger.d(FeatureTag.PROFILE, "profile written locally; requesting sync")
         syncScheduler.requestSync()
     }
+
+    override suspend fun setDynamicTheme(enabled: Boolean) {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            AppLogger.w(FeatureTag.PROFILE, "setDynamicTheme with no signed-in user; dropping write")
+            return
+        }
+        // Single-owner load-then-copy: read the current row and re-persist it with only the theme
+        // flag changed, so no other profile field is clobbered. A missing row starts from defaults.
+        val current = profileDao.get(userId)?.toDomain() ?: UserProfile()
+        upsertProfile(current.copy(isDynamicTheme = enabled))
+    }
+
+    override fun observeDynamicTheme(): Flow<Boolean> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(true)
+            return@flow
+        }
+        // No row yet -> default-on; a present row reports its stored flag.
+        emitAll(profileDao.observe(userId).map { it?.isDynamicTheme ?: true })
+    }.flowOn(Dispatchers.IO)
 
     private fun ProfileEntity.toDomain() = UserProfile(
         displayName = displayName,
@@ -77,7 +106,8 @@ class ProfileRepositoryImpl @Inject constructor(
         targetWeightKg = targetWeightKg,
         targetRateKgPerWeek = targetRateKgPerWeek,
         unitPreference = unitPreference.toEnumOrNull<UnitPreference>() ?: UnitPreference.METRIC,
-        hasOnboarded = hasOnboarded
+        hasOnboarded = hasOnboarded,
+        isDynamicTheme = isDynamicTheme
     )
 }
 

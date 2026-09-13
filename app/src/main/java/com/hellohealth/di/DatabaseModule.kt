@@ -5,6 +5,9 @@ import androidx.room.Room
 import com.hellohealth.data.local.AppDatabase
 import com.hellohealth.data.local.MIGRATION_3_4
 import com.hellohealth.data.local.MIGRATION_4_5
+import com.hellohealth.data.local.MIGRATION_5_6
+import com.hellohealth.data.local.MIGRATION_6_7
+import com.hellohealth.data.local.dao.EmotionRecordsDao
 import com.hellohealth.data.local.dao.FoodPrefsDao
 import com.hellohealth.data.local.dao.GoalsDao
 import com.hellohealth.data.local.dao.ProfileDao
@@ -31,7 +34,7 @@ object DatabaseModule {
             "hello_health.db"
         )
             // Real migrations — no destructive fallback. Never silently wipe user data.
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
     }
 
@@ -52,4 +55,7 @@ object DatabaseModule {
 
     @Provides
     fun provideSyncLogDao(database: AppDatabase): SyncLogDao = database.syncLogDao()
+
+    @Provides
+    fun provideEmotionRecordsDao(database: AppDatabase): EmotionRecordsDao = database.emotionRecordsDao()
 }
