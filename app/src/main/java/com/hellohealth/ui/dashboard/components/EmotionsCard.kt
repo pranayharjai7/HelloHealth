@@ -1,13 +1,8 @@
 package com.hellohealth.ui.dashboard.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,10 +51,9 @@ private const val DOT_TINT_FRACTION = 0.35f
 
 /**
  * Dashboard mood card. Stateless (plain data + lambdas), mirroring [WorkoutCard]. The whole card is
- * one tap target that opens the log sheet — no separate button or scattered face-icon. To make that
- * affordance obvious without cluttering the card with text, it gently "breathes" (a slow scale pulse)
- * at rest and springs down on press. Below the summary, a "shape of my day" strip of mood-dots
- * previews today's logs (newest on the left); "View timeline ›" opens the full browsable history.
+ * one tap target that opens the log sheet — no separate button or scattered face-icon. It springs
+ * down on press to confirm the tap is registered. Below the summary, a "shape of my day" strip of
+ * mood-dots previews today's logs (newest on the left); "View timeline ›" opens the full history.
  */
 @Composable
 fun EmotionsCard(
@@ -72,18 +66,6 @@ fun EmotionsCard(
 ) {
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
-    // Rest-state "breathing": a slow, subtle scale pulse that signals the card is interactive
-    // without any label. Amplitude is intentionally tiny so it reads as a hint, not a distraction.
-    val breathe = rememberInfiniteTransition(label = "cardBreathe")
-    val breatheScale by breathe.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.985f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2500),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "cardBreatheScale"
-    )
     // Press feedback: spring the card down on touch and release. Compose's ripple (from .clickable)
     // still plays on top.
     val interactionSource = remember { MutableInteractionSource() }
@@ -99,9 +81,8 @@ fun EmotionsCard(
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .graphicsLayer {
-                val s = breatheScale * pressScale
-                scaleX = s
-                scaleY = s
+                scaleX = pressScale
+                scaleY = pressScale
             }
             .clip(RoundedCornerShape(32.dp))
             .clickable(
