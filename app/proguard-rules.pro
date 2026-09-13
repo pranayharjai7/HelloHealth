@@ -64,3 +64,16 @@
 # --- Our entities/DTOs/domain models (defensive; queried reflectively) ------
 -keep class com.hellohealth.data.local.entities.** { *; }
 -keep class com.hellohealth.domain.model.** { *; }
+
+# --- On-device ML: PyTorch Lite + TensorFlow Lite (P2) ----------------------
+# Both libs call into native code via JNI and resolve classes/methods reflectively,
+# so R8 must not rename or strip them. Without these, a release (minified) build
+# loads the classes fine in dev but throws at model-load/inference time.
+-keep class org.pytorch.** { *; }
+-keep class org.tensorflow.** { *; }
+-keep class org.tensorflow.lite.** { *; }
+-dontwarn org.pytorch.**
+-dontwarn org.tensorflow.**
+# com.facebook.jni backs PyTorch's native bridge; keep + silence it.
+-keep class com.facebook.jni.** { *; }
+-dontwarn com.facebook.**
