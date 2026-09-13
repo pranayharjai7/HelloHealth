@@ -120,7 +120,9 @@ fun AppNavigation(
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToHelp = { navController.navigate(Screen.Help.route) },
                 onNavigateToLogEmotion = { navController.navigate(Screen.LogEmotion.route) },
-                onNavigateToEmotionCapture = { navController.navigate(Screen.EmotionCapture.route) }
+                onNavigateToEmotionCapture = { navController.navigate(Screen.EmotionCapture.route) },
+                // Wired to the MoodTimeline route in Step 6 once the screen exists.
+                onNavigateToMoodTimeline = { }
             )
         }
         

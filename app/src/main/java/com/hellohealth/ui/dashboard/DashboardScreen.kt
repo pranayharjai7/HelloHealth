@@ -45,6 +45,7 @@ import coil.compose.AsyncImage
 import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
+import com.hellohealth.ui.dashboard.components.LogMoodSheet
 import com.hellohealth.ui.dashboard.components.WorkoutCard
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -67,7 +68,8 @@ fun DashboardScreen(
     onNavigateToInsights: () -> Unit,
     onNavigateToHelp: () -> Unit,
     onNavigateToLogEmotion: () -> Unit,
-    onNavigateToEmotionCapture: () -> Unit
+    onNavigateToEmotionCapture: () -> Unit,
+    onNavigateToMoodTimeline: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -76,6 +78,7 @@ fun DashboardScreen(
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showCalendarSheet by remember { mutableStateOf(false) }
+    var showLogMoodSheet by remember { mutableStateOf(false) }
     
     val snackbarHostState = remember { SnackbarHostState() }
     val pullRefreshState = rememberPullToRefreshState()
@@ -324,8 +327,9 @@ fun DashboardScreen(
                     latest = emotionsState.latest,
                     dominantToday = emotionsState.dominantToday,
                     todayCount = emotionsState.todayCount,
-                    onClick = onNavigateToLogEmotion,
-                    onScan = onNavigateToEmotionCapture
+                    today = emotionsState.today,
+                    onLog = { showLogMoodSheet = true },
+                    onOpenTimeline = onNavigateToMoodTimeline
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -363,6 +367,30 @@ fun DashboardScreen(
                         "Help & Support" -> onNavigateToHelp()
                         "Sign Out" -> showLogoutDialog = true
                     }
+                }
+            )
+        }
+
+        if (showLogMoodSheet) {
+            LogMoodSheet(
+                onDismiss = { showLogMoodSheet = false },
+                onScan = {
+                    showLogMoodSheet = false
+                    onNavigateToEmotionCapture()
+                },
+                onPickGallery = {
+                    // Gallery lives on the capture screen (no permission needed); Step 6 will route
+                    // the picked Uri straight into its analyze path. For now, land on that screen.
+                    showLogMoodSheet = false
+                    onNavigateToEmotionCapture()
+                },
+                onLogManually = {
+                    showLogMoodSheet = false
+                    onNavigateToLogEmotion()
+                },
+                onQuickLog = { emotion ->
+                    showLogMoodSheet = false
+                    emotionsViewModel.quickLog(emotion)
                 }
             )
         }
