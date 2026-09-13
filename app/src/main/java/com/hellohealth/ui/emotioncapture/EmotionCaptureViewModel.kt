@@ -45,8 +45,12 @@ class EmotionCaptureViewModel @Inject constructor(
     val uiState: StateFlow<EmotionCaptureUiState> = _uiState.asStateFlow()
 
     fun analyze(bitmap: Bitmap) {
-        // Guard against double-taps while an analysis is already running.
-        if (_uiState.value is EmotionCaptureUiState.Analyzing) return
+        // Guard against double-taps while an analysis is already running. The just-passed bitmap is
+        // ours to own now, so recycle it rather than leaking a freshly captured/decoded full-res frame.
+        if (_uiState.value is EmotionCaptureUiState.Analyzing) {
+            bitmap.recycle()
+            return
+        }
         _uiState.value = EmotionCaptureUiState.Analyzing
         viewModelScope.launch {
             val next = try {
@@ -62,6 +66,10 @@ class EmotionCaptureViewModel @Inject constructor(
                 // capture crash the screen — fall back to a clean error.
                 AppLogger.e(FeatureTag.EMOTION_ML, "Capture analysis failed unexpectedly", t)
                 EmotionCaptureUiState.Error("Something went wrong. Try again.")
+            } finally {
+                // detect() reads the bitmap's pixels synchronously before returning, so it's safe to
+                // recycle the multi-megapixel source now instead of leaving it for GC each scan.
+                bitmap.recycle()
             }
             _uiState.value = next
         }

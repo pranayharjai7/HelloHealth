@@ -24,8 +24,10 @@ import kotlin.math.max
  *
  * The two ML members are created lazily and only ONCE — model construction is expensive and can
  * fail (missing/corrupt assets). [modelsOrNull] centralizes that load-and-cache so both [detect]
- * and [isAvailable] share the same outcome: a failed load flips the pipeline to `ModelUnavailable`
- * for the rest of the process, and the capture UI falls back to manual logging.
+ * and [isAvailable] share the same outcome. A DETERMINISTIC load failure (missing/corrupt asset)
+ * poisons the cache (`loadFailed`) so we don't re-attempt a doomed load; a TRANSIENT failure (OOM
+ * under memory pressure) does NOT poison it, so detection can recover once memory frees up. Either
+ * way the capture UI falls back to manual logging while the model is unavailable.
  */
 @Singleton
 class EmotionDetectionRepositoryImpl @Inject constructor(
@@ -51,11 +53,19 @@ class EmotionDetectionRepositoryImpl @Inject constructor(
                 val loaded = Models(MTCNN(context), EmotionPyTorchClassifier(context))
                 models = loaded
                 loaded
-            } catch (t: Throwable) {
-                // OutOfMemory, missing asset, unsatisfied native link, etc. — all fatal-to-ML but
-                // recoverable for the app (manual logging still works).
-                AppLogger.e(FeatureTag.EMOTION_ML, "ML model load failed; detection unavailable", t)
+            } catch (e: Exception) {
+                // Deterministic load failures — missing/corrupt asset, unsatisfied native link
+                // (UnsatisfiedLinkError is an Error, handled below; RuntimeExceptions from a bad
+                // asset land here). These won't succeed on retry, so poison the cache to avoid
+                // re-attempting a doomed load on every call. Manual logging still works.
+                AppLogger.e(FeatureTag.EMOTION_ML, "ML model load failed; detection unavailable", e)
                 loadFailed = true
+                null
+            } catch (t: Throwable) {
+                // Transient Error (notably OutOfMemoryError under memory pressure while loading the
+                // ~16 MB .ptl + tflite graphs). This IS recoverable once memory frees up, so DON'T
+                // set the sticky loadFailed flag — return null and let a later call retry.
+                AppLogger.e(FeatureTag.EMOTION_ML, "ML model load hit a transient error; will retry", t)
                 null
             }
         }

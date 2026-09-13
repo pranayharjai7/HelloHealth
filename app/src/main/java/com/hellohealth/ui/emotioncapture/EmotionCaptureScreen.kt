@@ -47,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,8 +65,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.concurrent.futures.await
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
+import java.util.concurrent.Executors
 
 /**
  * On-device face-scan screen (P2). Front-camera CameraX preview + still capture, with a gallery
@@ -88,6 +92,7 @@ fun EmotionCaptureScreen(
     val backgroundColor = MaterialTheme.colorScheme.background
 
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -96,6 +101,21 @@ fun EmotionCaptureScreen(
         )
     }
     var permissionRequested by remember { mutableStateOf(false) }
+
+    // Re-check the permission whenever the screen resumes. Covers the "denied in-app → sent to
+    // Settings → granted there → returned" path: the remember initializer doesn't re-run on resume,
+    // so without this the UI would stay wedged on the gallery-only fallback despite the grant.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasCameraPermission = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.CAMERA
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -305,6 +325,12 @@ private fun CameraCaptureView(
     val lifecycleOwner = LocalLifecycleOwner.current
     val imageCapture = remember { ImageCapture.Builder().build() }
     val mainExecutor = remember { ContextCompat.getMainExecutor(context) }
+    // Dedicated background thread for the capture callback so the full-resolution decode +
+    // rotate/mirror (imageProxyToUprightBitmap) never runs on the UI thread and janks capture.
+    val captureExecutor = remember { Executors.newSingleThreadExecutor() }
+    DisposableEffect(captureExecutor) {
+        onDispose { captureExecutor.shutdown() }
+    }
     val previewView = remember { PreviewView(context) }
 
     // Bind the front-camera preview + capture use case once, off the addListener path (camera-
@@ -353,12 +379,15 @@ private fun CameraCaptureView(
     Button(
         onClick = {
             imageCapture.takePicture(
-                mainExecutor,
+                captureExecutor,
                 object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(image: ImageProxy) {
+                        // Runs on captureExecutor (background): decode + rotate/mirror the full-res
+                        // frame off the UI thread, then hand the result back on the main thread
+                        // because onCaptured touches Compose/ViewModel state.
                         val bitmap = imageProxyToUprightBitmap(image)
                         image.close()
-                        if (bitmap != null) onCaptured(bitmap)
+                        if (bitmap != null) mainExecutor.execute { onCaptured(bitmap) }
                     }
 
                     override fun onError(exception: ImageCaptureException) {
@@ -427,7 +456,11 @@ private fun imageProxyToUprightBitmap(image: ImageProxy): Bitmap? {
             postRotate(rotation)
             postScale(-1f, 1f) // front-camera mirror
         }
-        Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+        val upright = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+        // A non-identity matrix always yields a distinct bitmap, so `raw` is now dead weight —
+        // recycle it instead of leaving a full-res frame for GC on every capture.
+        if (upright !== raw) raw.recycle()
+        upright
     } catch (t: Throwable) {
         AppLogger.w(FeatureTag.EMOTION_ML, "ImageProxy -> bitmap failed", t)
         null
