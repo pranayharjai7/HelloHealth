@@ -162,6 +162,68 @@ CREATE TRIGGER trg_emotion_records_set_updated_at
     BEFORE UPDATE ON public.emotion_records
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- ============================================================================
+-- Row Level Security (owner-scoped) — P1 hardening
+-- ----------------------------------------------------------------------------
+-- The client uses real GoTrue auth (email + Google), so every PostgREST request
+-- carries the user's JWT and `auth.uid()` is populated. Each table's ownership
+-- column holds that same Supabase Auth UID:
+--   profiles                : id        = auth.uid()
+--   activity_goals          : user_id   = auth.uid()
+--   food_preferences        : user_id   = auth.uid()
+--   daily_health_snapshots  : user_id   = auth.uid()
+--   emotion_records         : user_id   = auth.uid()
+-- Ownership-column types vary (emotion_records is `text`; the pre-existing P0
+-- tables may be `uuid`), so we cast BOTH sides to text: `col::text = auth.uid()::text`.
+-- This is `text = text` regardless of the column type — a no-op cast on text
+-- columns, and the canonical lowercase-hyphenated form on uuid columns, which is
+-- exactly what auth.uid()::text yields. Casting only auth.uid() failed with
+-- "operator does not exist: uuid = text" against the uuid `id`/`user_id` columns.
+--
+-- Each table gets ONE permissive FOR ALL policy: USING gates which rows the
+-- client may read/update/delete; WITH CHECK gates which rows it may insert/
+-- update to — both to rows it owns. This matches the client's sync exactly
+-- (it only ever pushes/pulls rows for getCurrentUserId()), so enabling RLS does
+-- NOT lock out any legitimate write.
+--
+-- Idempotent: ENABLE ROW LEVEL SECURITY is a no-op if already on; each policy is
+-- DROPped IF EXISTS then re-created (CREATE POLICY has no IF NOT EXISTS).
+-- ----------------------------------------------------------------------------
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS profiles_owner ON public.profiles;
+CREATE POLICY profiles_owner ON public.profiles
+    FOR ALL TO authenticated
+    USING (id::text = auth.uid()::text)
+    WITH CHECK (id::text = auth.uid()::text);
+
+ALTER TABLE public.activity_goals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS activity_goals_owner ON public.activity_goals;
+CREATE POLICY activity_goals_owner ON public.activity_goals
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+ALTER TABLE public.food_preferences ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS food_preferences_owner ON public.food_preferences;
+CREATE POLICY food_preferences_owner ON public.food_preferences
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+ALTER TABLE public.daily_health_snapshots ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS daily_health_snapshots_owner ON public.daily_health_snapshots;
+CREATE POLICY daily_health_snapshots_owner ON public.daily_health_snapshots
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+ALTER TABLE public.emotion_records ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS emotion_records_owner ON public.emotion_records;
+CREATE POLICY emotion_records_owner ON public.emotion_records
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
 -- --- Refresh PostgREST's schema cache ---------------------------------------
 -- So the just-added profiles columns are visible to the API immediately and the
 -- client's onboarding-field upserts stop returning PGRST204. Harmless to run
