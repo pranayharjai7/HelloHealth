@@ -69,9 +69,19 @@ fun HelloHealthTheme(
     // Only `primary` is lerp'd toward the accent — every gradient/wordmark reads primary live, so
     // the whole app re-tints with no call-site edits. Surfaces, backgrounds, and text roles are
     // left exactly as the base scheme defines them, preserving contrast in light and dark.
-    val colorScheme = baseScheme.copy(
-        primary = lerp(baseScheme.primary, animatedAccent, MOOD_TINT_FRACTION)
-    )
+    //
+    // The neutral accent is the *light* base green, which differs from the dark base primary, so a
+    // blind lerp would still shift the dark primary when the mood feature is off/neutral. Guard on
+    // the neutral sentinel: when there's no active mood, keep the base primary untouched in BOTH
+    // themes — a true no-op. A real mood always tints (its accent is never the neutral sentinel).
+    val isNeutral = animatedAccent == NeutralMoodAccent.accent
+    val colorScheme = if (isNeutral) {
+        baseScheme
+    } else {
+        baseScheme.copy(
+            primary = lerp(baseScheme.primary, animatedAccent, MOOD_TINT_FRACTION)
+        )
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {

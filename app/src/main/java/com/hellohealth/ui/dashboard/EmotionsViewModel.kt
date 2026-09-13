@@ -49,11 +49,15 @@ class EmotionsViewModel @Inject constructor(
         }
     }
 
-    /** The most-frequent emotion logged today; ties broken by most recent (last in the list). */
+    /**
+     * The most-frequent emotion logged today; ties broken toward the most recent mood.
+     * [EmotionsRepository.observeToday] delivers records newest-first, so among the tied moods the
+     * first one in the list is the most recent — [first], not last.
+     */
     private fun dominantOf(today: List<EmotionRecord>): EmotionType? {
         if (today.isEmpty()) return null
         val counts = today.groupingBy { it.emotion }.eachCount()
         val max = counts.values.max()
-        return today.last { counts[it.emotion] == max }.emotion
+        return today.first { counts[it.emotion] == max }.emotion
     }
 }
