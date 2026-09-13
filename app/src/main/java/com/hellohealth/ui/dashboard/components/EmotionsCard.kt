@@ -1,8 +1,18 @@
 package com.hellohealth.ui.dashboard.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,18 +30,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,10 +55,11 @@ import com.hellohealth.ui.theme.moodAccentFor
 private const val DOT_TINT_FRACTION = 0.35f
 
 /**
- * Dashboard mood card. Stateless (plain data + lambdas), mirroring [WorkoutCard]. One clear action:
- * a single "Log your mood" button (and the card body) opens the log sheet — the old scattered
- * face-icon-scan and decorative "+" are gone. Below the summary, a "shape of my day" strip of
- * mood-dots previews today's logs; "View timeline ›" opens the full browsable history.
+ * Dashboard mood card. Stateless (plain data + lambdas), mirroring [WorkoutCard]. The whole card is
+ * one tap target that opens the log sheet — no separate button or scattered face-icon. To make that
+ * affordance obvious without cluttering the card with text, it gently "breathes" (a slow scale pulse)
+ * at rest and springs down on press. Below the summary, a "shape of my day" strip of mood-dots
+ * previews today's logs (newest on the left); "View timeline ›" opens the full browsable history.
  */
 @Composable
 fun EmotionsCard(
@@ -60,12 +72,43 @@ fun EmotionsCard(
 ) {
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
+    // Rest-state "breathing": a slow, subtle scale pulse that signals the card is interactive
+    // without any label. Amplitude is intentionally tiny so it reads as a hint, not a distraction.
+    val breathe = rememberInfiniteTransition(label = "cardBreathe")
+    val breatheScale by breathe.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.985f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cardBreatheScale"
+    )
+    // Press feedback: spring the card down on touch and release. Compose's ripple (from .clickable)
+    // still plays on top.
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(),
+        label = "cardPressScale"
+    )
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
+            .graphicsLayer {
+                val s = breatheScale * pressScale
+                scaleX = s
+                scaleY = s
+            }
             .clip(RoundedCornerShape(32.dp))
-            .clickable(onClick = onLog),
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onLog
+            ),
         shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
@@ -108,17 +151,9 @@ fun EmotionsCard(
                         color = onSurfaceColor.copy(alpha = 0.55f)
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                FilledTonalIconButton(onClick = onLog) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Log your mood",
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
             }
 
-            // "Shape of my day" — today's logs, oldest→newest left→right (input is newest-first).
+            // "Shape of my day" — today's logs, newest→oldest left→right (input is newest-first).
             AnimatedVisibility(visible = today.isNotEmpty()) {
                 Column {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -128,7 +163,7 @@ fun EmotionsCard(
                         contentPadding = PaddingValues(vertical = 2.dp)
                     ) {
                         items(
-                            items = today.reversed(),
+                            items = today,
                             key = { it.id }
                         ) { record ->
                             MoodDot(record.emotion)

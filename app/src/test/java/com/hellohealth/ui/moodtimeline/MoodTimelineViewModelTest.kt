@@ -5,6 +5,7 @@ import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.model.EmotionType
 import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.usecase.EmotionInsightsUseCase
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +32,10 @@ class MoodTimelineViewModelTest {
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
     @After fun tearDown() = Dispatchers.resetMain()
+
+    // Stands in for the injected @ApplicationScope. Unconfined so a commit's launched delete runs
+    // eagerly to its first suspension, letting these tests assert the write synchronously.
+    private val appScope = CoroutineScope(UnconfinedTestDispatcher())
 
     private class FakeEmotions(private val window: List<EmotionRecord>) : EmotionsRepository {
         val deleted = mutableListOf<String>()
@@ -63,7 +68,7 @@ class MoodTimelineViewModelTest {
             record("d1-evening", EmotionType.CALM, d1, hour = 20),
             record("d2-morning", EmotionType.HAPPINESS, d2, hour = 8)
         )
-        val vm = MoodTimelineViewModel(FakeEmotions(window), EmotionInsightsUseCase())
+        val vm = MoodTimelineViewModel(FakeEmotions(window), EmotionInsightsUseCase(), appScope)
         vm.uiState.test {
             val state = awaitItem()
             assertEquals(2, state.daySections.size)
@@ -84,7 +89,7 @@ class MoodTimelineViewModelTest {
             record("a", EmotionType.HAPPINESS, d1, hour = 9),
             record("b", EmotionType.HAPPINESS, d1, hour = 10)
         )
-        val vm = MoodTimelineViewModel(FakeEmotions(window), EmotionInsightsUseCase())
+        val vm = MoodTimelineViewModel(FakeEmotions(window), EmotionInsightsUseCase(), appScope)
         vm.uiState.test {
             val state = awaitItem()
             assertEquals(2, state.insights.total)
@@ -95,7 +100,7 @@ class MoodTimelineViewModelTest {
 
     @Test
     fun `empty window yields no sections and empty insights`() = runTest {
-        val vm = MoodTimelineViewModel(FakeEmotions(emptyList()), EmotionInsightsUseCase())
+        val vm = MoodTimelineViewModel(FakeEmotions(emptyList()), EmotionInsightsUseCase(), appScope)
         vm.uiState.test {
             val state = awaitItem()
             assertEquals(emptyList<DaySection>(), state.daySections)
@@ -113,7 +118,7 @@ class MoodTimelineViewModelTest {
             record("b", EmotionType.CALM, d1, hour = 10)
         )
         val fake = FakeEmotions(window)
-        val vm = MoodTimelineViewModel(fake, EmotionInsightsUseCase())
+        val vm = MoodTimelineViewModel(fake, EmotionInsightsUseCase(), appScope)
         vm.uiState.test {
             assertEquals(2, awaitItem().daySections[0].records.size)
             // Staging hides the row immediately, before any Room write.
@@ -135,7 +140,7 @@ class MoodTimelineViewModelTest {
             record("b", EmotionType.CALM, d1, hour = 10)
         )
         val fake = FakeEmotions(window)
-        val vm = MoodTimelineViewModel(fake, EmotionInsightsUseCase())
+        val vm = MoodTimelineViewModel(fake, EmotionInsightsUseCase(), appScope)
         vm.uiState.test {
             assertEquals(2, awaitItem().daySections[0].records.size)
             vm.stageDelete("b")
@@ -145,6 +150,25 @@ class MoodTimelineViewModelTest {
             // A later commit for an undone id is a no-op.
             vm.commitDelete("b")
             assertEquals(emptyList<String>(), fake.deleted)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `committing the same id twice tombstones exactly once`() = runTest {
+        val d1 = LocalDate.of(2026, 3, 10)
+        val window = listOf(record("a", EmotionType.HAPPINESS, d1, hour = 9))
+        val fake = FakeEmotions(window)
+        val vm = MoodTimelineViewModel(fake, EmotionInsightsUseCase(), appScope)
+        vm.uiState.test {
+            awaitItem()
+            vm.stageDelete("a")
+            awaitItem()
+            // The snackbar-timeout commit and the screen-exit flush can both fire for the same id;
+            // the synchronous remove() guard must let delete() run exactly once, not twice.
+            vm.commitDelete("a")
+            vm.commitDelete("a")
+            assertEquals(listOf("a"), fake.deleted)
             cancelAndIgnoreRemainingEvents()
         }
     }

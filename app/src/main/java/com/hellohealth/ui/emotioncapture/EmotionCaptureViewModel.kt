@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.data.local.prefs.CameraPreferences
 import com.hellohealth.domain.model.EmotionType
 import com.hellohealth.domain.repository.EmotionDetectionResult
 import com.hellohealth.domain.usecase.DetectAndLogEmotionUseCase
@@ -38,11 +39,24 @@ sealed interface EmotionCaptureUiState {
  */
 @HiltViewModel
 class EmotionCaptureViewModel @Inject constructor(
-    private val detectAndLog: DetectAndLogEmotionUseCase
+    private val detectAndLog: DetectAndLogEmotionUseCase,
+    private val cameraPreferences: CameraPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<EmotionCaptureUiState>(EmotionCaptureUiState.Idle)
     val uiState: StateFlow<EmotionCaptureUiState> = _uiState.asStateFlow()
+
+    // Which lens the capture preview binds. Seeded from the persisted last-used lens so a returning
+    // user opens on the camera they last chose; toggled (and re-persisted) by the flip button.
+    private val _lensFront = MutableStateFlow(cameraPreferences.lastLensFront)
+    val lensFront: StateFlow<Boolean> = _lensFront.asStateFlow()
+
+    /** Flip between the front and back camera, persisting the choice for next time. */
+    fun toggleLens() {
+        val next = !_lensFront.value
+        _lensFront.value = next
+        cameraPreferences.lastLensFront = next
+    }
 
     fun analyze(bitmap: Bitmap) {
         // Guard against double-taps while an analysis is already running. The just-passed bitmap is

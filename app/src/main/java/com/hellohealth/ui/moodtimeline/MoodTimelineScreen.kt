@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -78,7 +79,8 @@ private val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MM
  *
  * Delete is a plain overflow action — NOT a SwipeToDismissBox (the pinned Compose BOM predates its
  * stable API). Each delete is staged (the row hides at once) and shown with a mandatory Undo
- * snackbar; the tombstone is only committed when that window closes without an Undo.
+ * snackbar; the tombstone is committed when that Short window closes without an Undo, or — if the
+ * user leaves the screen first — flushed by the ViewModel's onCleared on genuine navigate-away.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -99,7 +101,8 @@ fun MoodTimelineScreen(
         scope.launch {
             val result = snackbarHostState.showSnackbar(
                 message = "Mood deleted",
-                actionLabel = "Undo"
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
             )
             when (result) {
                 SnackbarResult.ActionPerformed -> viewModel.undoDelete(id)

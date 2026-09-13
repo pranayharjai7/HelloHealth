@@ -2,11 +2,13 @@ package com.hellohealth.ui.moodtimeline
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.di.ApplicationScope
 import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.usecase.EmotionInsights
 import com.hellohealth.domain.usecase.EmotionInsightsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,7 +51,8 @@ data class MoodTimelineUiState(
 @HiltViewModel
 class MoodTimelineViewModel @Inject constructor(
     private val emotionsRepository: EmotionsRepository,
-    private val emotionInsights: EmotionInsightsUseCase
+    private val emotionInsights: EmotionInsightsUseCase,
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MoodTimelineUiState())
@@ -92,15 +95,49 @@ class MoodTimelineViewModel @Inject constructor(
         if (pendingDeletes.remove(id)) emitState()
     }
 
-    /** Commit a staged delete — actually tombstone the record. No-op if it was already undone. */
+    /**
+     * Commit a staged delete — actually tombstone the record. No-op if it was already committed or
+     * undone. The guard is [MutableSet.remove]'s own boolean: removing the id synchronously (before
+     * any suspension) means a second caller for the same id — e.g. the snackbar timeout AND the
+     * screen-exit flush racing in the same frame — finds it already gone and returns, so [delete] runs
+     * exactly once.
+     *
+     * The write launches on [applicationScope], NOT [viewModelScope]: on navigate-away the
+     * NavBackStackEntry destroys this ViewModel and cancels [viewModelScope] in the same teardown, and
+     * [emotionsRepository.delete] suspends at its first Room read before the tombstone write — so a
+     * viewModelScope-bound write would be cancelled mid-flight and the delete silently lost. The
+     * process-lifetime scope guarantees the tombstone lands.
+     */
     fun commitDelete(id: String) {
-        if (id !in pendingDeletes) return
-        viewModelScope.launch {
+        if (!pendingDeletes.remove(id)) return
+        applicationScope.launch {
             emotionsRepository.delete(id)
-            // The live feed will re-emit without the row; drop it from pending so a late emission
-            // (before that re-emit lands) still filters it out.
-            pendingDeletes.remove(id)
         }
+        // Deliberately DON'T re-derive state here: the row is already hidden (staging removed it), and
+        // the tombstone write is async, so an emitState() now — with the id gone from pendingDeletes
+        // but the row not yet tombstoned in Room — would briefly un-hide it (a delete-then-reappear
+        // flicker). Room's observeWindow re-emits without the row once the write commits, finalizing
+        // the removal cleanly.
+    }
+
+    /**
+     * Flush every still-pending delete — called from [onCleared] on genuine navigate-away so a delete
+     * staged then left before its Undo snackbar closed still persists. Snapshots the ids first because
+     * [commitDelete] mutates [pendingDeletes]; each id routes through the guarded, application-scoped
+     * [commitDelete] path so it commits exactly once and survives this ViewModel's teardown.
+     */
+    private fun commitAllPending() {
+        pendingDeletes.toList().forEach { commitDelete(it) }
+    }
+
+    /**
+     * Fires on genuine destruction (backstack pop / navigate-away) but NOT on a configuration change —
+     * a retained ViewModel survives rotation, so a still-undoable staged delete is left alone then and
+     * only flushed when the user actually leaves the screen.
+     */
+    override fun onCleared() {
+        commitAllPending()
+        super.onCleared()
     }
 
     /** Re-derive UI state from the latest records minus any pending (staged-but-not-committed) deletes. */

@@ -240,8 +240,7 @@ fun AppNavigation(
             val viewModel: LogEmotionViewModel = hiltViewModel()
             LogEmotionScreen(
                 viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                onViewInsights = { navController.navigate(Screen.EmotionInsights.route) }
+                onBack = { navController.popBackStack() }
             )
         }
 

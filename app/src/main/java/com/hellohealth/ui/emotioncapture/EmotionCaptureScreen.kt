@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -90,6 +91,7 @@ fun EmotionCaptureScreen(
     startInGallery: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val lensFront by viewModel.lensFront.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
@@ -213,12 +215,14 @@ fun EmotionCaptureScreen(
                             hasCameraPermission = hasCameraPermission,
                             permissionRequested = permissionRequested,
                             isAnalyzing = state is EmotionCaptureUiState.Analyzing,
+                            lensFront = lensFront,
                             primaryColor = primaryColor,
                             onRequestPermission = {
                                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                             },
                             onOpenSettings = { openAppSettings(context) },
                             onCaptured = { viewModel.analyze(it) },
+                            onToggleLens = viewModel::toggleLens,
                             onPickGallery = {
                                 galleryLauncher.launch(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -231,10 +235,12 @@ fun EmotionCaptureScreen(
                         emoji = state.emotion.emoji(),
                         title = state.emotion.displayLabel(),
                         subtitle = "Confidence ${(state.confidence * 100).toInt()}% · logged and applied to your theme",
-                        primaryActionLabel = "Scan again",
-                        onPrimaryAction = viewModel::reset,
-                        secondaryActionLabel = "Done",
-                        onSecondaryAction = onBack,
+                        // "Done" is the natural next step once the mood is logged, so it's the prominent
+                        // primary action; "Scan again" is the secondary escape hatch.
+                        primaryActionLabel = "Done",
+                        onPrimaryAction = onBack,
+                        secondaryActionLabel = "Scan again",
+                        onSecondaryAction = viewModel::reset,
                         primaryColor = primaryColor
                     )
 
@@ -281,14 +287,16 @@ private fun CaptureSurface(
     hasCameraPermission: Boolean,
     permissionRequested: Boolean,
     isAnalyzing: Boolean,
+    lensFront: Boolean,
     primaryColor: Color,
     onRequestPermission: () -> Unit,
     onOpenSettings: () -> Unit,
     onCaptured: (Bitmap) -> Unit,
+    onToggleLens: () -> Unit,
     onPickGallery: () -> Unit
 ) {
     Text(
-        text = "Point the front camera at your face and capture — the mood is read entirely on your device.",
+        text = "Point the camera at your face and capture — the mood is read entirely on your device.",
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     )
@@ -296,8 +304,9 @@ private fun CaptureSurface(
     if (hasCameraPermission) {
         CameraCaptureView(
             isAnalyzing = isAnalyzing,
-            primaryColor = primaryColor,
-            onCaptured = onCaptured
+            lensFront = lensFront,
+            onCaptured = onCaptured,
+            onToggleLens = onToggleLens
         )
     } else {
         // Permission not (yet) granted. Offer camera access, and always offer the gallery path so
@@ -344,8 +353,9 @@ private fun CaptureSurface(
 @Composable
 private fun CameraCaptureView(
     isAnalyzing: Boolean,
-    primaryColor: Color,
-    onCaptured: (Bitmap) -> Unit
+    lensFront: Boolean,
+    onCaptured: (Bitmap) -> Unit,
+    onToggleLens: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -359,18 +369,24 @@ private fun CameraCaptureView(
     }
     val previewView = remember { PreviewView(context) }
 
-    // Bind the front-camera preview + capture use case once, off the addListener path (camera-
-    // lifecycle 1.3.x has no awaitInstance()), awaiting the provider from a coroutine.
-    LaunchedEffect(previewView) {
+    // Bind the preview + capture use case for the selected lens, off the addListener path (camera-
+    // lifecycle 1.3.x has no awaitInstance()), awaiting the provider from a coroutine. Keyed on
+    // lensFront so flipping the camera unbinds and re-binds to the other lens.
+    LaunchedEffect(previewView, lensFront) {
         try {
             val provider = ProcessCameraProvider.getInstance(context).await()
             val preview = Preview.Builder().build().also {
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
+            val selector = if (lensFront) {
+                CameraSelector.DEFAULT_FRONT_CAMERA
+            } else {
+                CameraSelector.DEFAULT_BACK_CAMERA
+            }
             provider.unbindAll()
             provider.bindToLifecycle(
                 lifecycleOwner,
-                CameraSelector.DEFAULT_FRONT_CAMERA,
+                selector,
                 preview,
                 imageCapture
             )
@@ -390,6 +406,21 @@ private fun CameraCaptureView(
             modifier = Modifier
                 .fillMaxSize()
         )
+        // Flip front/back — overlaid in the top-right of the preview.
+        IconButton(
+            onClick = onToggleLens,
+            enabled = !isAnalyzing,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp)
+                .background(Color.Black.copy(alpha = 0.35f), shape = androidx.compose.foundation.shape.CircleShape)
+        ) {
+            Icon(
+                Icons.Default.Cameraswitch,
+                contentDescription = if (lensFront) "Switch to back camera" else "Switch to front camera",
+                tint = Color.White
+            )
+        }
         if (isAnalyzing) {
             Box(
                 modifier = Modifier
@@ -410,8 +441,9 @@ private fun CameraCaptureView(
                     override fun onCaptureSuccess(image: ImageProxy) {
                         // Runs on captureExecutor (background): decode + rotate/mirror the full-res
                         // frame off the UI thread, then hand the result back on the main thread
-                        // because onCaptured touches Compose/ViewModel state.
-                        val bitmap = imageProxyToUprightBitmap(image)
+                        // because onCaptured touches Compose/ViewModel state. Only the front lens is
+                        // mirrored; a back-camera frame must not be flipped.
+                        val bitmap = imageProxyToUprightBitmap(image, mirror = lensFront)
                         image.close()
                         if (bitmap != null) mainExecutor.execute { onCaptured(bitmap) }
                     }
@@ -470,21 +502,23 @@ private fun ResultPanel(
 }
 
 /**
- * Convert a captured [ImageProxy] to an upright, front-mirrored software bitmap: rotate by the
- * frame's [ImageProxy.getImageInfo] rotationDegrees so the classifier sees an upright face, then
- * horizontally flip because the front camera image is mirrored. Returns null on decode failure.
+ * Convert a captured [ImageProxy] to an upright software bitmap: rotate by the frame's
+ * [ImageProxy.getImageInfo] rotationDegrees so the classifier sees an upright face, then — only for
+ * the front camera ([mirror] = true) — horizontally flip because the front image is mirrored. The
+ * back camera is not mirrored, so its frame is left un-flipped. Returns null on decode failure.
  */
-private fun imageProxyToUprightBitmap(image: ImageProxy): Bitmap? {
+private fun imageProxyToUprightBitmap(image: ImageProxy, mirror: Boolean): Bitmap? {
     return try {
         val raw = image.toBitmap()
         val rotation = image.imageInfo.rotationDegrees.toFloat()
         val matrix = Matrix().apply {
             postRotate(rotation)
-            postScale(-1f, 1f) // front-camera mirror
+            if (mirror) postScale(-1f, 1f) // front-camera mirror only
         }
         val upright = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
-        // A non-identity matrix always yields a distinct bitmap, so `raw` is now dead weight —
-        // recycle it instead of leaving a full-res frame for GC on every capture.
+        // A distinct bitmap is returned when the matrix is non-identity (always true here: rotation
+        // and/or mirror). Recycle `raw` when it's a separate instance instead of leaving a full-res
+        // frame for GC on every capture.
         if (upright !== raw) raw.recycle()
         upright
     } catch (t: Throwable) {
