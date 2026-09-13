@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
@@ -28,7 +30,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.hellohealth.domain.model.UnitPreference
+import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.ui.auth.AuthViewModel
+import com.hellohealth.ui.common.cmToFeetInches
+import com.hellohealth.ui.common.displayLabel
+import com.hellohealth.ui.common.formatNumber
+import com.hellohealth.ui.common.kgToLb
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,6 +50,12 @@ fun ProfileScreen(
     onEditProfile: () -> Unit = {}
 ) {
     val user by viewModel.currentUser.collectAsState()
+    // The onboarding vitals live on the stored UserProfile. Reuse the editor's read path
+    // (profileEditorState) to display them read-only here — no new VM plumbing. The Edit Profile
+    // button opens EditProfileScreen, which uses this same state to edit and save them.
+    val editorState by viewModel.profileEditorState.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadProfileForEditing() }
+    val profile = editorState.profile
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
@@ -96,6 +110,7 @@ fun ProfileScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -161,9 +176,45 @@ fun ProfileScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // Edit Button
+                // Body & Goals — the onboarding measurements, shown read-only. Values are formatted
+                // in the user's stored unit preference; unset fields read "--" (a partial profile is
+                // valid). Editing happens via the Edit Profile button below.
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text(
+                            text = "Body & Goals",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        ProfileInfoItem("Gender", profile?.gender?.displayLabel() ?: "--")
+                        VitalsDivider()
+                        ProfileInfoItem("Age", profile?.ageYears()?.let { "$it yr" } ?: "--")
+                        VitalsDivider()
+                        ProfileInfoItem("Height", formatHeight(profile))
+                        VitalsDivider()
+                        ProfileInfoItem("Weight", formatWeight(profile?.weightKg, profile?.unitPreference))
+                        VitalsDivider()
+                        ProfileInfoItem("Activity Level", profile?.activityLevel?.displayLabel() ?: "--")
+                        VitalsDivider()
+                        ProfileInfoItem("Goal", profile?.goalType?.displayLabel() ?: "--")
+                        profile?.let { p ->
+                            if (p.goalType != null && p.goalType != com.hellohealth.domain.model.GoalType.MAINTAIN) {
+                                VitalsDivider()
+                                ProfileInfoItem("Target Weight", formatWeight(p.targetWeightKg, p.unitPreference))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
                 Button(
                     onClick = onEditProfile,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -193,5 +244,34 @@ private fun ProfileInfoItem(label: String, value: String) {
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+@Composable
+private fun VitalsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(vertical = 16.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+    )
+}
+
+/** Height in the profile's stored units: metric → "cm", imperial → "ft in". "--" when unset. */
+private fun formatHeight(profile: UserProfile?): String {
+    val cm = profile?.heightCm ?: return "--"
+    return if (profile.unitPreference == UnitPreference.IMPERIAL) {
+        val (feet, inches) = cmToFeetInches(cm)
+        "$feet ft ${formatNumber(inches)} in"
+    } else {
+        "${formatNumber(cm)} cm"
+    }
+}
+
+/** Weight in the given units: metric → "kg", imperial → "lb". "--" when unset. */
+private fun formatWeight(weightKg: Double?, unitPreference: UnitPreference?): String {
+    val kg = weightKg ?: return "--"
+    return if (unitPreference == UnitPreference.IMPERIAL) {
+        "${formatNumber(kg.kgToLb())} lb"
+    } else {
+        "${formatNumber(kg)} kg"
     }
 }

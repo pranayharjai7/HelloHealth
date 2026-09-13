@@ -1,11 +1,7 @@
 package com.hellohealth.ui.goals
 
 import com.hellohealth.domain.model.ActivityGoals
-import com.hellohealth.domain.model.GoalType
-import com.hellohealth.domain.model.UnitPreference
-import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.GoalsRepository
-import com.hellohealth.domain.repository.ProfileRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,10 +19,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Tests for the Goals editor's new goal-direction handling (P0.5 Step 10c): goal-type/target/rate
- * seed from the profile and persist back via load-then-`copy()`, MAINTAIN clears targets, and the
- * locked re-derive rule — active-calories is recomputed from the goal type ONLY when the type
- * changed this session; a pure slider tweak persists as-is.
+ * Tests for the Daily Goals editor after the goal-direction fields moved to the Preferences screen.
+ * Goals now owns ONLY the three activity-ring targets: it persists them exactly as edited (no profile
+ * write, no goal-type-driven calorie re-derivation — that logic lives in PreferencesViewModel now).
  *
  * Runs under Robolectric so [com.hellohealth.core.logging.AppLogger]'s `android.util.Log` calls in
  * the write-failure path resolve rather than throwing "not mocked".
@@ -38,7 +33,8 @@ class GoalsViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
     private class FakeGoalsRepository(
-        initial: ActivityGoals = ActivityGoals()
+        initial: ActivityGoals = ActivityGoals(),
+        var throwOnWrite: Boolean = false
     ) : GoalsRepository {
         val flow = MutableStateFlow(initial)
         var goals: ActivityGoals
@@ -46,24 +42,12 @@ class GoalsViewModelTest {
             set(value) { flow.value = value }
         override fun getActivityGoals(): Flow<ActivityGoals> = flow
         override suspend fun getCurrentActivityGoals(): ActivityGoals = flow.value
-        override suspend fun updateActivityGoals(goals: ActivityGoals) { flow.value = goals }
+        override suspend fun updateActivityGoals(goals: ActivityGoals) {
+            if (throwOnWrite) error("write failed")
+            flow.value = goals
+        }
         /** Simulate a background sync write re-emitting on the observed Flow. */
         fun emitFromBackground(goals: ActivityGoals) { flow.value = goals }
-    }
-
-    private class FakeProfileRepository(
-        var profile: UserProfile?,
-        var throwOnRead: Boolean = false,
-        var throwOnWrite: Boolean = false
-    ) : ProfileRepository {
-        override suspend fun getProfile(): UserProfile? {
-            if (throwOnRead) error("read failed")
-            return profile
-        }
-        override suspend fun upsertProfile(profile: UserProfile) {
-            if (throwOnWrite) error("write failed")
-            this.profile = profile
-        }
     }
 
     @Before
@@ -72,133 +56,45 @@ class GoalsViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel(
-        goals: FakeGoalsRepository,
-        profile: FakeProfileRepository
-    ) = GoalsViewModel(goals, profile)
+    private fun viewModel(goals: FakeGoalsRepository) = GoalsViewModel(goals)
 
     @Test
-    fun `seeds goal-direction fields from the stored profile`() = runTest(dispatcher) {
-        val profileRepo = FakeProfileRepository(
-            UserProfile(
-                goalType = GoalType.LOSE,
-                targetWeightKg = 60.0,
-                targetRateKgPerWeek = 0.5,
-                unitPreference = UnitPreference.IMPERIAL,
-                hasOnboarded = true
-            )
-        )
-        val vm = viewModel(FakeGoalsRepository(), profileRepo)
-        advanceUntilIdle()
-
-        val s = vm.uiState.value
-        assertEquals(GoalType.LOSE, s.goalType)
-        assertEquals(60.0, s.targetWeightKg!!, 0.0001)
-        assertEquals(0.5, s.targetRateKgPerWeek!!, 0.0001)
-        assertEquals(UnitPreference.IMPERIAL, s.unitPreference)
-    }
-
-    @Test
-    fun `MAINTAIN clears target weight and rate`() = runTest(dispatcher) {
-        val profileRepo = FakeProfileRepository(
-            UserProfile(goalType = GoalType.LOSE, targetWeightKg = 60.0, targetRateKgPerWeek = 0.5, hasOnboarded = true)
-        )
-        val vm = viewModel(FakeGoalsRepository(), profileRepo)
-        advanceUntilIdle()
-
-        vm.updateGoalType(GoalType.MAINTAIN)
-
-        val s = vm.uiState.value
-        assertEquals(GoalType.MAINTAIN, s.goalType)
-        assertNull("target weight must clear on MAINTAIN", s.targetWeightKg)
-        assertNull("rate must clear on MAINTAIN", s.targetRateKgPerWeek)
-    }
-
-    @Test
-    fun `save persists goal-direction fields onto the profile preserving hasOnboarded`() = runTest(dispatcher) {
-        val profileRepo = FakeProfileRepository(
-            UserProfile(displayName = "Ann", heightCm = 170.0, goalType = GoalType.MAINTAIN, hasOnboarded = true)
-        )
-        val vm = viewModel(FakeGoalsRepository(), profileRepo)
-        advanceUntilIdle()
-
-        vm.updateGoalType(GoalType.LOSE)
-        vm.updateTargetWeightKg(62.0)
-        vm.updateTargetRateKgPerWeek(0.4)
-        vm.saveGoals()
-        advanceUntilIdle()
-
-        val saved = profileRepo.profile!!
-        assertEquals(GoalType.LOSE, saved.goalType)
-        assertEquals(62.0, saved.targetWeightKg!!, 0.0001)
-        assertEquals(0.4, saved.targetRateKgPerWeek!!, 0.0001)
-        assertEquals("untouched vitals survive", 170.0, saved.heightCm!!, 0.0001)
-        assertEquals("hasOnboarded survives", true, saved.hasOnboarded)
-    }
-
-    @Test
-    fun `save re-derives active-calories when goal type changed`() = runTest(dispatcher) {
-        // Starts MAINTAIN (500-cal ring). Switching to LOSE must re-derive to 600.
-        val profileRepo = FakeProfileRepository(UserProfile(goalType = GoalType.MAINTAIN, hasOnboarded = true))
+    fun `seeds the ring targets from the store`() = runTest(dispatcher) {
         val goalsRepo = FakeGoalsRepository(ActivityGoals(steps = 9000, activeCalories = 500, activeMinutes = 55))
-        val vm = viewModel(goalsRepo, profileRepo)
+        val vm = viewModel(goalsRepo)
         advanceUntilIdle()
 
-        vm.updateGoalType(GoalType.LOSE)
-        vm.saveGoals()
-        advanceUntilIdle()
-
-        assertEquals("active-calories re-derived from LOSE", 600, goalsRepo.goals.activeCalories)
-        assertEquals("steps preserved", 9000, goalsRepo.goals.steps)
-        assertEquals("minutes preserved", 55, goalsRepo.goals.activeMinutes)
+        val s = vm.uiState.value
+        assertEquals(9000, s.goals.steps)
+        assertEquals(500, s.goals.activeCalories)
+        assertEquals(55, s.goals.activeMinutes)
     }
 
     @Test
-    fun `save keeps the manual slider value when goal type is unchanged`() = runTest(dispatcher) {
-        // Goal type stays LOSE; a manual active-cal slider tweak must persist as-is (NOT re-derived
-        // back to LOSE's 600) — this is the locked decision.
-        val profileRepo = FakeProfileRepository(UserProfile(goalType = GoalType.LOSE, hasOnboarded = true))
+    fun `save persists the three ring targets exactly as edited`() = runTest(dispatcher) {
         val goalsRepo = FakeGoalsRepository(ActivityGoals(steps = 10000, activeCalories = 600, activeMinutes = 60))
-        val vm = viewModel(goalsRepo, profileRepo)
+        val vm = viewModel(goalsRepo)
         advanceUntilIdle()
 
-        vm.updateCaloriesGoal(750) // user drags the slider
+        vm.updateStepsGoal(12000)
+        vm.updateCaloriesGoal(750)
+        vm.updateMinutesGoal(45)
         vm.saveGoals()
         advanceUntilIdle()
 
-        assertEquals("manual slider value must persist untouched", 750, goalsRepo.goals.activeCalories)
-    }
-
-    @Test
-    fun `a second save after a type change does not re-derive when type is stable`() = runTest(dispatcher) {
-        // First save changes MAINTAIN→LOSE (re-derives to 600 and advances the persisted snapshot).
-        // A follow-up manual slider tweak + save must then stick, proving the snapshot advanced.
-        val profileRepo = FakeProfileRepository(UserProfile(goalType = GoalType.MAINTAIN, hasOnboarded = true))
-        val goalsRepo = FakeGoalsRepository(ActivityGoals(activeCalories = 500))
-        val vm = viewModel(goalsRepo, profileRepo)
-        advanceUntilIdle()
-
-        vm.updateGoalType(GoalType.LOSE)
-        vm.saveGoals()
-        advanceUntilIdle()
-        assertEquals(600, goalsRepo.goals.activeCalories)
-
-        vm.updateCaloriesGoal(720)
-        vm.saveGoals()
-        advanceUntilIdle()
-        assertEquals("second save keeps the slider value (type stable since last save)", 720, goalsRepo.goals.activeCalories)
+        assertEquals("steps persisted", 12000, goalsRepo.goals.steps)
+        assertEquals("calories persisted as edited (no re-derivation)", 750, goalsRepo.goals.activeCalories)
+        assertEquals("minutes persisted", 45, goalsRepo.goals.activeMinutes)
+        assertEquals("success message set", "Daily goals saved.", vm.uiState.value.successMessage)
     }
 
     @Test
     fun `save surfaces an error and does not clear on write failure`() = runTest(dispatcher) {
-        val profileRepo = FakeProfileRepository(
-            UserProfile(goalType = GoalType.LOSE, hasOnboarded = true),
-            throwOnWrite = true
-        )
-        val vm = viewModel(FakeGoalsRepository(), profileRepo)
+        val goalsRepo = FakeGoalsRepository(ActivityGoals(activeCalories = 500), throwOnWrite = true)
+        val vm = viewModel(goalsRepo)
         advanceUntilIdle()
 
-        vm.updateGoalType(GoalType.GAIN)
+        vm.updateCaloriesGoal(650)
         vm.saveGoals()
         advanceUntilIdle()
 
@@ -209,73 +105,13 @@ class GoalsViewModelTest {
     }
 
     @Test
-    fun `out-of-range target blocks save`() = runTest(dispatcher) {
-        val profileRepo = FakeProfileRepository(UserProfile(goalType = GoalType.LOSE, hasOnboarded = true))
-        val vm = viewModel(FakeGoalsRepository(), profileRepo)
-        advanceUntilIdle()
-
-        vm.updateTargetWeightKg(5.0) // below MIN_WEIGHT_KG
-        assertEquals("canSave must be false with an out-of-range target", false, vm.uiState.value.canSave)
-
-        vm.saveGoals()
-        advanceUntilIdle()
-        assertNull("no save should occur", vm.uiState.value.successMessage)
-    }
-
-    // --- Regression: seed-vs-save race / load-failure clobber (10c adversarial review) ---
-
-    @Test
-    fun `save is blocked and no-op before the profile snapshot has loaded`() = runTest(dispatcher) {
-        // Stored directional goal + targets. If a Save lands before the seed coroutine resolves, the
-        // null-default goal fields must NOT be projected over the stored row.
-        val stored = UserProfile(goalType = GoalType.LOSE, targetWeightKg = 70.0, targetRateKgPerWeek = 0.5, hasOnboarded = true)
-        val profileRepo = FakeProfileRepository(stored)
-        val vm = viewModel(FakeGoalsRepository(), profileRepo)
-        // NOTE: no advanceUntilIdle — the seed coroutine is still pending, profileLoaded is false.
-
-        assertEquals("Save must be disabled until the profile loads", false, vm.uiState.value.canSave)
-        vm.saveGoals() // must be a guarded no-op
-        advanceUntilIdle()
-
-        // The stored goal survives untouched (the null-default state was never written).
-        val saved = profileRepo.profile!!
-        assertEquals(GoalType.LOSE, saved.goalType)
-        assertEquals(70.0, saved.targetWeightKg!!, 0.0001)
-        assertEquals(0.5, saved.targetRateKgPerWeek!!, 0.0001)
-    }
-
-    @Test
-    fun `a failed profile load leaves save disabled and surfaces an error`() = runTest(dispatcher) {
-        val profileRepo = FakeProfileRepository(
-            UserProfile(goalType = GoalType.LOSE, targetWeightKg = 70.0, hasOnboarded = true),
-            throwOnRead = true
-        )
-        val vm = viewModel(FakeGoalsRepository(), profileRepo)
-        advanceUntilIdle()
-
-        val s = vm.uiState.value
-        assertEquals("a failed profile load must not enable Save", false, s.canSave)
-        assertEquals("an error must surface", true, s.error != null)
-
-        // Even a forced save must be a no-op — the stored goal survives.
-        vm.saveGoals()
-        advanceUntilIdle()
-        assertNull(vm.uiState.value.successMessage)
-        assertEquals(GoalType.LOSE, profileRepo.profile!!.goalType)
-    }
-
-    @Test
     fun `a background goals emission does not clear a save-owned error`() = runTest(dispatcher) {
         // A write failure sets an error; a subsequent goals Flow refresh must NOT wipe that banner.
-        val profileRepo = FakeProfileRepository(
-            UserProfile(goalType = GoalType.LOSE, hasOnboarded = true),
-            throwOnWrite = true
-        )
-        val goalsRepo = FakeGoalsRepository(ActivityGoals(activeCalories = 600))
-        val vm = viewModel(goalsRepo, profileRepo)
+        val goalsRepo = FakeGoalsRepository(ActivityGoals(activeCalories = 600), throwOnWrite = true)
+        val vm = viewModel(goalsRepo)
         advanceUntilIdle()
 
-        vm.updateGoalType(GoalType.GAIN)
+        vm.updateCaloriesGoal(700)
         vm.saveGoals()
         advanceUntilIdle()
         assertEquals("error set by the failed save", true, vm.uiState.value.error != null)

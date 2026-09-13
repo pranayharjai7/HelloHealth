@@ -21,8 +21,8 @@ import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
 import com.hellohealth.ui.debug.SyncDebugScreen
-import com.hellohealth.ui.foodpreferences.FoodPreferencesScreen
-import com.hellohealth.ui.foodpreferences.FoodPreferencesViewModel
+import com.hellohealth.ui.preferences.PreferencesScreen
+import com.hellohealth.ui.preferences.PreferencesViewModel
 import com.hellohealth.ui.goals.GoalsScreen
 import com.hellohealth.ui.goals.GoalsViewModel
 import com.hellohealth.ui.help.HelpScreen
@@ -107,7 +107,7 @@ fun AppNavigation(
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                 onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
                 onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },
-                onNavigateToFoodPreferences = { navController.navigate(Screen.FoodPreferences.route) },
+                onNavigateToFoodPreferences = { navController.navigate(Screen.Preferences.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToHelp = { navController.navigate(Screen.Help.route) }
             )
@@ -200,9 +200,9 @@ fun AppNavigation(
             ActivitySettingsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.FoodPreferences.route) {
-            val viewModel: FoodPreferencesViewModel = hiltViewModel()
-            FoodPreferencesScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        composable(Screen.Preferences.route) {
+            val viewModel: PreferencesViewModel = hiltViewModel()
+            PreferencesScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
         composable(Screen.Insights.route) {
@@ -249,7 +249,7 @@ sealed class Screen(val route: String) {
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
     object ActivitySettings : Screen("activity_settings")
-    object FoodPreferences : Screen("food_preferences")
+    object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")
     object Help : Screen("help")
     object Onboarding : Screen("onboarding")
