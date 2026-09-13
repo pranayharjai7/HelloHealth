@@ -41,8 +41,6 @@ import com.hellohealth.ui.onboarding.OnboardingScreen
 import com.hellohealth.ui.profile.EditProfileScreen
 import com.hellohealth.ui.profile.ProfileScreen
 import com.hellohealth.ui.splash.SplashScreen
-import com.hellohealth.ui.workoutlog.WorkoutLogScreen
-import com.hellohealth.ui.workoutlog.WorkoutLogViewModel
 
 @Composable
 fun AppNavigation(
@@ -148,7 +146,6 @@ fun AppNavigation(
             WorkoutDetailsScreen(
                 viewModel = dashboardViewModel,
                 onBack = { navController.popBackStack() },
-                onOpenWorkoutLog = { navController.navigate(Screen.WorkoutLog.route) },
                 onOpenActivityDetail = { session ->
                     if (session.id.isNotBlank()) {
                         navController.navigate(
@@ -345,19 +342,6 @@ fun AppNavigation(
             HelpScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(
-            route = Screen.WorkoutLog.route,
-            enterTransition = { fadeIn(tween(300)) + slideInVertically(tween(400)) { it / 2 } },
-            exitTransition = { fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 } },
-            popExitTransition = { fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 } }
-        ) {
-            val viewModel: WorkoutLogViewModel = hiltViewModel()
-            WorkoutLogScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
                 onFinished = {
@@ -406,6 +390,5 @@ sealed class Screen(val route: String) {
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")
     object Help : Screen("help")
-    object WorkoutLog : Screen("workout_log")
     object Onboarding : Screen("onboarding")
 }

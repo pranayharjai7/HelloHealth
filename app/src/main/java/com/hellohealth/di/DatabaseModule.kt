@@ -15,7 +15,6 @@ import com.hellohealth.data.local.dao.ProfileDao
 import com.hellohealth.data.local.dao.SnapshotDao
 import com.hellohealth.data.local.dao.SyncLogDao
 import com.hellohealth.data.local.dao.UserDao
-import com.hellohealth.data.local.dao.WorkoutSessionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -60,7 +59,4 @@ object DatabaseModule {
 
     @Provides
     fun provideEmotionRecordsDao(database: AppDatabase): EmotionRecordsDao = database.emotionRecordsDao()
-
-    @Provides
-    fun provideWorkoutSessionDao(database: AppDatabase): WorkoutSessionDao = database.workoutSessionDao()
 }

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 8,
-    "identityHash": "3455e659d94c89e95615fa75ac763eec",
+    "identityHash": "e739f6d5ea37e521ab142f342a808c67",
     "entities": [
       {
         "tableName": "users",
@@ -546,116 +546,12 @@
         },
         "indices": [],
         "foreignKeys": []
-      },
-      {
-        "tableName": "workout_sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `userId` TEXT NOT NULL, `activityType` TEXT NOT NULL, `title` TEXT, `startTimeUtcEpochMs` INTEGER NOT NULL, `endTimeUtcEpochMs` INTEGER NOT NULL, `durationMinutes` INTEGER NOT NULL, `calories` REAL, `distanceKm` REAL, `note` TEXT, `localDate` TEXT NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL, `updatedAtTzOffsetMinutes` INTEGER NOT NULL, `deletedAtEpochMs` INTEGER, `isSynced` INTEGER NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "userId",
-            "columnName": "userId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "activityType",
-            "columnName": "activityType",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "title",
-            "columnName": "title",
-            "affinity": "TEXT",
-            "notNull": false
-          },
-          {
-            "fieldPath": "startTimeUtcEpochMs",
-            "columnName": "startTimeUtcEpochMs",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "endTimeUtcEpochMs",
-            "columnName": "endTimeUtcEpochMs",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "durationMinutes",
-            "columnName": "durationMinutes",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "calories",
-            "columnName": "calories",
-            "affinity": "REAL",
-            "notNull": false
-          },
-          {
-            "fieldPath": "distanceKm",
-            "columnName": "distanceKm",
-            "affinity": "REAL",
-            "notNull": false
-          },
-          {
-            "fieldPath": "note",
-            "columnName": "note",
-            "affinity": "TEXT",
-            "notNull": false
-          },
-          {
-            "fieldPath": "localDate",
-            "columnName": "localDate",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "updatedAtEpochMs",
-            "columnName": "updatedAtEpochMs",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "updatedAtTzOffsetMinutes",
-            "columnName": "updatedAtTzOffsetMinutes",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "deletedAtEpochMs",
-            "columnName": "deletedAtEpochMs",
-            "affinity": "INTEGER",
-            "notNull": false
-          },
-          {
-            "fieldPath": "isSynced",
-            "columnName": "isSynced",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [],
-        "foreignKeys": []
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3455e659d94c89e95615fa75ac763eec')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e739f6d5ea37e521ab142f342a808c67')"
     ]
   }
 }

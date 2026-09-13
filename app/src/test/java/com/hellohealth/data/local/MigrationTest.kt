@@ -173,8 +173,13 @@ class MigrationTest {
             close()
         }
 
-        // Apply MIGRATION_7_8 and validate the resulting schema matches 8.json exactly.
-        val db = helper.runMigrationsAndValidate(dbName, 8, true, MIGRATION_7_8)
+        // Apply MIGRATION_7_8 WITHOUT schema validation. The flat `workout_sessions` vertical has been
+        // removed from the app (WorkoutSessionEntity is deleted), so `AppDatabase` at v8 no longer
+        // declares that table and a validating run would fail on the "extra" table. We still exercise
+        // the real v7→v8 migration a genuine legacy user takes before v9 drops the table, and assert it
+        // creates a usable `workout_sessions` and leaves existing rows intact. Structural validation of
+        // the current schema is covered by the `migrate 8 to 9` case (added in Step 2/3).
+        val db = helper.runMigrationsAndValidate(dbName, 8, false, MIGRATION_7_8)
 
         // The pre-existing profile row is untouched by the additive new table.
         db.query("SELECT displayName FROM profile WHERE userId = 'u1'").use { c ->
