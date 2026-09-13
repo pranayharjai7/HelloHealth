@@ -30,4 +30,8 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindSnapshotSyncer(impl: SnapshotSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindEmotionsSyncer(impl: EmotionsSyncer): Syncer
 }

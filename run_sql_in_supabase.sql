@@ -126,6 +126,38 @@ CREATE TRIGGER trg_daily_health_snapshots_set_updated_at
     BEFORE UPDATE ON public.daily_health_snapshots
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- --- emotion_records (P1) ---------------------------------------------------
+-- NEW table (does not exist yet) — multi-row per user, conflict key `id` (a
+-- client-generated deterministic string "userId|timestampMs|EMOTION", matching
+-- EmotionsSyncer.EmotionSyncDto). Unlike the tables above, this whole block is
+-- additive-new, so it is created in full rather than ALTER-ed. Columns mirror
+-- the DTO 1:1 (snake_case): text/int/double/nullable per the Kotlin types.
+--   updated_at / deleted_at carry the same LWW-clock + tombstone semantics as
+--   the other tables; the set_updated_at trigger stamps updated_at on UPDATE.
+-- The client ALWAYS pushes every column, so this must run (and PostgREST
+-- reload) BEFORE shipping the P1 client — else emotion upserts return PGRST204.
+CREATE TABLE IF NOT EXISTS public.emotion_records (
+    id            text PRIMARY KEY,
+    user_id       text NOT NULL,
+    timestamp_utc timestamptz NOT NULL,
+    tz_offset     integer NOT NULL DEFAULT 0,
+    local_date    text NOT NULL,
+    emotion       text NOT NULL,
+    confidence    double precision NOT NULL DEFAULT 1.0,
+    source        text NOT NULL DEFAULT 'manual',
+    note          text,
+    visibility    text NOT NULL DEFAULT 'private',
+    updated_at    timestamptz NOT NULL DEFAULT now(),
+    deleted_at    timestamptz
+);
+-- Pull filters by user_id; index it for the per-user select.
+CREATE INDEX IF NOT EXISTS idx_emotion_records_user_id ON public.emotion_records (user_id);
+
+DROP TRIGGER IF EXISTS trg_emotion_records_set_updated_at ON public.emotion_records;
+CREATE TRIGGER trg_emotion_records_set_updated_at
+    BEFORE UPDATE ON public.emotion_records
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 -- --- Refresh PostgREST's schema cache ---------------------------------------
 -- So the just-added profiles columns are visible to the API immediately and the
 -- client's onboarding-field upserts stop returning PGRST204. Harmless to run
