@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -87,6 +88,7 @@ import kotlinx.coroutines.delay
 fun WorkoutDetailsScreen(
     viewModel: DashboardViewModel,
     onBack: () -> Unit,
+    onOpenWorkoutLog: () -> Unit,
     onOpenActivityDetail: (ExerciseSession) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -119,7 +121,9 @@ fun WorkoutDetailsScreen(
                     }
                 },
                 actions = {
-                    // Removed refresh button
+                    IconButton(onClick = onOpenWorkoutLog) {
+                        Icon(Icons.Filled.Add, contentDescription = "Log a workout")
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent
