@@ -29,10 +29,11 @@ interface ExerciseDao {
 
     /**
      * Catalog search for the exercise picker: matches name or category, ordered by name. [query] is
-     * matched with SQL `LIKE`; callers pass the user text and the repository wraps it with `%…%`.
+     * a pre-built SQL `LIKE` pattern (the repository wraps the user text with `%…%` and escapes any
+     * literal wildcards); `ESCAPE '\'` honors that escaping so a `%` typed by the user stays literal.
      */
     @Query(
-        "SELECT * FROM exercises WHERE name LIKE :query OR category LIKE :query " +
+        "SELECT * FROM exercises WHERE name LIKE :query ESCAPE '\\' OR category LIKE :query ESCAPE '\\' " +
             "ORDER BY name ASC LIMIT :limit"
     )
     suspend fun search(query: String, limit: Int): List<ExerciseEntity>

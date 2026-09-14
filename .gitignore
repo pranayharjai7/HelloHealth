@@ -27,6 +27,9 @@ capture/
 !app/schemas/
 !app/schemas/**/*.json
 
+# ...and the bundled exercise catalog is a required app asset (free-exercise-db, ~1MB), not a secret.
+!app/src/main/assets/exercises.json
+
 # Mac files
 .DS_Store
 
