@@ -162,39 +162,92 @@ CREATE TRIGGER trg_emotion_records_set_updated_at
     BEFORE UPDATE ON public.emotion_records
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- --- workout_sessions (Workout Phase A) -------------------------------------
--- NEW table (does not exist yet) — multi-row per user, conflict key `id` (a
--- client-generated random UUID string, matching WorkoutSessionSyncer.WorkoutSyncDto).
--- Additive-new like emotion_records, so it is created in full rather than ALTER-ed.
--- Columns mirror the DTO 1:1 (snake_case): text/bigint/double/nullable per the
--- Kotlin types (durationMinutes is Long -> bigint; calories/distanceKm are
--- Double? -> double precision NULL; title/note are String? -> text NULL).
---   updated_at / deleted_at carry the same LWW-clock + tombstone semantics as
---   the other tables; the set_updated_at trigger stamps updated_at on UPDATE.
+-- --- Remove the retired flat workout_sessions vertical ----------------------
+-- The single flat workout_sessions feature (activity_type/title/calories/distance)
+-- was superseded by the TrackMe-style planning hierarchy below and is being
+-- removed cleanly (it never reached master; the client dropped its local table in
+-- Room MIGRATION_8_9 and deleted its syncer/DTO). DROP the server table to match —
+-- CASCADE also removes its trigger + RLS policy. Idempotent: IF EXISTS makes this a
+-- no-op once the table is gone. Any pre-existing rows were test-only.
+DROP TABLE IF EXISTS public.workout_sessions CASCADE;
+
+-- ============================================================================
+-- Workout / Training planning hierarchy (TrackMe-style)
+-- ----------------------------------------------------------------------------
+-- Three NEW synced tables forming WorkoutPlan -> WorkoutDay -> PlannedExercise,
+-- each multi-row per user with conflict key `id` (client-generated random UUID
+-- string, matching WorkoutPlanSyncer / WorkoutDaySyncer / PlannedExerciseSyncer).
+-- Additive-new like emotion_records, so created in full rather than ALTER-ed.
+-- Columns mirror each DTO 1:1 (snake_case); target_* are all nullable except
+-- target_sets (Int NOT NULL, client default 3). The exercise CATALOG is NOT here —
+-- it is a local-only, read-only asset seeded identically per device (no user_id,
+-- no sync), so there is deliberately no `exercises` table.
+--   updated_at / deleted_at carry the same LWW-clock + tombstone semantics as the
+--   other tables; the set_updated_at trigger stamps updated_at on UPDATE.
 -- The client ALWAYS pushes every column, so this must run (and PostgREST reload)
--- BEFORE relying on pull — else workout upserts return PGRST204. Until it runs,
--- the syncer degrades to push-only losslessly (updated_at/deleted_at are null).
-CREATE TABLE IF NOT EXISTS public.workout_sessions (
-    id              text PRIMARY KEY,
-    user_id         text NOT NULL,
-    activity_type   text NOT NULL DEFAULT 'OTHER',
-    title           text,
-    start_time_utc  timestamptz NOT NULL,
-    end_time_utc    timestamptz NOT NULL,
-    duration_minutes bigint NOT NULL DEFAULT 0,
-    calories        double precision,
-    distance_km     double precision,
-    note            text,
-    local_date      text NOT NULL,
-    updated_at      timestamptz NOT NULL DEFAULT now(),
-    deleted_at      timestamptz
+-- BEFORE relying on pull — else upserts return PGRST204. Until it runs, the syncers
+-- degrade to push-only losslessly (updated_at/deleted_at are null).
+
+-- --- workout_plans (routines) -----------------------------------------------
+CREATE TABLE IF NOT EXISTS public.workout_plans (
+    id           text PRIMARY KEY,
+    user_id      text NOT NULL,
+    name         text NOT NULL,
+    is_active    boolean NOT NULL DEFAULT false,
+    plan_type    text NOT NULL DEFAULT 'WEEKLY',
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    deleted_at   timestamptz
 );
 -- Pull filters by user_id; index it for the per-user select.
-CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_id ON public.workout_sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_workout_plans_user_id ON public.workout_plans (user_id);
 
-DROP TRIGGER IF EXISTS trg_workout_sessions_set_updated_at ON public.workout_sessions;
-CREATE TRIGGER trg_workout_sessions_set_updated_at
-    BEFORE UPDATE ON public.workout_sessions
+DROP TRIGGER IF EXISTS trg_workout_plans_set_updated_at ON public.workout_plans;
+CREATE TRIGGER trg_workout_plans_set_updated_at
+    BEFORE UPDATE ON public.workout_plans
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- --- workout_days (workouts within a routine) -------------------------------
+CREATE TABLE IF NOT EXISTS public.workout_days (
+    id           text PRIMARY KEY,
+    plan_id      text NOT NULL,
+    user_id      text NOT NULL,
+    slot_key     text NOT NULL,
+    name         text NOT NULL,
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    deleted_at   timestamptz
+);
+-- Pull filters by user_id; index it for the per-user select.
+CREATE INDEX IF NOT EXISTS idx_workout_days_user_id ON public.workout_days (user_id);
+
+DROP TRIGGER IF EXISTS trg_workout_days_set_updated_at ON public.workout_days;
+CREATE TRIGGER trg_workout_days_set_updated_at
+    BEFORE UPDATE ON public.workout_days
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- --- planned_exercises (an exercise + targets, within a day) -----------------
+CREATE TABLE IF NOT EXISTS public.planned_exercises (
+    id                      text PRIMARY KEY,
+    day_id                  text NOT NULL,
+    user_id                 text NOT NULL,
+    exercise_id             text NOT NULL,
+    order_index             integer NOT NULL DEFAULT 0,
+    target_sets             integer NOT NULL DEFAULT 3,
+    target_reps             integer,
+    target_weight_kg        double precision,
+    target_duration_seconds integer,
+    target_distance_km      double precision,
+    target_speed_kmh        double precision,
+    target_incline          double precision,
+    updated_at              timestamptz NOT NULL DEFAULT now(),
+    deleted_at              timestamptz
+);
+-- Pull filters by user_id; index it for the per-user select.
+CREATE INDEX IF NOT EXISTS idx_planned_exercises_user_id ON public.planned_exercises (user_id);
+
+DROP TRIGGER IF EXISTS trg_planned_exercises_set_updated_at ON public.planned_exercises;
+CREATE TRIGGER trg_planned_exercises_set_updated_at
+    BEFORE UPDATE ON public.planned_exercises
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- ============================================================================
@@ -208,7 +261,9 @@ CREATE TRIGGER trg_workout_sessions_set_updated_at
 --   food_preferences        : user_id   = auth.uid()
 --   daily_health_snapshots  : user_id   = auth.uid()
 --   emotion_records         : user_id   = auth.uid()
---   workout_sessions        : user_id   = auth.uid()
+--   workout_plans           : user_id   = auth.uid()
+--   workout_days            : user_id   = auth.uid()
+--   planned_exercises       : user_id   = auth.uid()
 -- Ownership-column types vary (emotion_records is `text`; the pre-existing P0
 -- tables may be `uuid`), so we cast BOTH sides to text: `col::text = auth.uid()::text`.
 -- This is `text = text` regardless of the column type — a no-op cast on text
@@ -265,9 +320,23 @@ CREATE POLICY emotion_records_owner ON public.emotion_records
     USING (user_id::text = auth.uid()::text)
     WITH CHECK (user_id::text = auth.uid()::text);
 
-ALTER TABLE public.workout_sessions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS workout_sessions_owner ON public.workout_sessions;
-CREATE POLICY workout_sessions_owner ON public.workout_sessions
+ALTER TABLE public.workout_plans ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS workout_plans_owner ON public.workout_plans;
+CREATE POLICY workout_plans_owner ON public.workout_plans
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+ALTER TABLE public.workout_days ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS workout_days_owner ON public.workout_days;
+CREATE POLICY workout_days_owner ON public.workout_days
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+ALTER TABLE public.planned_exercises ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS planned_exercises_owner ON public.planned_exercises;
+CREATE POLICY planned_exercises_owner ON public.planned_exercises
     FOR ALL TO authenticated
     USING (user_id::text = auth.uid()::text)
     WITH CHECK (user_id::text = auth.uid()::text);
@@ -285,8 +354,9 @@ CREATE POLICY workout_sessions_owner ON public.workout_sessions
 --
 -- The pre-existing P0 tables received this grant when the project was first
 -- provisioned (Supabase's default table privileges); the tables ADDED later by
--- this script (emotion_records, workout_sessions) did not — hence they 403 until
--- this block runs. Granting all six is idempotent and self-documenting.
+-- this script (emotion_records, workout_plans/days, planned_exercises) did not —
+-- hence they 403 until this block runs. Granting all is idempotent and
+-- self-documenting.
 --
 -- We deliberately do NOT grant DELETE: the client never issues a hard DELETE — it
 -- soft-deletes via a `deleted_at` tombstone (an UPDATE), so SELECT/INSERT/UPDATE
@@ -296,7 +366,9 @@ GRANT SELECT, INSERT, UPDATE ON public.activity_goals         TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.food_preferences       TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.daily_health_snapshots TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.emotion_records        TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.workout_sessions       TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.workout_plans          TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.workout_days           TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.planned_exercises      TO authenticated;
 
 -- --- Refresh PostgREST's schema cache ---------------------------------------
 -- So the just-added profiles columns are visible to the API immediately and the
