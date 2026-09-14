@@ -34,4 +34,16 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindEmotionsSyncer(impl: EmotionsSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindWorkoutPlanSyncer(impl: WorkoutPlanSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindWorkoutDaySyncer(impl: WorkoutDaySyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindPlannedExerciseSyncer(impl: PlannedExerciseSyncer): Syncer
 }
