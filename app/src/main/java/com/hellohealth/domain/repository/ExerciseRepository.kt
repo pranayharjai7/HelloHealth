@@ -22,8 +22,12 @@ interface ExerciseRepository {
     /** Current catalog row count (0 when unseeded/unavailable). */
     suspend fun count(): Int
 
-    /** Name-or-category substring search, ordered by name, capped at [limit]. Empty query matches all. */
-    suspend fun search(query: String, limit: Int = 50): List<Exercise>
+    /**
+     * Name-or-category substring search, ordered by name. Empty query matches all. [limit] defaults to
+     * the whole catalog so the picker returns every row (scroll + in-memory category filter cover all
+     * 873). Pass a smaller [limit] only for a genuinely capped surface.
+     */
+    suspend fun search(query: String, limit: Int = Int.MAX_VALUE): List<Exercise>
 
     /** Single exercise by id, or null if absent. */
     suspend fun getById(id: String): Exercise?

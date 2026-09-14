@@ -68,7 +68,9 @@ class ExercisePickerViewModel @Inject constructor(
             .flatMapLatest { (q, cat) ->
                 flow {
                     _isSearching.value = true
-                    val hits = exerciseRepository.search(q)
+                    // Return the whole read-only catalog (873 rows); no cap. The list is small and
+                    // lazily rendered, and the in-memory category filter below must see every row.
+                    val hits = exerciseRepository.search(q, limit = Int.MAX_VALUE)
                     emit(if (cat == null) hits else hits.filter { it.category.equals(cat, ignoreCase = true) })
                     _isSearching.value = false
                 }
