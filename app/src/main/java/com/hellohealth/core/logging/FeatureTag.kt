@@ -16,5 +16,8 @@ enum class FeatureTag(val tag: String) {
     EMOTION_ML("HH.EmotionML"),
     DB("HH.Db"),
     AUTH("HH.Auth"),
-    EXERCISE_CATALOG("HH.ExerciseCatalog")
+    EXERCISE_CATALOG("HH.ExerciseCatalog"),
+    WORKOUT_PLAN("HH.WorkoutPlan"),
+    WORKOUT_DAY("HH.WorkoutDay"),
+    PLANNED_EXERCISE("HH.PlannedExercise")
 }
