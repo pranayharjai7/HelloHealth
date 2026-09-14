@@ -125,6 +125,9 @@ fun AppNavigation(
                 onNavigateToWorkoutDetails = {
                     navController.navigate(Screen.WorkoutDetails.route)
                 },
+                onNavigateToWorkoutPlan = {
+                    navController.navigate(Screen.Routines.route)
+                },
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                 onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
                 onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },

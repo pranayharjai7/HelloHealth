@@ -44,9 +44,11 @@ import com.hellohealth.domain.model.DailyHealthSnapshot
 import coil.compose.AsyncImage
 import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.LogMoodSheet
 import com.hellohealth.ui.dashboard.components.WorkoutCard
+import com.hellohealth.ui.dashboard.components.WorkoutPlanCard
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -61,6 +63,7 @@ fun DashboardScreen(
     emotionsViewModel: EmotionsViewModel,
     onLogout: () -> Unit,
     onNavigateToWorkoutDetails: () -> Unit,
+    onNavigateToWorkoutPlan: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToGoals: () -> Unit,
     onNavigateToActivitySettings: () -> Unit,
@@ -75,6 +78,8 @@ fun DashboardScreen(
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
     val emotionsState by emotionsViewModel.uiState.collectAsState()
+    val workoutPlanViewModel: WorkoutPlanViewModel = hiltViewModel()
+    val workoutPlanSummary by workoutPlanViewModel.summary.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -321,6 +326,15 @@ fun DashboardScreen(
                     onOpenSettings = { dashboardViewModel.openHealthConnectSettings(context) },
                     onSync = { dashboardViewModel.refreshSelectedDate() },
                     onClick = onNavigateToWorkoutDetails
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                WorkoutPlanCard(
+                    activePlanName = workoutPlanSummary.activePlanName,
+                    dayCount = workoutPlanSummary.dayCount,
+                    plannedCount = workoutPlanSummary.plannedCount,
+                    onClick = onNavigateToWorkoutPlan
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
