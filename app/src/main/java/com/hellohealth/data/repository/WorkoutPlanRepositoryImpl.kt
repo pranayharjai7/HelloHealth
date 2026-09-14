@@ -261,6 +261,13 @@ class WorkoutPlanRepositoryImpl @Inject constructor(
         )
     }.flowOn(Dispatchers.IO)
 
+    override suspend fun getPlannedExercise(id: String): PlannedExerciseWithDetails? {
+        val entity = plannedDao.getById(id)?.takeIf { it.deletedAtEpochMs == null } ?: return null
+        val planned = entity.toDomain()
+        val exercise = exerciseRepository.getById(planned.exerciseId)
+        return PlannedExerciseWithDetails(planned = planned, exercise = exercise)
+    }
+
     override suspend fun addExercise(dayId: String, exerciseId: String): String? {
         val userId = sessionManager.getCurrentUserId()
         if (userId == null) {

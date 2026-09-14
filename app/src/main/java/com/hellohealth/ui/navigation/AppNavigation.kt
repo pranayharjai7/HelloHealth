@@ -41,6 +41,16 @@ import com.hellohealth.ui.onboarding.OnboardingScreen
 import com.hellohealth.ui.profile.EditProfileScreen
 import com.hellohealth.ui.profile.ProfileScreen
 import com.hellohealth.ui.splash.SplashScreen
+import com.hellohealth.ui.workoutplan.DayDetailScreen
+import com.hellohealth.ui.workoutplan.DayDetailViewModel
+import com.hellohealth.ui.workoutplan.ExerciseDetailScreen
+import com.hellohealth.ui.workoutplan.ExerciseDetailViewModel
+import com.hellohealth.ui.workoutplan.ExercisePickerScreen
+import com.hellohealth.ui.workoutplan.ExercisePickerViewModel
+import com.hellohealth.ui.workoutplan.RoutineDetailScreen
+import com.hellohealth.ui.workoutplan.RoutineDetailViewModel
+import com.hellohealth.ui.workoutplan.RoutinesScreen
+import com.hellohealth.ui.workoutplan.RoutinesViewModel
 
 @Composable
 fun AppNavigation(
@@ -351,6 +361,101 @@ fun AppNavigation(
                 }
             )
         }
+
+        // ---- Workout planning flow (Routines → RoutineDetail → DayDetail → ExercisePicker/ExerciseDetail) ----
+
+        composable(
+            route = Screen.Routines.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: RoutinesViewModel = hiltViewModel()
+            RoutinesScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onOpenRoutine = { planId ->
+                    navController.navigate(Screen.RoutineDetail.createRoute(planId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.RoutineDetail.route,
+            arguments = listOf(
+                navArgument(Screen.RoutineDetail.planIdArg) { type = NavType.StringType }
+            ),
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: RoutineDetailViewModel = hiltViewModel()
+            RoutineDetailScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onOpenDay = { dayId ->
+                    navController.navigate(Screen.DayDetail.createRoute(dayId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.DayDetail.route,
+            arguments = listOf(
+                navArgument(Screen.DayDetail.dayIdArg) { type = NavType.StringType }
+            ),
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: DayDetailViewModel = hiltViewModel()
+            DayDetailScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onAddExercise = { dayId ->
+                    navController.navigate(Screen.ExercisePicker.createRoute(dayId))
+                },
+                onOpenExercise = { plannedId ->
+                    navController.navigate(Screen.ExerciseDetail.createRoute(plannedId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.ExercisePicker.route,
+            arguments = listOf(
+                navArgument(Screen.ExercisePicker.dayIdArg) { type = NavType.StringType }
+            ),
+            enterTransition = { fadeIn(tween(300)) + slideInVertically(tween(400)) { it / 2 } },
+            exitTransition = { fadeOut(tween(300)) },
+            popExitTransition = { fadeOut(tween(250)) + slideOutVertically(tween(300)) { it / 2 } }
+        ) {
+            val viewModel: ExercisePickerViewModel = hiltViewModel()
+            ExercisePickerScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.ExerciseDetail.route,
+            arguments = listOf(
+                navArgument(Screen.ExerciseDetail.plannedIdArg) { type = NavType.StringType }
+            ),
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: ExerciseDetailViewModel = hiltViewModel()
+            ExerciseDetailScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
     }
 }
 
@@ -391,4 +496,36 @@ sealed class Screen(val route: String) {
     object Insights : Screen("insights")
     object Help : Screen("help")
     object Onboarding : Screen("onboarding")
+
+    // ---- Workout planning (WorkoutPlan → WorkoutDay → PlannedExercise + read-only catalog) ----
+
+    /** The routines list — entry point from the dashboard's workout hero card. */
+    object Routines : Screen("routines")
+
+    /** A single routine's days. Carries the plan id. */
+    object RoutineDetail : Screen("routine_detail/{planId}") {
+        const val planIdArg = "planId"
+        fun createRoute(planId: String): String = "routine_detail/$planId"
+    }
+
+    /** A single day's planned exercises. Carries the day id. */
+    object DayDetail : Screen("day_detail/{dayId}") {
+        const val dayIdArg = "dayId"
+        fun createRoute(dayId: String): String = "day_detail/$dayId"
+    }
+
+    /** Catalog picker to add an exercise to a day. Carries the day id it adds to. */
+    object ExercisePicker : Screen("exercise_picker/{dayId}") {
+        const val dayIdArg = "dayId"
+        fun createRoute(dayId: String): String = "exercise_picker/$dayId"
+    }
+
+    /**
+     * Detail + target editor for one planned exercise. Carries the planned-exercise id (the row whose
+     * targets are edited); the screen resolves its catalog exercise for the gif + instructions.
+     */
+    object ExerciseDetail : Screen("exercise_detail/{plannedId}") {
+        const val plannedIdArg = "plannedId"
+        fun createRoute(plannedId: String): String = "exercise_detail/$plannedId"
+    }
 }

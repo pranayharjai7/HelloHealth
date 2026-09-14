@@ -69,6 +69,13 @@ interface WorkoutPlanRepository {
     fun observePlannedExercises(dayId: String): Flow<List<PlannedExerciseWithDetails>>
 
     /**
+     * A single planned exercise joined with its catalog [com.hellohealth.domain.model.Exercise], or
+     * null if absent / signed out. Backs the target editor, which needs the current targets to seed
+     * its form and the catalog details (gif / instructions / loggingType) to render.
+     */
+    suspend fun getPlannedExercise(id: String): PlannedExerciseWithDetails?
+
+    /**
      * Append an exercise to a day with default targets (targetSets=3). [orderIndex] is assigned after
      * the current max. Returns the new planned-exercise id, or null if signed out.
      */
