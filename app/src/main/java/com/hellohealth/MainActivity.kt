@@ -11,18 +11,34 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.lifecycleScope
+import com.hellohealth.data.exercise.ExerciseSeeder
 import com.hellohealth.ui.navigation.AppNavigation
 import com.hellohealth.ui.theme.HelloHealthTheme
 import com.hellohealth.ui.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Seeds the read-only exercise catalog on every launch (idempotent, count-gated). Injected here
+     * so it covers BOTH fresh installs and users migrated v8→v9 — see [ExerciseSeeder].
+     */
+    @Inject
+    lateinit var exerciseSeeder: ExerciseSeeder
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Make status bar transparent and match the app theme
         enableEdgeToEdge()
+
+        // Populate the exercise catalog if empty. Fire-and-forget on the lifecycle scope: the seeder
+        // is IO-dispatched and never throws, so this can't block or crash app start.
+        lifecycleScope.launch { exerciseSeeder.seedIfNeeded() }
 
         setContent {
             val themeViewModel: ThemeViewModel = hiltViewModel()
