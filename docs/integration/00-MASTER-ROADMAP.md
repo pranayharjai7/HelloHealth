@@ -74,13 +74,20 @@ Each phase below is designed to **build, run, and ship on its own** without brea
   Broaden `HealthConnectManager` reads to the HealthSync type set (RHR, HRV RMSSD, respiratory rate, body temp, hydration; SpO2/BP/glucose/VO2max/sleep already present) with per‑type conversion rules from `DESIGN.md`; extend `HealthSummary` + add a `vitals_samples` table (content‑hash idempotent id); port TrackMe `ReadinessScoreCalculator`; add the Vitals & Recovery card + trends screen.
   *Depends on:* P0. *Risk:* some Samsung/HC types absent on‑device — null‑guard every type; readiness handles missing inputs via weight redistribution.
 
-- [ ] **P4 — Workout module (planner + live session)**
-  Port `exercises.json` (873 exercises) + seeding; the workout Room graph (plans/days/planned‑exercises/sessions/sets/PRs); `WorkoutSessionManager` singleton + live session screen + foreground notification; planner screens; use cases. Rewrite wiring to HelloHealth Hilt conventions; strip Wear coupling; add tables to `SyncManager`; add the Workout card.
-  *Depends on:* P0. *Risk:* largest feature by volume — keep it self‑contained; **Wear bridge explicitly deferred.**
+- [~] **P4 — Workout module** *(planning hierarchy SHIPPED; live session deferred)*
+  **Shipped:** `exercises.json` (873) + count‑gated seeding; the planning Room graph
+  (plans → days → planned‑exercises over a read‑only catalog) at v9 with `MIGRATION_8_9`;
+  `WorkoutPlanRepository` (cascade delete) + `ExerciseRepository`; 3 syncers + Supabase tables
+  (RLS+GRANT); the 5 planning screens; the Dashboard **Workout / Training** hero card. Wiring is
+  HelloHealth Hilt; the retired flat `workout_sessions` vertical was removed cleanly.
+  **Deferred (see [`04`](04-FEATURE-PLAN-workout.md)):** live session logging
+  (`WorkoutSessionManager` + foreground notification + rest‑timer resume), personal records, and
+  the Wear bridge. An invented GPS/live‑cardio phase was deleted — TrackMe has no location tracking.
+  *Depends on:* P0. *Risk:* largest feature by volume — kept self‑contained; **Wear bridge explicitly deferred.**
 
 - [ ] **P5 — Body analytics engine**
   Port TrackMe's `ProgressAnalyticsEngine` (11 modules) + models + 4 analytics‑cache tables (compute off main thread, cache to Room, push‑mostly to Supabase); Progress screen cards reusing HelloHealth's Canvas chart + `ActivityRing` idioms.
-  *Depends on:* P4, P3, P0.5 *(profile vitals)*. *Risk:* pure math, easy to lift; main risk is UI perf — keep compute off the main thread. Reads gender/age/weight from `UserProfile` (P0.5) instead of hardcoded age‑25/male.
+  *Depends on:* P4 *(planning hierarchy, shipped)* + live logging, P3, P0.5 *(profile vitals)*. *Risk:* pure math, easy to lift; main risk is UI perf — keep compute off the main thread. Reads gender/age/weight from `UserProfile` (P0.5) instead of hardcoded age‑25/male.
 
 - [ ] **P6 — Nutrition / Calorie tracker + energy balance**
   Food/nutrition Room tables + Supabase mirror; USDA FDC + Open Food Facts remote sources + barcode (ML Kit/ZXing); food search / quick‑add / water / meal‑category logging; BMR/TDEE + calorie‑budget use cases; `DailyNutritionSummary` as the shared calories‑in record; Nutrition card (ring + macro bars); **wire the flagship contract: adjusted budget = budget + caloriesOut − caloriesIn.**
