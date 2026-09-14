@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -249,12 +252,21 @@ private fun AddDayDialog(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
-                SingleSelectChips(
-                    options = slots,
-                    selected = selectedSlot,
-                    labelOf = { it.label },
-                    onSelect = { selectedSlot = it },
-                )
+                // Slot list can be up to 99 chips (CUSTOM) / 31 (MONTHLY). Bound its height and
+                // let it scroll so the Name field and dialog buttons stay reachable on screen.
+                // SingleSelectChips is unchanged; only its call-site wrapper is constrained.
+                Box(
+                    modifier = Modifier
+                        .heightIn(max = 200.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    SingleSelectChips(
+                        options = slots,
+                        selected = selectedSlot,
+                        labelOf = { it.label },
+                        onSelect = { selectedSlot = it },
+                    )
+                }
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
