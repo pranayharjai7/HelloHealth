@@ -6,6 +6,7 @@ import com.hellohealth.core.time.Timestamps
 import com.hellohealth.data.local.dao.VitalsSampleDao
 import com.hellohealth.data.local.entities.VitalsSampleEntity
 import com.hellohealth.domain.model.vitals.HealthMetricsData
+import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.repository.VitalsRepository
 import com.hellohealth.domain.vitals.ReadinessScoreCalculator
@@ -76,6 +77,29 @@ class VitalsRepositoryImpl @Inject constructor(
         emitAll(
             vitalsSampleDao.observeRollupsForUser(userId, startDate, endDate)
                 .map { rows -> rows.map { it.toMetrics() } }
+        )
+    }.flowOn(Dispatchers.IO)
+
+    override fun observeLatestVitals(): Flow<LatestVitals?> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(null)
+            return@flow
+        }
+        emitAll(
+            vitalsSampleDao.observeLatestRollup(userId).map { row ->
+                row?.let {
+                    LatestVitals(
+                        localDate = it.localDate,
+                        restingHeartRate = it.restingHeartRate,
+                        hrvRmssd = it.hrvRmssd,
+                        respiratoryRate = it.respiratoryRate,
+                        bodyTemperature = it.bodyTemperature,
+                        hydrationMl = it.hydrationMl,
+                        spo2 = it.spo2
+                    )
+                }
+            }
         )
     }.flowOn(Dispatchers.IO)
 

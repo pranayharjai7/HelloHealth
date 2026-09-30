@@ -10,6 +10,7 @@ import com.hellohealth.domain.model.Gender
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.domain.model.vitals.HealthMetricsData
+import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.repository.VitalsRepository
 import com.hellohealth.sync.SyncScheduler
@@ -82,6 +83,7 @@ class ActivityRepositoryImplBmrFallbackTest {
     private object NoopVitalsRepository : VitalsRepository {
         override fun observeReadiness(): Flow<ReadinessScore?> = flowOf(null)
         override fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>> = flowOf(emptyList())
+        override fun observeLatestVitals(): Flow<LatestVitals?> = flowOf(null)
         override suspend fun upsertRollup(
             localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?,
             respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?,

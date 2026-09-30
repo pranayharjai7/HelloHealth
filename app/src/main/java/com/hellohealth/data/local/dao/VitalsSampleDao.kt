@@ -32,6 +32,13 @@ interface VitalsSampleDao {
     )
     fun observeRollupsForUser(userId: String, startDate: String, endDate: String): Flow<List<VitalsSampleEntity>>
 
+    /** The most recent live rollup row for a user, if any — feeds the dashboard card's latest chips. */
+    @Query(
+        "SELECT * FROM vitals_samples WHERE userId = :userId AND kind = 'rollup' " +
+            "AND deletedAtEpochMs IS NULL ORDER BY localDate DESC LIMIT 1"
+    )
+    fun observeLatestRollup(userId: String): Flow<VitalsSampleEntity?>
+
     /** The rollup row for a specific local day, if any (used by the count-gated backfill). */
     @Query(
         "SELECT * FROM vitals_samples WHERE userId = :userId AND kind = 'rollup' " +

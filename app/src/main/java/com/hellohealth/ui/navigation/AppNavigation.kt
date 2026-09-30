@@ -139,7 +139,9 @@ fun AppNavigation(
                 onNavigateToEmotionGallery = {
                     navController.navigate(Screen.EmotionCapture.createRoute(startInGallery = true))
                 },
-                onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) }
+                onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) },
+                // Wired to the trends route in Step 10; a no-op keeps Step 9 compiling.
+                onNavigateToVitalsTrends = { }
             )
         }
         

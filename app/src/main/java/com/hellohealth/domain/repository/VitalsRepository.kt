@@ -1,6 +1,7 @@
 package com.hellohealth.domain.repository
 
 import com.hellohealth.domain.model.vitals.HealthMetricsData
+import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import kotlinx.coroutines.flow.Flow
 
@@ -27,6 +28,12 @@ interface VitalsRepository {
      * feeds the trends charts. Empty when no user / no data.
      */
     fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>>
+
+    /**
+     * The most recent day's raw vitals for the dashboard card's chips, or null when there is no
+     * signed-in user or no rollup yet. Nullable fields render as dashes in the UI.
+     */
+    fun observeLatestVitals(): Flow<LatestVitals?>
 
     /**
      * Upsert the daily rollup for a local day. The row id is deterministic
