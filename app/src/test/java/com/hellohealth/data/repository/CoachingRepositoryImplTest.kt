@@ -2,9 +2,7 @@ package com.hellohealth.data.repository
 
 import com.hellohealth.data.ai.ChatRequest
 import com.hellohealth.data.ai.ChatResult
-import com.hellohealth.data.ai.CoachingProvider
-import com.hellohealth.data.ai.GeminiDataSource
-import com.hellohealth.data.ai.OpenRouterDataSource
+import com.hellohealth.data.ai.CoachingProxyDataSource
 import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.BodyMetrics
@@ -25,9 +23,7 @@ import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.repository.NutritionRepository
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.domain.repository.VitalsRepository
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.respond
+import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -102,11 +98,8 @@ class CoachingRepositoryImplTest {
         override fun observeAiCoachingEnabled(): Flow<Boolean> = flowOf(enabled)
     }
 
-    private class FakeProvider(private val result: ChatResult, val onCall: () -> Unit = {}) :
-        CoachingProvider(
-            GeminiDataSource(HttpClient(MockEngine { respond("") })),
-            OpenRouterDataSource(HttpClient(MockEngine { respond("") })),
-        ) {
+    private class FakeProxy(private val result: ChatResult, val onCall: () -> Unit = {}) :
+        CoachingProxyDataSource(CoachingRepositoryImplTest.stubSupabase()) {
         override suspend fun generate(request: ChatRequest): ChatResult { onCall(); return result }
     }
 
@@ -130,10 +123,10 @@ class CoachingRepositoryImplTest {
         moods: List<EmotionRecord> = emptyList(),
         profile: UserProfile? = UserProfile(),
         enabled: Boolean = false,
-        provider: FakeProvider = FakeProvider(ChatResult.Failure("no-op")),
+        proxy: FakeProxy = FakeProxy(ChatResult.Failure("no-op")),
     ) = CoachingRepositoryImpl(
         FakeNutrition(summary), FakeActivity(health), FakeVitals(readiness, latest),
-        FakeEmotions(moods), FakeProfile(profile, enabled), provider,
+        FakeEmotions(moods), FakeProfile(profile, enabled), proxy,
     )
 
     private fun mood(emotion: EmotionType) = EmotionRecord(
@@ -178,7 +171,7 @@ class CoachingRepositoryImplTest {
         val insight = repo(
             summary = summary(cal = 1500.0),
             enabled = true,
-            provider = FakeProvider(ChatResult.Success("Great deficit today!")),
+            proxy = FakeProxy(ChatResult.Success("Great deficit today!")),
         ).dailyInsight()
         assertEquals("Great deficit today!", insight.text)
         assertEquals(CoachingInsight.Source.LLM, insight.source)
@@ -197,7 +190,7 @@ class CoachingRepositoryImplTest {
                 goalType = com.hellohealth.domain.model.GoalType.MAINTAIN,
             ),
             enabled = true,
-            provider = FakeProvider(ChatResult.Failure("both down")),
+            proxy = FakeProxy(ChatResult.Failure("both down")),
         ).dailyInsight()
         assertEquals(CoachingInsight.Source.RULE_BASED, insight.source)
         assertTrue(insight.text.isNotBlank())
@@ -209,7 +202,7 @@ class CoachingRepositoryImplTest {
         val insight = repo(
             summary = summary(cal = 1500.0),
             enabled = false,
-            provider = FakeProvider(ChatResult.Success("should not be used")) { called = true },
+            proxy = FakeProxy(ChatResult.Success("should not be used")) { called = true },
         ).dailyInsight()
         assertEquals(false, called)
         assertEquals(CoachingInsight.Source.RULE_BASED, insight.source)
@@ -218,15 +211,20 @@ class CoachingRepositoryImplTest {
     @Test
     fun `ask with a blank question returns a gentle rule-based prompt without calling the LLM`() = runTest {
         var called = false
-        val insight = repo(enabled = true, provider = FakeProvider(ChatResult.Success("x")) { called = true }).ask("   ")
+        val insight = repo(enabled = true, proxy = FakeProxy(ChatResult.Success("x")) { called = true }).ask("   ")
         assertEquals(false, called)
         assertEquals(CoachingInsight.Source.RULE_BASED, insight.source)
     }
 
     @Test
     fun `ask uses the LLM when enabled and successful`() = runTest {
-        val insight = repo(enabled = true, provider = FakeProvider(ChatResult.Success("Because your HRV dipped."))).ask("Why is readiness low?")
+        val insight = repo(enabled = true, proxy = FakeProxy(ChatResult.Success("Because your HRV dipped."))).ask("Why is readiness low?")
         assertEquals("Because your HRV dipped.", insight.text)
         assertEquals(CoachingInsight.Source.LLM, insight.source)
+    }
+
+    companion object {
+        /** A throwaway Supabase client so FakeProxy can call its super constructor (never used — generate is overridden). */
+        fun stubSupabase() = createSupabaseClient(supabaseUrl = "https://stub.supabase.co", supabaseKey = "stub") {}
     }
 }

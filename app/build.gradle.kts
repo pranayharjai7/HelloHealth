@@ -23,8 +23,8 @@ android {
         applicationId = "com.hellohealth"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -43,12 +43,9 @@ android {
             "USDA_FDC_API_KEY",
             "\"${localProperties.getProperty("USDA_FDC_API_KEY")?.takeIf { it.isNotBlank() } ?: "DEMO_KEY"}\""
         )
-        // AI Coaching LLM keys (Nutrition/AI). Gemini is the default provider; OpenRouter is the
-        // automatic fallback when Gemini fails/quota-limits. Blank when unset — the CoachingProvider
-        // then skips that provider and degrades to the rule-based local coach, so a fresh clone builds
-        // and the feature never crashes for lack of a key.
-        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY") ?: ""}\"")
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"${localProperties.getProperty("OPENROUTER_API_KEY") ?: ""}\"")
+        // NOTE: the Gemini/OpenRouter keys are deliberately NOT compiled into the app. AI Coaching
+        // calls the `ai-coach` Supabase Edge Function (server-side proxy) which holds those keys as
+        // function secrets, so no LLM provider secret ships in the APK. See supabase/functions/ai-coach.
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
     }
 
@@ -182,6 +179,9 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:supabase-kt:$supabaseVersion")
     implementation("io.github.jan-tennert.supabase:postgrest-kt:$supabaseVersion")
     implementation("io.github.jan-tennert.supabase:gotrue-kt:$supabaseVersion")
+    // functions-kt: invoke the ai-coach Edge Function (LLM proxy) with the user's session JWT, so the
+    // Gemini/OpenRouter keys stay server-side and never ship in the APK.
+    implementation("io.github.jan-tennert.supabase:functions-kt:$supabaseVersion")
     implementation("io.ktor:ktor-client-android:2.3.11")
 
     // Remote food data (Nutrition): a dedicated Ktor client (separate from Supabase's) for the USDA

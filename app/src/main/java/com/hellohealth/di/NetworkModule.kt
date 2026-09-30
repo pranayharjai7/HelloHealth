@@ -8,6 +8,7 @@ import dagger.hilt.components.SingletonComponent
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.gotrue.Auth
+import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.postgrest.Postgrest
 import javax.inject.Singleton
 
@@ -24,6 +25,9 @@ object NetworkModule {
         ) {
             install(Postgrest)
             install(Auth)
+            // Functions: invoke the ai-coach Edge Function (LLM proxy). The SDK attaches the current
+            // session's JWT automatically, satisfying the function's verify_jwt gate.
+            install(Functions)
         }
     }
 }

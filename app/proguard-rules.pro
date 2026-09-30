@@ -77,3 +77,13 @@
 # com.facebook.jni backs PyTorch's native bridge; keep + silence it.
 -keep class com.facebook.jni.** { *; }
 -dontwarn com.facebook.**
+
+# --- ML Kit barcode scanning + CameraX (Nutrition barcode scan) -------------
+# ML Kit resolves its model/detector classes reflectively and loads native code; a minified release
+# can load fine in dev but throw at SCAN time without these. CameraX uses reflection for its
+# use-case bindings. Defensive keep + dontwarn (ML Kit ships consumer rules, but pin ours too).
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_barcode.** { *; }
+-dontwarn com.google.mlkit.**
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
