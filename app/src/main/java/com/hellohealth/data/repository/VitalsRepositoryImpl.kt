@@ -41,25 +41,40 @@ class VitalsRepositoryImpl @Inject constructor(
     private val readinessCalculator: ReadinessScoreCalculator
 ) : VitalsRepository {
 
-    override fun observeReadiness(): Flow<ReadinessScore?> = flow {
+    override fun observeReadiness(): Flow<ReadinessScore?> =
+        observeReadinessAsOf(LocalDate.now(ZoneId.systemDefault()))
+
+    override fun observeReadinessAsOf(date: LocalDate): Flow<ReadinessScore?> = flow {
         val userId = sessionManager.getCurrentUserId()
         if (userId == null) {
             emit(null)
             return@flow
         }
-        val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
-        val startDate = today.minusDays(READINESS_WINDOW_DAYS.toLong()).toString()
-        val endDate = today.toString()
-        val todayStr = today.toString()
+        val startDate = date.minusDays(READINESS_WINDOW_DAYS.toLong()).toString()
+        val endDate = date.toString()
+        val dayStr = date.toString()
 
         emitAll(
             vitalsSampleDao.observeRollupsForUser(userId, startDate, endDate).map { rows ->
-                // Today's rollup is the `todayMetric`; every earlier rollup forms the history the
-                // calculator averages (bounded internally to its 28-day baseline window).
-                val todayRow = rows.lastOrNull { it.localDate == todayStr }
-                val history = rows.filter { it.localDate != todayStr }.map { it.toMetrics() }
-                readinessCalculator.calculate(history, todayRow?.toMetrics())
+                // The selected day's rollup is the `todayMetric`; every earlier rollup forms the
+                // history the calculator averages (bounded internally to its 28-day baseline window).
+                val dayRow = rows.lastOrNull { it.localDate == dayStr }
+                val history = rows.filter { it.localDate != dayStr }.map { it.toMetrics() }
+                readinessCalculator.calculate(history, dayRow?.toMetrics())
+            }
+        )
+    }.flowOn(Dispatchers.IO)
+
+    override fun observeVitalsForDay(localDate: String): Flow<LatestVitals?> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(null)
+            return@flow
+        }
+        // Reuse the range query for a single day; take the matching rollup (null if that day has none).
+        emitAll(
+            vitalsSampleDao.observeRollupsForUser(userId, localDate, localDate).map { rows ->
+                rows.firstOrNull { it.localDate == localDate }?.toLatestVitals()
             }
         )
     }.flowOn(Dispatchers.IO)

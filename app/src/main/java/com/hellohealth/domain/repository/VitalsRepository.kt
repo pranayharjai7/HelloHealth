@@ -24,6 +24,21 @@ interface VitalsRepository {
     fun observeReadiness(): Flow<ReadinessScore?>
 
     /**
+     * Readiness "as of" a specific local day — the score the user would have seen on [date], derived
+     * from the rollup window ending that day (history strictly before [date] + that day's rollup as
+     * the todayMetric). Lets a date-aware screen show a past day's readiness. Null when no signed-in
+     * user; INSUFFICIENT_DATA / establishing when that day lacks a rollup or enough history.
+     * [observeReadiness] is `observeReadinessAsOf(today)`.
+     */
+    fun observeReadinessAsOf(date: java.time.LocalDate): Flow<ReadinessScore?>
+
+    /**
+     * The raw vitals rollup for a specific local day (ISO `yyyy-MM-dd`), or null when no signed-in
+     * user / no rollup for that day. Lets a date-aware card show a past day's chips.
+     */
+    fun observeVitalsForDay(localDate: String): Flow<LatestVitals?>
+
+    /**
      * Live daily rollups over the last [days] days as pure [HealthMetricsData], ascending by date —
      * feeds the trends charts. Empty when no user / no data.
      */

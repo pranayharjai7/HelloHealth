@@ -65,9 +65,11 @@ class InsightsPreviewViewModelTest {
 
     private class FakeVitals(private val latest: LatestVitals?) : VitalsRepository {
         override fun observeReadiness(): Flow<ReadinessScore?> = flowOf(null)
+        override fun observeReadinessAsOf(date: java.time.LocalDate): Flow<ReadinessScore?> = flowOf(null)
         override fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>> = flowOf(emptyList())
         override fun observeRecentVitals(days: Int): Flow<List<LatestVitals>> = flowOf(emptyList())
         override fun observeLatestVitals(): Flow<LatestVitals?> = flowOf(latest)
+        override fun observeVitalsForDay(localDate: String): Flow<LatestVitals?> = flowOf(latest)
         override suspend fun upsertRollup(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?, sleepDurationMinutes: Int?, deepSleepMinutes: Int?) = Unit
         override suspend fun upsertSample(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?) = Unit
     }
