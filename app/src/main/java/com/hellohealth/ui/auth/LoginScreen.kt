@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.hellohealth.BuildConfig
@@ -315,9 +316,33 @@ private fun handleGoogleSignIn(context: Context, viewModel: AuthViewModel, scope
         } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
             Log.w("GoogleSignIn", "Sign-in cancelled by user. Note: This also happens if the SHA-1 or Client ID is misconfigured.")
             viewModel.setError("Login failed: The request was cancelled. Please check your Google Cloud Console configuration (SHA-1 and Client ID type).")
+        } catch (e: NoCredentialException) {
+            // No Google account on the device, or none matching the request. Not a misconfig — guide
+            // the user to add an account rather than showing a raw SDK string.
+            Log.w("GoogleSignIn", "No credential available: ${e.message}")
+            viewModel.setError("No Google account is available on this device. Add a Google account in Settings, then try again.")
         } catch (e: androidx.credentials.exceptions.GetCredentialException) {
-            Log.e("GoogleSignIn", "GetCredentialException: ${e.message}", e)
-            viewModel.setError("Login failed: ${e.message}")
+            // Error 10 / DEVELOPER_ERROR means this build's signing SHA-1 isn't registered in the
+            // Google Cloud project. The concrete exception class varies by Play Services version, so
+            // detect it heuristically on type/message and log the running build's SHA-1 to make the
+            // Cloud-console fix self-serve (see hellohealth-google-signin-setup).
+            val marker = "${e.type} ${e.message}".lowercase()
+            val looksLikeConfig = listOf("10", "developer_error", "provider configuration")
+                .any { it in marker }
+            if (looksLikeConfig) {
+                val sha1 = currentSigningSha1(context)
+                Log.e(
+                    "GoogleSignIn",
+                    "Sign-in not configured for this build. Register this SHA-1 in Google Cloud " +
+                        "project 637347574786: sha1=$sha1 package=${context.packageName} " +
+                        "clientId=${BuildConfig.GOOGLE_WEB_CLIENT_ID}",
+                    e,
+                )
+                viewModel.setError("Sign-in isn't configured for this build. This device's app signature isn't registered in Google Cloud.")
+            } else {
+                Log.e("GoogleSignIn", "GetCredentialException: ${e.message}", e)
+                viewModel.setError("Login failed: ${e.message}")
+            }
         } catch (e: Exception) {
             Log.e("GoogleSignIn", "Unexpected error: ${e.localizedMessage}", e)
             viewModel.setError("Unexpected error: ${e.localizedMessage}")

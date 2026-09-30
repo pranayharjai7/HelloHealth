@@ -38,6 +38,24 @@ android {
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
     }
 
+    // Release signing is driven entirely from local.properties (git-ignored) with the keystore kept
+    // OUTSIDE the repo — no secrets in version control. On a machine that has neither, `hasReleaseKeystore`
+    // is false and the release build stays unsigned (the prior behaviour) instead of failing configuration,
+    // so debug builds and CI without the keystore are unaffected.
+    val releaseStoreFile = localProperties.getProperty("RELEASE_STORE_FILE")?.takeIf { it.isNotBlank() }
+    val hasReleaseKeystore = releaseStoreFile != null && file(releaseStoreFile).exists()
+
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -46,6 +64,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Sign only when the keystore is present; otherwise leave the release build unsigned.
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

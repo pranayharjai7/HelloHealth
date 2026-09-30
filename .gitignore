@@ -23,6 +23,11 @@ capture/
 # Secrets
 *.json
 
+# Signing keystores — never commit. Keep the .jks OUTSIDE the repo; secrets live in local.properties.
+*.jks
+*.keystore
+keystore.properties
+
 # ...but Room's exported schemas are the migration-test baseline and must be tracked.
 !app/schemas/
 !app/schemas/**/*.json
