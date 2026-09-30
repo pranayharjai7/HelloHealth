@@ -50,4 +50,8 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindVitalsSampleSyncer(impl: VitalsSampleSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindNutritionEntrySyncer(impl: NutritionEntrySyncer): Syncer
 }
