@@ -443,4 +443,106 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 10 to 11 adds nutrition tables and preserves existing data`() {
+        // A genuine v10 user has a profile row. MIGRATION_10_11 is purely additive: it CREATEs
+        // nutrition_entries + cached_foods and touches nothing else, so the profile must survive.
+        helper.createDatabase(dbName, 10).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded, isDynamicTheme) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 1, 1)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_10_11 and validate the resulting schema matches 11.json exactly. This is
+        // the structural guard that the hand-written CREATE TABLEs / indices match Room's v11 entities.
+        val db = helper.runMigrationsAndValidate(dbName, 11, true, MIGRATION_10_11)
+
+        // The pre-existing profile row is untouched by the additive creates.
+        db.query("SELECT displayName FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+        }
+
+        // Both new tables exist and are empty.
+        for (table in listOf("nutrition_entries", "cached_foods")) {
+            db.query("SELECT count(*) FROM $table").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("$table should be empty after migration", 0, c.getInt(0))
+            }
+        }
+
+        // Row A: a food row with every optional macro populated — proves the REAL affinities round-trip.
+        db.execSQL(
+            "INSERT INTO nutrition_entries " +
+                "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, mealCategory, foodId, " +
+                "foodName, quantity, unit, calories, proteinG, carbsG, fatG, fibreG, waterMl, entryMethod, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('n1', 'u1', '2026-09-30', 1000, 0, 'food', 'breakfast', 'seed:oats', " +
+                "'Oats', 100.0, 'g', 389.0, 16.9, 66.3, 6.9, 10.6, NULL, 'catalog', 1000, 0, NULL, 0)"
+        )
+        db.query(
+            "SELECT kind, mealCategory, foodName, quantity, calories, proteinG, carbsG, fatG, fibreG " +
+                "FROM nutrition_entries WHERE id = 'n1'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("food", c.getString(0))
+            assertEquals("breakfast", c.getString(1))
+            assertEquals("Oats", c.getString(2))
+            assertEquals(100.0, c.getDouble(3), 0.0001)
+            assertEquals(389.0, c.getDouble(4), 0.0001)
+            assertEquals(16.9, c.getDouble(5), 0.0001)
+            assertEquals(66.3, c.getDouble(6), 0.0001)
+            assertEquals(6.9, c.getDouble(7), 0.0001)
+            assertEquals(10.6, c.getDouble(8), 0.0001)
+        }
+
+        // Row B: a water row leaving every nullable macro NULL — proves the nullable affinities round-trip.
+        db.execSQL(
+            "INSERT INTO nutrition_entries " +
+                "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, mealCategory, foodId, " +
+                "foodName, quantity, unit, calories, proteinG, carbsG, fatG, fibreG, waterMl, entryMethod, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('n2', 'u1', '2026-09-30', 2000, 0, 'water', NULL, NULL, " +
+                "'Water', 1.0, 'glass', 0.0, NULL, NULL, NULL, NULL, 250.0, 'water', 2000, 0, NULL, 0)"
+        )
+        db.query(
+            "SELECT kind, mealCategory, waterMl, proteinG, carbsG, fatG, fibreG " +
+                "FROM nutrition_entries WHERE id = 'n2'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("water", c.getString(0))
+            assertTrue("mealCategory should be null", c.isNull(1))
+            assertEquals(250.0, c.getDouble(2), 0.0001)
+            assertTrue("proteinG should be null", c.isNull(3))
+            assertTrue("carbsG should be null", c.isNull(4))
+            assertTrue("fatG should be null", c.isNull(5))
+            assertTrue("fibreG should be null", c.isNull(6))
+        }
+
+        // cached_foods (read-only catalog, no sync columns) round-trips, including nullable macros.
+        db.execSQL(
+            "INSERT INTO cached_foods " +
+                "(id, name, brand, source, basisUnit, servingLabel, servingGrams, caloriesPer, " +
+                "proteinGPer, carbsGPer, fatGPer, fibreGPer, barcode, lastRefreshedEpochMs) " +
+                "VALUES ('off:123', 'Test Bar', 'Acme', 'off', 'per_serving', 'bar', 40.0, 180.0, " +
+                "8.0, 20.0, 6.0, NULL, '123', 3000)"
+        )
+        db.query(
+            "SELECT name, source, basisUnit, caloriesPer, fibreGPer, barcode FROM cached_foods WHERE id = 'off:123'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Test Bar", c.getString(0))
+            assertEquals("off", c.getString(1))
+            assertEquals("per_serving", c.getString(2))
+            assertEquals(180.0, c.getDouble(3), 0.0001)
+            assertTrue("fibreGPer should be null", c.isNull(4))
+            assertEquals("123", c.getString(5))
+        }
+        db.close()
+    }
 }
