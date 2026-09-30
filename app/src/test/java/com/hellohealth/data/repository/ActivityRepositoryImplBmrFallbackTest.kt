@@ -9,7 +9,11 @@ import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.model.Gender
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ProfileRepository
+import com.hellohealth.domain.model.vitals.HealthMetricsData
+import com.hellohealth.domain.model.vitals.ReadinessScore
+import com.hellohealth.domain.repository.VitalsRepository
 import com.hellohealth.sync.SyncScheduler
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -69,8 +73,24 @@ class ActivityRepositoryImplBmrFallbackTest {
             syncScheduler = object : SyncScheduler(ctx) {
                 override fun requestSync() {}
             },
-            profileRepository = profileRepo
+            profileRepository = profileRepo,
+            vitalsRepository = NoopVitalsRepository
         )
+    }
+
+    /** These tests exercise BMR fallback, not vitals — a no-op rollup sink keeps them focused. */
+    private object NoopVitalsRepository : VitalsRepository {
+        override fun observeReadiness(): Flow<ReadinessScore?> = flowOf(null)
+        override fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>> = flowOf(emptyList())
+        override suspend fun upsertRollup(
+            localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?,
+            respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?,
+            sleepDurationMinutes: Int?, deepSleepMinutes: Int?
+        ) {}
+        override suspend fun upsertSample(
+            localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?,
+            respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?
+        ) {}
     }
 
     private fun birthEpochDayForAge(age: Int, today: LocalDate = LocalDate.now()): Long =
