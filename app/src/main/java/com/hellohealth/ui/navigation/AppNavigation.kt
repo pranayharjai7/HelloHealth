@@ -140,7 +140,8 @@ fun AppNavigation(
                     navController.navigate(Screen.EmotionCapture.createRoute(startInGallery = true))
                 },
                 onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) },
-                onNavigateToVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) }
+                onNavigateToVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) },
+                onNavigateToNutrition = { navController.navigate(Screen.Nutrition.route) }
             )
         }
         
@@ -510,6 +511,8 @@ sealed class Screen(val route: String) {
     object EmotionInsights : Screen("emotion_insights")
     object MoodTimeline : Screen("mood_timeline")
     object VitalsTrends : Screen("vitals_trends")
+    object Nutrition : Screen("nutrition")
+    object BarcodeScan : Screen("barcode_scan")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")

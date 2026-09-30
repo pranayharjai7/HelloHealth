@@ -20,9 +20,16 @@ import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.domain.repository.VitalsRepository
 import com.hellohealth.sync.SyncScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -144,6 +151,24 @@ class ActivityRepositoryImpl @Inject constructor(
 
     override fun getSettingsIntent(context: Context): Intent =
         healthConnectManager.getHealthConnectSettingsIntent()
+
+    override fun observeTodayCaloriesOut(): Flow<Double> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(0.0)
+            return@flow
+        }
+        // Reactive today-only read off the snapshot rollup. There's no single-day observe query, so
+        // observe the [today, today] range and take its one row. caloriesOut = active + BMR, matching
+        // the EnergyBalance contract; a missing/partial snapshot degrades to 0.0 rather than throwing.
+        val today = LocalDate.now(ZoneId.systemDefault()).toString()
+        emitAll(
+            snapshotDao.observeRange(userId, today, today).map { rows ->
+                val summary = rows.firstOrNull()?.let(SnapshotMapper::toDomain)?.summary
+                (summary?.activeCalories ?: 0.0) + (summary?.basalMetabolicRate ?: 0.0)
+            }
+        )
+    }.flowOn(Dispatchers.IO)
 
     private suspend fun loadSnapshot(date: LocalDate): DailyHealthSnapshot? {
         val userId = sessionManager.getCurrentUserId() ?: return null

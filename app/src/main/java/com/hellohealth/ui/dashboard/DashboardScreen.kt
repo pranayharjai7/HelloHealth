@@ -47,6 +47,7 @@ import com.hellohealth.ui.auth.AuthViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.LogMoodSheet
+import com.hellohealth.ui.dashboard.components.NutritionCard
 import com.hellohealth.ui.dashboard.components.VitalsCard
 import com.hellohealth.ui.dashboard.components.WorkoutCard
 import com.hellohealth.ui.dashboard.components.WorkoutPlanCard
@@ -75,7 +76,8 @@ fun DashboardScreen(
     onNavigateToEmotionCapture: () -> Unit,
     onNavigateToEmotionGallery: () -> Unit,
     onNavigateToMoodTimeline: () -> Unit,
-    onNavigateToVitalsTrends: () -> Unit
+    onNavigateToVitalsTrends: () -> Unit,
+    onNavigateToNutrition: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -84,6 +86,8 @@ fun DashboardScreen(
     val workoutPlanSummary by workoutPlanViewModel.summary.collectAsState()
     val vitalsViewModel: VitalsViewModel = hiltViewModel()
     val vitalsState by vitalsViewModel.uiState.collectAsState()
+    val nutritionViewModel: NutritionViewModel = hiltViewModel()
+    val nutritionState by nutritionViewModel.uiState.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -370,8 +374,15 @@ fun DashboardScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
+                NutritionCard(
+                    state = nutritionState,
+                    onClick = onNavigateToNutrition
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
                 Text(
-                    text = "Upcoming: Nutrition & AI Coaching",
+                    text = "Upcoming: AI Coaching",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
                     modifier = Modifier.padding(bottom = 32.dp)
