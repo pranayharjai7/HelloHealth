@@ -2,14 +2,17 @@ package com.hellohealth.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.model.vitals.ReadinessStatus
 import com.hellohealth.domain.repository.VitalsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -43,21 +46,26 @@ data class VitalsUiState(
 /**
  * Own VM for the dashboard's Vitals & Recovery card — deliberately NOT folded into [DashboardViewModel]
  * (mirrors [WorkoutPlanViewModel]) so the vitals read surface stays in one place. Combines the derived
- * readiness score with the latest raw vitals, both sourced ONLY from the persisted daily rollup (never
- * live Health Connect). With no signed-in user both flows emit null and the state collapses to its
- * empty defaults without special-casing.
+ * readiness score with the raw vitals for the SELECTED day, both sourced ONLY from the persisted daily
+ * rollup (never live Health Connect). Date-aware via [SelectedDateHolder]: browsing to a past day shows
+ * that day's chips and as-of readiness. With no signed-in user both flows emit null and the state
+ * collapses to its empty defaults without special-casing.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class VitalsViewModel @Inject constructor(
     repository: VitalsRepository,
+    selectedDateHolder: SelectedDateHolder,
 ) : ViewModel() {
 
     val uiState: StateFlow<VitalsUiState> =
-        combine(
-            repository.observeReadiness(),
-            repository.observeLatestVitals(),
-        ) { readiness, latest ->
-            toUiState(readiness, latest)
+        selectedDateHolder.selectedDate.flatMapLatest { date ->
+            combine(
+                repository.observeReadinessAsOf(date),
+                repository.observeVitalsForDay(date.toString()),
+            ) { readiness, latest ->
+                toUiState(readiness, latest)
+            }
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),

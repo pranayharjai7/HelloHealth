@@ -64,6 +64,7 @@ class CoachingRepositoryImplTest {
         override suspend fun hasPermissions() = true
         override suspend fun fetchLatestBodyMetrics() = BodyMetrics()
         override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(0.0)
+        override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flowOf(null)
         override fun getRequiredPermissions() = emptySet<String>()
         override fun getAvailability() = 0
         override fun getSettingsIntent(context: android.content.Context) = android.content.Intent()
@@ -74,9 +75,11 @@ class CoachingRepositoryImplTest {
         private val latest: LatestVitals?,
     ) : VitalsRepository {
         override fun observeReadiness(): Flow<ReadinessScore?> = flowOf(readiness)
+        override fun observeReadinessAsOf(date: java.time.LocalDate): Flow<ReadinessScore?> = flowOf(readiness)
         override fun observeRecentRollups(days: Int): Flow<List<com.hellohealth.domain.model.vitals.HealthMetricsData>> = flowOf(emptyList())
         override fun observeRecentVitals(days: Int): Flow<List<LatestVitals>> = flowOf(emptyList())
         override fun observeLatestVitals(): Flow<LatestVitals?> = flowOf(latest)
+        override fun observeVitalsForDay(localDate: String): Flow<LatestVitals?> = flowOf(latest)
         override suspend fun upsertRollup(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?, sleepDurationMinutes: Int?, deepSleepMinutes: Int?) = Unit
         override suspend fun upsertSample(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?) = Unit
     }

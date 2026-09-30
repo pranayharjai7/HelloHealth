@@ -1,5 +1,7 @@
 package com.hellohealth.ui.dashboard
 
+import com.hellohealth.core.date.SelectedDateHolder
+
 import android.content.Context
 import android.content.Intent
 import androidx.health.connect.client.HealthConnectClient
@@ -62,6 +64,8 @@ class DashboardViewModelTest {
         override suspend fun fetchLatestBodyMetrics() = com.hellohealth.domain.model.BodyMetrics()
         override fun observeTodayCaloriesOut(): kotlinx.coroutines.flow.Flow<Double> =
             kotlinx.coroutines.flow.flowOf(0.0)
+        override fun observeCaloriesOutForDay(localDate: String): kotlinx.coroutines.flow.Flow<Double?> =
+            kotlinx.coroutines.flow.flowOf(null)
         override fun getRequiredPermissions(): Set<String> = setOf("perm")
         override fun getAvailability(): Int = available
         override fun getSettingsIntent(context: Context): Intent = Intent()
@@ -91,7 +95,7 @@ class DashboardViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun viewModel(repo: FakeActivityRepository) =
-        DashboardViewModel(repo, FakeAuthRepository(), FakeGoalsRepository())
+        DashboardViewModel(repo, FakeAuthRepository(), FakeGoalsRepository(), SelectedDateHolder())
 
     @Test
     fun `no permissions leaves dashboard disconnected`() = runTest(dispatcher) {

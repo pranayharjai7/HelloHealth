@@ -2,6 +2,7 @@ package com.hellohealth.ui.insights
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.CrossDimensionInsights
 import com.hellohealth.domain.model.FoodPreferences
@@ -46,15 +47,27 @@ class InsightsViewModel @Inject constructor(
     private val vitalsRepository: VitalsRepository,
     private val nutritionRepository: NutritionRepository,
     private val buildWeeklyInsights: BuildWeeklyInsightsUseCase,
-    private val buildCrossInsights: BuildCrossInsightsUseCase
+    private val buildCrossInsights: BuildCrossInsightsUseCase,
+    private val selectedDateHolder: SelectedDateHolder
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(InsightsUiState())
     val uiState: StateFlow<InsightsUiState> = _uiState.asStateFlow()
 
+    /** The window-end for the 7-day insights window: the dashboard's selected date (default today). */
+    private val asOf: LocalDate get() = selectedDateHolder.selectedDate.value
+
     init {
-        loadWeeklyStats()
         observeGoals()
+        // Collecting the selected date emits its current value immediately → initial load.
+        observeSelectedDate()
+    }
+
+    /** Re-anchor the insights window whenever the dashboard's selected date changes. */
+    private fun observeSelectedDate() {
+        viewModelScope.launch {
+            selectedDateHolder.selectedDate.collectLatest { loadWeeklyStats() }
+        }
     }
 
     private fun observeGoals() {
@@ -64,7 +77,7 @@ class InsightsViewModel @Inject constructor(
                     if (state.weeklyStats.dailyStats.isEmpty()) {
                         state.copy(goals = goals)
                     } else {
-                        val insights = buildWeeklyInsights(state.weeklyStats, goals, state.foodPreferences)
+                        val insights = buildWeeklyInsights(state.weeklyStats, goals, state.foodPreferences, asOf)
                         state.copy(
                             goals = goals,
                             weeklyInsights = insights
@@ -82,7 +95,7 @@ class InsightsViewModel @Inject constructor(
                 val stats = repository.fetchWeeklyStats()
                 val goals = goalsRepository.getCurrentActivityGoals()
                 val preferences = userRepository.getCurrentFoodPreferences()
-                val insights = buildWeeklyInsights(stats, goals, preferences)
+                val insights = buildWeeklyInsights(stats, goals, preferences, asOf)
                 val cross = buildCrossDimension(stats)
                 _uiState.value = _uiState.value.copy(
                     weeklyStats = stats,
@@ -110,7 +123,7 @@ class InsightsViewModel @Inject constructor(
      */
     private suspend fun buildCrossDimension(stats: WeeklyStats): CrossDimensionInsights {
         val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
+        val today = asOf
         val windowDays = (0..6).map { today.minusDays((6 - it).toLong()) }
 
         // Emotions: the 7-day window (inclusive) by epoch-day.

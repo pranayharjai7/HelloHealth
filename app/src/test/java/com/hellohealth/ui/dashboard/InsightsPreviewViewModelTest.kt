@@ -1,6 +1,7 @@
 package com.hellohealth.ui.dashboard
 
 import app.cash.turbine.test
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.model.EmotionType
@@ -58,16 +59,19 @@ class InsightsPreviewViewModelTest {
     private class FakeEmotions(private val today: List<EmotionRecord>) : EmotionsRepository {
         override fun observeToday(): Flow<List<EmotionRecord>> = flowOf(today)
         override fun observeLatest(): Flow<EmotionRecord?> = flowOf(today.firstOrNull())
-        override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(emptyList())
+        // The preview VM now counts mood via observeWindow (per-day); serve the same fixture.
+        override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(today)
         override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String): String? = null
         override suspend fun delete(id: String) = Unit
     }
 
     private class FakeVitals(private val latest: LatestVitals?) : VitalsRepository {
         override fun observeReadiness(): Flow<ReadinessScore?> = flowOf(null)
+        override fun observeReadinessAsOf(date: java.time.LocalDate): Flow<ReadinessScore?> = flowOf(null)
         override fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>> = flowOf(emptyList())
         override fun observeRecentVitals(days: Int): Flow<List<LatestVitals>> = flowOf(emptyList())
         override fun observeLatestVitals(): Flow<LatestVitals?> = flowOf(latest)
+        override fun observeVitalsForDay(localDate: String): Flow<LatestVitals?> = flowOf(latest)
         override suspend fun upsertRollup(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?, sleepDurationMinutes: Int?, deepSleepMinutes: Int?) = Unit
         override suspend fun upsertSample(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?) = Unit
     }
@@ -80,6 +84,7 @@ class InsightsPreviewViewModelTest {
         override suspend fun hasPermissions() = true
         override suspend fun fetchLatestBodyMetrics() = com.hellohealth.domain.model.BodyMetrics()
         override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(caloriesOut)
+        override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flowOf(caloriesOut)
         override fun getRequiredPermissions() = emptySet<String>()
         override fun getAvailability() = 0
         override fun getSettingsIntent(context: android.content.Context) = android.content.Intent()
@@ -92,7 +97,7 @@ class InsightsPreviewViewModelTest {
 
     @Test
     fun `counts zero when nothing is tracked today`() = runTest {
-        val vm = InsightsPreviewViewModel(FakeNutrition(emptySummary()), FakeEmotions(emptyList()), FakeVitals(null), FakeActivity(0.0))
+        val vm = InsightsPreviewViewModel(FakeNutrition(emptySummary()), FakeEmotions(emptyList()), FakeVitals(null), FakeActivity(0.0), SelectedDateHolder())
         vm.uiState.test {
             var s = awaitItem()
             while (s.isLoading) s = awaitItem()
@@ -111,6 +116,7 @@ class InsightsPreviewViewModelTest {
             FakeEmotions(listOf(mood())),
             FakeVitals(latestVitals()),
             FakeActivity(500.0),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var s = awaitItem()
@@ -128,6 +134,7 @@ class InsightsPreviewViewModelTest {
             FakeEmotions(listOf(mood())),
             FakeVitals(null),
             FakeActivity(0.0),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var s = awaitItem()

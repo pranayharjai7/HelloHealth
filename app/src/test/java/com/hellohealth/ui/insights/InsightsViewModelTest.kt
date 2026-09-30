@@ -1,5 +1,6 @@
 package com.hellohealth.ui.insights
 
+import com.hellohealth.core.date.SelectedDateHolder
 import app.cash.turbine.test
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.DailyStat
@@ -61,6 +62,7 @@ class InsightsViewModelTest {
         override suspend fun hasPermissions() = true
         override suspend fun fetchLatestBodyMetrics() = com.hellohealth.domain.model.BodyMetrics()
         override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(0.0)
+        override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flowOf(null)
         override fun getRequiredPermissions() = emptySet<String>()
         override fun getAvailability() = 0
         override fun getSettingsIntent(context: android.content.Context) = android.content.Intent()
@@ -88,9 +90,11 @@ class InsightsViewModelTest {
 
     private class FakeVitals(private val rollups: List<HealthMetricsData>) : VitalsRepository {
         override fun observeReadiness(): Flow<ReadinessScore?> = flowOf(null)
+        override fun observeReadinessAsOf(date: java.time.LocalDate): Flow<ReadinessScore?> = flowOf(null)
         override fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>> = flowOf(rollups)
         override fun observeRecentVitals(days: Int): Flow<List<LatestVitals>> = flowOf(emptyList())
         override fun observeLatestVitals(): Flow<LatestVitals?> = flowOf(null)
+        override fun observeVitalsForDay(localDate: String): Flow<LatestVitals?> = flowOf(null)
         override suspend fun upsertRollup(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?, sleepDurationMinutes: Int?, deepSleepMinutes: Int?) = Unit
         override suspend fun upsertSample(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?) = Unit
     }
@@ -116,6 +120,7 @@ class InsightsViewModelTest {
         FakeActivity(stats), FakeGoals(ActivityGoals()), FakeUser(FoodPreferences()),
         FakeEmotions(emotions), FakeVitals(rollups), FakeNutrition(nutrition),
         BuildWeeklyInsightsUseCase(), BuildCrossInsightsUseCase(ReadinessScoreCalculator()),
+        SelectedDateHolder(),
     )
 
     @Test

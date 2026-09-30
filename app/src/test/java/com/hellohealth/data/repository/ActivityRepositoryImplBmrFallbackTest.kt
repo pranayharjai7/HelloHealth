@@ -84,9 +84,11 @@ class ActivityRepositoryImplBmrFallbackTest {
     /** These tests exercise BMR fallback, not vitals — a no-op rollup sink keeps them focused. */
     private object NoopVitalsRepository : VitalsRepository {
         override fun observeReadiness(): Flow<ReadinessScore?> = flowOf(null)
+        override fun observeReadinessAsOf(date: java.time.LocalDate): Flow<ReadinessScore?> = flowOf(null)
         override fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>> = flowOf(emptyList())
         override fun observeRecentVitals(days: Int): Flow<List<LatestVitals>> = flowOf(emptyList())
         override fun observeLatestVitals(): Flow<LatestVitals?> = flowOf(null)
+        override fun observeVitalsForDay(localDate: String): Flow<LatestVitals?> = flowOf(null)
         override suspend fun upsertRollup(
             localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?,
             respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?,

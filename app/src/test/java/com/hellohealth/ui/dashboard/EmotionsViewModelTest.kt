@@ -1,6 +1,7 @@
 package com.hellohealth.ui.dashboard
 
 import app.cash.turbine.test
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.model.EmotionType
 import com.hellohealth.domain.repository.EmotionsRepository
@@ -35,7 +36,9 @@ class EmotionsViewModelTest {
         val deleted = mutableListOf<String>()
         override fun observeToday(): Flow<List<EmotionRecord>> = flowOf(today)
         override fun observeLatest(): Flow<EmotionRecord?> = flowOf(today.firstOrNull())
-        override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(emptyList())
+        // The VM now reads the per-day fields from observeWindow; serve the same list here. The VM
+        // sorts by timestamp DESC, so ordering of this fixture doesn't affect the tie-break assertions.
+        override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(today)
         override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String): String? {
             logged += emotion
             loggedSource = source
@@ -43,6 +46,8 @@ class EmotionsViewModelTest {
         }
         override suspend fun delete(id: String) { deleted += id }
     }
+
+    private fun vm(fake: FakeEmotions) = EmotionsViewModel(fake, SelectedDateHolder())
 
     private fun record(id: String, emotion: EmotionType, ts: Long) = EmotionRecord(
         id = id, userId = "u1", timestampUtcEpochMs = ts, tzOffsetMinutes = 0, emotion = emotion
@@ -55,7 +60,7 @@ class EmotionsViewModelTest {
             record("b", EmotionType.CALM, ts = 10_000),
             record("a", EmotionType.HAPPINESS, ts = 9_000)
         )
-        val vm = EmotionsViewModel(FakeEmotions(today))
+        val vm = vm(FakeEmotions(today))
         vm.uiState.test {
             val state = awaitItem()
             assertEquals(EmotionType.CALM, state.dominantToday)
@@ -71,7 +76,7 @@ class EmotionsViewModelTest {
             record("b", EmotionType.HAPPINESS, ts = 11_000),
             record("a", EmotionType.HAPPINESS, ts = 10_000)
         )
-        val vm = EmotionsViewModel(FakeEmotions(today))
+        val vm = vm(FakeEmotions(today))
         vm.uiState.test {
             assertEquals(EmotionType.HAPPINESS, awaitItem().dominantToday)
             cancelAndIgnoreRemainingEvents()
@@ -80,7 +85,7 @@ class EmotionsViewModelTest {
 
     @Test
     fun `no moods today yields null dominant`() = runTest {
-        val vm = EmotionsViewModel(FakeEmotions(emptyList()))
+        val vm = vm(FakeEmotions(emptyList()))
         vm.uiState.test {
             val state = awaitItem()
             assertEquals(null, state.dominantToday)
@@ -95,7 +100,7 @@ class EmotionsViewModelTest {
             record("b", EmotionType.CALM, ts = 10_000),
             record("a", EmotionType.HAPPINESS, ts = 9_000)
         )
-        val vm = EmotionsViewModel(FakeEmotions(today))
+        val vm = vm(FakeEmotions(today))
         vm.uiState.test {
             assertEquals(today, awaitItem().today)
             cancelAndIgnoreRemainingEvents()
@@ -105,7 +110,7 @@ class EmotionsViewModelTest {
     @Test
     fun `quickLog routes through logEmotion with the manual source and returns the new id`() = runTest {
         val fake = FakeEmotions(emptyList())
-        val vm = EmotionsViewModel(fake)
+        val vm = vm(fake)
         val id = vm.quickLog(EmotionType.HAPPINESS)
         assertEquals(listOf(EmotionType.HAPPINESS), fake.logged)
         assertEquals(EmotionRecord.SOURCE_MANUAL, fake.loggedSource)
@@ -116,7 +121,7 @@ class EmotionsViewModelTest {
     @Test
     fun `delete forwards the id to the repository`() = runTest {
         val fake = FakeEmotions(emptyList())
-        val vm = EmotionsViewModel(fake)
+        val vm = vm(fake)
         vm.delete("rec-42")
         assertEquals(listOf("rec-42"), fake.deleted)
     }
@@ -125,9 +130,43 @@ class EmotionsViewModelTest {
     fun `the id returned by quickLog round-trips through delete`() = runTest {
         // Mirrors the Dashboard Undo host: capture the id quickLog returns, then delete exactly it.
         val fake = FakeEmotions(emptyList())
-        val vm = EmotionsViewModel(fake)
+        val vm = vm(fake)
         val id = vm.quickLog(EmotionType.HAPPINESS)
         vm.delete(id!!)
         assertEquals(listOf("id-1"), fake.deleted)
+    }
+
+    @Test
+    fun `changing the selected date re-scopes the day fields to that day`() = runTest {
+        val today = java.time.LocalDate.now()
+        val pastDay = today.minusDays(2)
+        // Distinct data per day so a date switch produces an observable change.
+        val byDay = mapOf(
+            today.toEpochDay() to listOf(record("t", EmotionType.CALM, ts = 10_000)),
+            pastDay.toEpochDay() to listOf(
+                record("p1", EmotionType.HAPPINESS, ts = 5_000),
+                record("p2", EmotionType.HAPPINESS, ts = 4_000),
+            ),
+        )
+        val dayAware = object : EmotionsRepository {
+            override fun observeToday(): Flow<List<EmotionRecord>> = flowOf(byDay[today.toEpochDay()].orEmpty())
+            override fun observeLatest(): Flow<EmotionRecord?> = flowOf(byDay[today.toEpochDay()]?.firstOrNull())
+            override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> =
+                flowOf(byDay[startEpochDay].orEmpty())
+            override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String): String? = null
+            override suspend fun delete(id: String) {}
+        }
+        val holder = SelectedDateHolder()
+        val viewModel = EmotionsViewModel(dayAware, holder)
+        viewModel.uiState.test {
+            var state = awaitItem()
+            while (state.todayCount != 1) state = awaitItem()
+            assertEquals(EmotionType.CALM, state.dominantToday) // today
+
+            holder.set(pastDay)
+            while (state.todayCount != 2) state = awaitItem()
+            assertEquals(EmotionType.HAPPINESS, state.dominantToday) // past day re-scoped
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

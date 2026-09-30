@@ -1,6 +1,7 @@
 package com.hellohealth.ui.dashboard
 
 import app.cash.turbine.test
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.health.MacroTargets
 import com.hellohealth.domain.model.ActivityLevel
@@ -47,8 +48,10 @@ class NutritionViewModelTest {
 
     private val today: String = LocalDate.now().toString()
 
-    private class FakeNutrition(private val summary: NutritionDaySummary) : NutritionRepository {
-        override fun observeDaySummary(localDate: String): Flow<NutritionDaySummary> = flowOf(summary)
+    private class FakeNutrition(private val byDay: Map<String, NutritionDaySummary>) : NutritionRepository {
+        constructor(summary: NutritionDaySummary) : this(mapOf(summary.localDate to summary))
+        override fun observeDaySummary(localDate: String): Flow<NutritionDaySummary> =
+            flowOf(byDay[localDate] ?: NutritionDaySummary.empty(localDate))
         override fun observeEntries(localDate: String): Flow<List<FoodEntry>> = flowOf(emptyList())
         override suspend fun addQuickAdd(
             localDate: String, mealCategory: MealCategory, foodName: String, quantity: Double,
@@ -65,8 +68,9 @@ class NutritionViewModelTest {
         override suspend fun seedCatalogIfEmpty() = Unit
     }
 
-    /** Only [observeTodayCaloriesOut] matters here; the rest is unused by the VM. */
-    private class FakeActivity(private val caloriesOut: Double) : ActivityRepository {
+    /** Calories-out per ISO day; null (default) means "no snapshot for that day". */
+    private class FakeActivity(private val caloriesOutByDay: Map<String, Double?>) : ActivityRepository {
+        constructor(caloriesOut: Double) : this(mapOf(LocalDate.now().toString() to caloriesOut))
         override suspend fun fetchSummary(
             goals: com.hellohealth.domain.model.ActivityGoals, date: LocalDate, forceRefresh: Boolean,
         ) = com.hellohealth.domain.model.HealthSummary()
@@ -75,7 +79,8 @@ class NutritionViewModelTest {
         override suspend fun fetchWeeklyStats() = com.hellohealth.domain.model.WeeklyStats()
         override suspend fun hasPermissions() = false
         override suspend fun fetchLatestBodyMetrics() = com.hellohealth.domain.model.BodyMetrics()
-        override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(caloriesOut)
+        override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(caloriesOutByDay[LocalDate.now().toString()] ?: 0.0)
+        override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flowOf(caloriesOutByDay[localDate])
         override fun getRequiredPermissions() = emptySet<String>()
         override fun getAvailability() = 0
         override fun getSettingsIntent(context: android.content.Context) =
@@ -121,6 +126,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(1500.0, 100.0, 150.0, 50.0, waterMl = 500.0)),
             FakeActivity(caloriesOut = 2600.0),
             FakeProfile(fullProfile()),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             // WhileSubscribed replays the initial default first; take the first populated emission.
@@ -144,6 +150,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(3000.0, 0.0, 0.0, 0.0, waterMl = 0.0)),
             FakeActivity(caloriesOut = 2000.0),
             FakeProfile(fullProfile()),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var state = awaitItem()
@@ -165,6 +172,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(1500.0, 0.0, 0.0, 0.0, waterMl = 0.0)),
             FakeActivity(caloriesOut = 2000.0),
             FakeProfile(profile),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var state = awaitItem()
@@ -185,6 +193,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(1200.0, 20.0, 30.0, 10.0, waterMl = 250.0)),
             FakeActivity(caloriesOut = 1800.0),
             FakeProfile(UserProfile(hasOnboarded = true)),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var state = awaitItem()
@@ -206,6 +215,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(0.0, 0.0, 0.0, 0.0, waterMl = 0.0)),
             FakeActivity(caloriesOut = 0.0),
             FakeProfile(null),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             // Every source flow emits its empty/zero default, so the joined state is the zero state.
@@ -226,11 +236,43 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(500.0, 0.0, 0.0, 0.0, waterMl = 1500.0)),
             FakeActivity(caloriesOut = 100.0),
             FakeProfile(fullProfile()),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var state = awaitItem()
             while (!state.hasData) state = awaitItem()
             assertEquals("1.5 L", state.waterLabel)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `changing the selected date re-drives the card to that day`() = runTest {
+        val today = LocalDate.now()
+        val pastDay = today.minusDays(3)
+        val nutrition = FakeNutrition(
+            mapOf(
+                today.toString() to daySummary(1500.0, 100.0, 150.0, 50.0, waterMl = 500.0),
+                pastDay.toString() to daySummary(2000.0, 120.0, 200.0, 60.0, waterMl = 0.0),
+            )
+        )
+        // Today has a snapshot (2600 out); the past day has NO snapshot (null).
+        val activity = FakeActivity(mapOf(today.toString() to 2600.0, pastDay.toString() to null))
+        val holder = SelectedDateHolder()
+        val vm = NutritionViewModel(nutrition, activity, FakeProfile(fullProfile()), holder)
+
+        vm.uiState.test {
+            var state = awaitItem()
+            while (state.caloriesConsumed != 1500) state = awaitItem()
+            assertTrue("today's net is known", state.netKnown)
+            assertEquals("1100 kcal deficit", state.netLabel)
+
+            // Switch to the past day: card re-drives to that day's intake, and net dashes (no snapshot).
+            holder.set(pastDay)
+            while (state.caloriesConsumed != 2000) state = awaitItem()
+            assertFalse("past-day net is unknown (no calories-out snapshot)", state.netKnown)
+            assertEquals(NutritionUiState.DASH, state.netLabel)
+            assertEquals(120, state.proteinG)
             cancelAndIgnoreRemainingEvents()
         }
     }

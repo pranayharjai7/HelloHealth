@@ -170,6 +170,23 @@ class ActivityRepositoryImpl @Inject constructor(
         )
     }.flowOn(Dispatchers.IO)
 
+    override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(null)
+            return@flow
+        }
+        // Reactive per-day read off the snapshot rollup for the SELECTED day. Unlike the today-only
+        // variant, this emits null when there is no snapshot row for the day, so a date-aware card can
+        // DASH a missing day rather than showing a fake 0-kcal burn. caloriesOut = active + BMR.
+        emitAll(
+            snapshotDao.observeRange(userId, localDate, localDate).map { rows ->
+                val summary = rows.firstOrNull()?.let(SnapshotMapper::toDomain)?.summary
+                summary?.let { (it.activeCalories) + (it.basalMetabolicRate) }
+            }
+        )
+    }.flowOn(Dispatchers.IO)
+
     private suspend fun loadSnapshot(date: LocalDate): DailyHealthSnapshot? {
         val userId = sessionManager.getCurrentUserId() ?: return null
         return runCatching {
