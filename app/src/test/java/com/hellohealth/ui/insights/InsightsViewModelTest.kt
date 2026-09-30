@@ -1,5 +1,6 @@
 package com.hellohealth.ui.insights
 
+import com.hellohealth.core.date.SelectedDateHolder
 import app.cash.turbine.test
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.DailyStat
@@ -119,6 +120,7 @@ class InsightsViewModelTest {
         FakeActivity(stats), FakeGoals(ActivityGoals()), FakeUser(FoodPreferences()),
         FakeEmotions(emotions), FakeVitals(rollups), FakeNutrition(nutrition),
         BuildWeeklyInsightsUseCase(), BuildCrossInsightsUseCase(ReadinessScoreCalculator()),
+        SelectedDateHolder(),
     )
 
     @Test

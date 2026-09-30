@@ -17,12 +17,14 @@ class BuildWeeklyInsightsUseCase @Inject constructor() {
     operator fun invoke(
         weeklyStats: WeeklyStats,
         goals: ActivityGoals,
-        foodPreferences: FoodPreferences
+        foodPreferences: FoodPreferences,
+        asOf: LocalDate = LocalDate.now()
     ): WeeklyInsights {
         val stats = weeklyStats.dailyStats.sortedBy { it.date }
         if (stats.isEmpty()) return WeeklyInsights()
-        val today = LocalDate.now()
-        val completedStats = stats.filter { !it.date.isAfter(today) }
+        // "As of" the selected day: exclude days after it, so browsing a past day re-anchors the
+        // window's end. Defaults to today for the normal (non-date-scoped) call.
+        val completedStats = stats.filter { !it.date.isAfter(asOf) }
         if (completedStats.isEmpty()) return WeeklyInsights()
         val completedDays = completedStats.size
 

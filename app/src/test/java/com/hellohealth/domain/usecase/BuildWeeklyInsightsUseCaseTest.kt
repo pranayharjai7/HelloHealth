@@ -86,6 +86,30 @@ class BuildWeeklyInsightsUseCaseTest {
         assertEquals(45, insights.averageActiveMinutes)
     }
 
+    @Test
+    fun `asOf re-anchors the window, excluding days after the selected day`() {
+        val goals = ActivityGoals(steps = 6000, activeCalories = 400, activeMinutes = 45)
+        val stats = WeeklyStats(
+            dailyStats = listOf(
+                dailyStat(0, 9000, 500.0, 60, 450, 70),
+                dailyStat(1, 9000, 500.0, 60, 450, 70),
+                dailyStat(2, 1000, 100.0, 10, 300, 70),
+                dailyStat(3, 1000, 100.0, 10, 300, 70),
+                dailyStat(4, 1000, 100.0, 10, 300, 70),
+            )
+        )
+        // As of 2 days ago: today (0) and yesterday (1) are AFTER asOf and must be excluded, so only
+        // the three low days count -> 3 completed days, 0 step-goal days.
+        val insights = useCase(
+            weeklyStats = stats,
+            goals = goals,
+            foodPreferences = FoodPreferences(),
+            asOf = LocalDate.now().minusDays(2),
+        )
+        assertEquals(3, insights.completedDays)
+        assertEquals(0, insights.stepGoalDays)
+    }
+
     private fun dailyStat(
         daysAgo: Long,
         steps: Long,
