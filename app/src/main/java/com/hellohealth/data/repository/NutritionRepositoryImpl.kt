@@ -3,6 +3,7 @@ package com.hellohealth.data.repository
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.core.time.Timestamps
+import com.hellohealth.data.food.FoodCatalogAssetLoader
 import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.entities.CachedFoodEntity
@@ -32,15 +33,16 @@ import javax.inject.Singleton
  * with a warning — matching the VitalsRepositoryImpl / EmotionsRepositoryImpl contract so screens
  * never special-case a missing session.
  *
- * The `cached_foods` catalog is per-device and un-synced (like `exercises`): the bundled-asset seed
- * ([seedCatalogIfEmpty]) and the remote (USDA/Open Food Facts) augmentation of
- * [searchFoods]/[resolveBarcode] are layered on in later phases; the Room paths here always work
+ * The `cached_foods` catalog is per-device and un-synced (like `exercises`): [seedCatalogIfEmpty]
+ * loads the bundled asset once (count-gated), and the remote (USDA/Open Food Facts) augmentation of
+ * [searchFoods]/[resolveBarcode] is layered on in a later phase; the Room paths here always work
  * offline and never throw.
  */
 @Singleton
 class NutritionRepositoryImpl @Inject constructor(
     private val nutritionEntryDao: NutritionEntryDao,
     private val cachedFoodDao: CachedFoodDao,
+    private val catalogAssetLoader: FoodCatalogAssetLoader,
     private val sessionManager: SupabaseSessionManager,
     private val syncScheduler: SyncScheduler,
 ) : NutritionRepository {
@@ -209,11 +211,25 @@ class NutritionRepositoryImpl @Inject constructor(
     }
 
     override suspend fun seedCatalogIfEmpty() {
-        // Count-gated bundled-asset seed is wired in the catalog phase; the Room cache simply stays
-        // empty until then, and search/barcode + quick-add still work. Never throws.
+        // Count-gated + idempotent: seed the bundled common-foods asset only when the cache is empty,
+        // so this is safe to call on every launch (covers fresh installs and migrated users, and
+        // self-heals a prior partial seed). Never throws — a bad asset just leaves the cache empty
+        // and the app falls back to quick-add + remote search. Mirrors the exercise-catalog seed.
         val existing = runCatching { cachedFoodDao.count() }.getOrDefault(0)
         if (existing > 0) return
-        AppLogger.d(FeatureTag.NUTRITION, "catalog empty; bundled seed pending catalog phase")
+        catalogAssetLoader.load(Timestamps.nowEpochMs())
+            .onSuccess { foods ->
+                if (foods.isEmpty()) {
+                    AppLogger.w(FeatureTag.NUTRITION, "common-foods asset produced no rows; catalog stays empty")
+                    return
+                }
+                runCatching { cachedFoodDao.insertAll(foods) }
+                    .onSuccess { AppLogger.d(FeatureTag.NUTRITION, "seeded ${foods.size} catalog food(s)") }
+                    .onFailure { AppLogger.w(FeatureTag.NUTRITION, "catalog seed insert failed: ${it.message}") }
+            }
+            .onFailure {
+                AppLogger.w(FeatureTag.NUTRITION, "common-foods asset load failed: ${it.message}; catalog stays empty")
+            }
     }
 
     // --- helpers ---

@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import com.hellohealth.data.exercise.ExerciseSeeder
+import com.hellohealth.data.food.NutritionSeeder
 import com.hellohealth.data.vitals.VitalsBackfiller
 import com.hellohealth.ui.navigation.AppNavigation
 import com.hellohealth.ui.theme.HelloHealthTheme
@@ -38,6 +39,13 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var vitalsBackfiller: VitalsBackfiller
 
+    /**
+     * Seeds the read-only common-foods catalog on every launch (idempotent, count-gated). Same
+     * fresh-install-and-migrated-user rationale as [ExerciseSeeder] — see [NutritionSeeder].
+     */
+    @Inject
+    lateinit var nutritionSeeder: NutritionSeeder
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -52,6 +60,10 @@ class MainActivity : ComponentActivity() {
         // fire-and-forget contract: IO-dispatched, count-gated, runCatching-wrapped — never blocks
         // or crashes app start, and self-skips once the rollup is populated.
         lifecycleScope.launch { vitalsBackfiller.backfillIfNeeded() }
+
+        // Populate the common-foods catalog if empty. Same fire-and-forget contract as the exercise
+        // seed: IO-dispatched, count-gated, runCatching-wrapped — never blocks or crashes app start.
+        lifecycleScope.launch { nutritionSeeder.seedIfNeeded() }
 
         setContent {
             val themeViewModel: ThemeViewModel = hiltViewModel()

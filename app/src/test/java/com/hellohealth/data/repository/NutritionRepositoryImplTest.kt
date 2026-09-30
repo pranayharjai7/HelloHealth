@@ -7,6 +7,7 @@ import com.hellohealth.data.local.AppDatabase
 import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.entities.CachedFoodEntity
+import com.hellohealth.data.food.FoodCatalogAssetLoader
 import com.hellohealth.domain.model.nutrition.MealCategory
 import com.hellohealth.sync.SyncScheduler
 import kotlinx.coroutines.flow.first
@@ -47,9 +48,17 @@ class NutritionRepositoryImplTest {
     @After
     fun tearDown() = db.close()
 
-    private fun repo(userId: String?) = NutritionRepositoryImpl(
+    private fun repo(
+        userId: String?,
+        catalogResult: Result<List<CachedFoodEntity>> = Result.success(emptyList()),
+    ) = NutritionRepositoryImpl(
         nutritionEntryDao = entryDao,
         cachedFoodDao = foodDao,
+        catalogAssetLoader = object : FoodCatalogAssetLoader(
+            ApplicationProvider.getApplicationContext<Context>()
+        ) {
+            override fun load(nowEpochMs: Long): Result<List<CachedFoodEntity>> = catalogResult
+        },
         sessionManager = object : SupabaseSessionManager(null) {
             override suspend fun getCurrentUserId(): String? = userId
         },
@@ -173,5 +182,30 @@ class NutritionRepositoryImplTest {
         assertNull(repo.resolveBarcode(""))
         assertNull(repo.resolveBarcode("999"))
         assertEquals("Cola", repo.resolveBarcode("123")!!.name)
+    }
+
+    @Test
+    fun `seedCatalogIfEmpty inserts once and is idempotent`() = runTest {
+        val seed = listOf(
+            CachedFoodEntity(
+                id = "seed:banana", name = "Banana", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 89.0, lastRefreshedEpochMs = 1L,
+            )
+        )
+        val repo = repo("u1", catalogResult = Result.success(seed))
+
+        repo.seedCatalogIfEmpty()
+        assertEquals(1, foodDao.count())
+
+        // Second call is count-gated → no duplicate insert (still one row).
+        repo.seedCatalogIfEmpty()
+        assertEquals(1, foodDao.count())
+    }
+
+    @Test
+    fun `seedCatalogIfEmpty leaves the cache empty when the asset fails to load`() = runTest {
+        val repo = repo("u1", catalogResult = Result.failure(RuntimeException("bad asset")))
+        repo.seedCatalogIfEmpty()
+        assertEquals(0, foodDao.count())
     }
 }
