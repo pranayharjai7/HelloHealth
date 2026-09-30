@@ -3,6 +3,8 @@ package com.hellohealth.ui.navigation
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.navigation.NavType
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -325,6 +327,49 @@ fun AppNavigation(
             com.hellohealth.ui.vitals.VitalsTrendsScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.Nutrition.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) { backStackEntry ->
+            val viewModel: com.hellohealth.ui.nutrition.NutritionScreenViewModel = hiltViewModel()
+            // The barcode scanner returns the scanned code by setting it on THIS entry's saved state
+            // before popping back (the standard Compose Navigation result idiom). Observe it as state.
+            val scannedBarcode by backStackEntry.savedStateHandle
+                .getStateFlow<String?>("scanned_barcode", null)
+                .collectAsState()
+            com.hellohealth.ui.nutrition.NutritionScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onScanBarcode = { navController.navigate(Screen.BarcodeScan.route) },
+                scannedBarcode = scannedBarcode,
+                onScannedBarcodeConsumed = {
+                    backStackEntry.savedStateHandle["scanned_barcode"] = null
+                },
+            )
+        }
+
+        composable(
+            route = Screen.BarcodeScan.route,
+            enterTransition = { fadeIn(tween(300)) + slideInVertically(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(300)) + slideOutVertically(tween(350)) { it } }
+        ) {
+            com.hellohealth.ui.nutrition.BarcodeScanScreen(
+                onBack = { navController.popBackStack() },
+                onBarcodeScanned = { code ->
+                    // Hand the scanned code back to the Nutrition screen, then pop.
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle?.set("scanned_barcode", code)
+                    navController.popBackStack()
+                },
+                onEnterManually = { navController.popBackStack() },
             )
         }
 
