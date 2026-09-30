@@ -5,6 +5,7 @@ import com.hellohealth.data.repository.EmotionDetectionRepositoryImpl
 import com.hellohealth.data.repository.EmotionsRepositoryImpl
 import com.hellohealth.data.repository.ExerciseRepositoryImpl
 import com.hellohealth.data.repository.GoalsRepositoryImpl
+import com.hellohealth.data.repository.NutritionRepositoryImpl
 import com.hellohealth.data.repository.ProfileRepositoryImpl
 import com.hellohealth.data.repository.UserRepositoryImpl
 import com.hellohealth.data.repository.VitalsRepositoryImpl
@@ -14,6 +15,7 @@ import com.hellohealth.domain.repository.EmotionDetectionRepository
 import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.repository.ExerciseRepository
 import com.hellohealth.domain.repository.GoalsRepository
+import com.hellohealth.domain.repository.NutritionRepository
 import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.domain.repository.UserRepository
 import com.hellohealth.domain.repository.VitalsRepository
@@ -81,4 +83,10 @@ abstract class RepositoryModule {
     abstract fun bindVitalsRepository(
         vitalsRepositoryImpl: VitalsRepositoryImpl
     ): VitalsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindNutritionRepository(
+        nutritionRepositoryImpl: NutritionRepositoryImpl
+    ): NutritionRepository
 }
