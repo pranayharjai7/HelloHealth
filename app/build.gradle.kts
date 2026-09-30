@@ -35,6 +35,14 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProperties.getProperty("SUPABASE_ANON_KEY") ?: ""}\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_WEB_CLIENT_ID") ?: ""}\"")
         buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""}\"")
+        // USDA FoodData Central API key for remote food search (Nutrition). Falls back to the public
+        // rate-limited DEMO_KEY when unset in local.properties, so a fresh clone still builds and the
+        // remote search degrades gracefully rather than failing to compile.
+        buildConfigField(
+            "String",
+            "USDA_FDC_API_KEY",
+            "\"${localProperties.getProperty("USDA_FDC_API_KEY")?.takeIf { it.isNotBlank() } ?: "DEMO_KEY"}\""
+        )
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
     }
 
@@ -170,6 +178,19 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:gotrue-kt:$supabaseVersion")
     implementation("io.ktor:ktor-client-android:2.3.11")
 
+    // Remote food data (Nutrition): a dedicated Ktor client (separate from Supabase's) for the USDA
+    // FoodData Central + Open Food Facts JSON APIs. content-negotiation + kotlinx-json parse the
+    // responses; every call is runCatching-guarded so a 429/timeout/malformed body degrades to a
+    // defined fallback (empty results / null), never a crash.
+    val ktorVersion = "2.3.11"
+    implementation("io.ktor:ktor-client-core:$ktorVersion")
+    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+
+    // Barcode scanning (Nutrition): ML Kit reads EAN-13/UPC off the CameraX preview → Open Food
+    // Facts lookup. Bundled model so the first scan works offline of Play Services.
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
+
     // On-device emotion ML (P2): MTCNN face detection (TFLite) + emotion classifier (PyTorch Lite).
     // Coordinates ported verbatim from the MyEmotions source app.
     implementation("org.pytorch:pytorch_android_lite:2.1.0")
@@ -194,6 +215,7 @@ dependencies {
     testImplementation("app.cash.turbine:turbine:1.1.0")
     testImplementation("org.robolectric:robolectric:4.12.2")
     testImplementation("androidx.test:core:1.5.0")
+    testImplementation("io.ktor:ktor-client-mock:2.3.11")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

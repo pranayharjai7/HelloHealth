@@ -4,6 +4,8 @@ import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.core.time.Timestamps
 import com.hellohealth.data.food.FoodCatalogAssetLoader
+import com.hellohealth.data.food.OpenFoodFactsDataSource
+import com.hellohealth.data.food.UsdaFoodDataSource
 import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.entities.CachedFoodEntity
@@ -34,15 +36,18 @@ import javax.inject.Singleton
  * never special-case a missing session.
  *
  * The `cached_foods` catalog is per-device and un-synced (like `exercises`): [seedCatalogIfEmpty]
- * loads the bundled asset once (count-gated), and the remote (USDA/Open Food Facts) augmentation of
- * [searchFoods]/[resolveBarcode] is layered on in a later phase; the Room paths here always work
- * offline and never throw.
+ * loads the bundled asset once (count-gated), [searchFoods] augments the local cache with USDA +
+ * Open Food Facts results (caching each), and [resolveBarcode] falls back to an Open Food Facts
+ * lookup on a cache miss. Every remote path is `runCatching`-guarded in the data sources, so the
+ * Room paths here always work offline and never throw.
  */
 @Singleton
 class NutritionRepositoryImpl @Inject constructor(
     private val nutritionEntryDao: NutritionEntryDao,
     private val cachedFoodDao: CachedFoodDao,
     private val catalogAssetLoader: FoodCatalogAssetLoader,
+    private val usdaDataSource: UsdaFoodDataSource,
+    private val openFoodFactsDataSource: OpenFoodFactsDataSource,
     private val sessionManager: SupabaseSessionManager,
     private val syncScheduler: SyncScheduler,
 ) : NutritionRepository {
@@ -191,23 +196,43 @@ class NutritionRepositoryImpl @Inject constructor(
     override suspend fun searchFoods(query: String): List<CachedFoodEntity> {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return emptyList()
-        // Local cache only for now; the remote (USDA/OFF) augmentation is layered in later. Never throws.
-        return runCatching {
+
+        // Local cache first — always available, instant, offline. Never throws.
+        val local = runCatching {
             cachedFoodDao.search(buildLikePattern(trimmed), SEARCH_LIMIT)
         }.getOrElse {
-            AppLogger.w(FeatureTag.NUTRITION, "searchFoods failed: ${it.message}")
+            AppLogger.w(FeatureTag.NUTRITION, "local food search failed: ${it.message}")
             emptyList()
         }
+
+        // Remote augmentation (USDA + Open Food Facts). Each data source is runCatching-guarded and
+        // returns empty on any failure, so remote is purely additive — a network problem just leaves
+        // the local matches. Newly-seen remote rows are cached for the next (offline) search.
+        val remote = (usdaDataSource.search(trimmed) + openFoodFactsDataSource.search(trimmed))
+        if (remote.isNotEmpty()) {
+            runCatching { cachedFoodDao.insertAll(remote) }
+                .onFailure { AppLogger.w(FeatureTag.NUTRITION, "caching remote foods failed: ${it.message}") }
+        }
+
+        // Merge, de-duplicating by id (local wins on a tie), capped at the search limit.
+        return (local + remote).distinctBy { it.id }.take(SEARCH_LIMIT)
     }
 
     override suspend fun resolveBarcode(barcode: String): CachedFoodEntity? {
         val trimmed = barcode.trim()
         if (trimmed.isEmpty()) return null
-        // Local cache only for now; Open Food Facts lookup on a miss is layered in later. Never throws.
-        return runCatching { cachedFoodDao.getByBarcode(trimmed) }.getOrElse {
-            AppLogger.w(FeatureTag.NUTRITION, "resolveBarcode failed: ${it.message}")
+
+        // Cache first; on a miss consult Open Food Facts and cache the result. Never throws.
+        val cached = runCatching { cachedFoodDao.getByBarcode(trimmed) }.getOrElse {
+            AppLogger.w(FeatureTag.NUTRITION, "local barcode lookup failed: ${it.message}")
             null
         }
+        if (cached != null) return cached
+
+        val resolved = openFoodFactsDataSource.lookupBarcode(trimmed) ?: return null
+        runCatching { cachedFoodDao.upsert(resolved) }
+            .onFailure { AppLogger.w(FeatureTag.NUTRITION, "caching resolved barcode failed: ${it.message}") }
+        return resolved
     }
 
     override suspend fun seedCatalogIfEmpty() {

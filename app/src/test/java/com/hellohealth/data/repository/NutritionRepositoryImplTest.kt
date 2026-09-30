@@ -8,8 +8,13 @@ import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.entities.CachedFoodEntity
 import com.hellohealth.data.food.FoodCatalogAssetLoader
+import com.hellohealth.data.food.OpenFoodFactsDataSource
+import com.hellohealth.data.food.UsdaFoodDataSource
 import com.hellohealth.domain.model.nutrition.MealCategory
 import com.hellohealth.sync.SyncScheduler
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -51,6 +56,9 @@ class NutritionRepositoryImplTest {
     private fun repo(
         userId: String?,
         catalogResult: Result<List<CachedFoodEntity>> = Result.success(emptyList()),
+        usdaResults: List<CachedFoodEntity> = emptyList(),
+        offSearchResults: List<CachedFoodEntity> = emptyList(),
+        offBarcodeResult: CachedFoodEntity? = null,
     ) = NutritionRepositoryImpl(
         nutritionEntryDao = entryDao,
         cachedFoodDao = foodDao,
@@ -59,11 +67,21 @@ class NutritionRepositoryImplTest {
         ) {
             override fun load(nowEpochMs: Long): Result<List<CachedFoodEntity>> = catalogResult
         },
+        usdaDataSource = object : UsdaFoodDataSource(mockClient()) {
+            override suspend fun search(query: String, pageSize: Int): List<CachedFoodEntity> = usdaResults
+        },
+        openFoodFactsDataSource = object : OpenFoodFactsDataSource(mockClient()) {
+            override suspend fun search(query: String, pageSize: Int): List<CachedFoodEntity> = offSearchResults
+            override suspend fun lookupBarcode(barcode: String): CachedFoodEntity? = offBarcodeResult
+        },
         sessionManager = object : SupabaseSessionManager(null) {
             override suspend fun getCurrentUserId(): String? = userId
         },
         syncScheduler = syncScheduler,
     )
+
+    /** A stubbed Ktor client the fakes never actually call (all remote methods are overridden). */
+    private fun mockClient() = HttpClient(MockEngine { respond("") })
 
     private val today = "2026-09-30"
 
@@ -166,6 +184,36 @@ class NutritionRepositoryImplTest {
         val hits = repo.searchFoods("ban")
         assertEquals(1, hits.size)
         assertEquals("Banana", hits.single().name)
+    }
+
+    @Test
+    fun `search merges remote results and caches them for the next offline search`() = runTest {
+        val usdaHit = CachedFoodEntity(
+            id = "usda:111", name = "Greek Yogurt", source = "usda",
+            basisUnit = "per_100g", caloriesPer = 59.0, lastRefreshedEpochMs = 1L,
+        )
+        val repo = repo("u1", usdaResults = listOf(usdaHit))
+
+        val hits = repo.searchFoods("yogurt")
+        assertEquals(1, hits.size)
+        assertEquals("usda:111", hits.single().id)
+        // Remote hit is now cached, so it is findable locally.
+        assertEquals("Greek Yogurt", foodDao.getById("usda:111")?.name)
+    }
+
+    @Test
+    fun `resolveBarcode falls back to Open Food Facts on a cache miss and caches the result`() = runTest {
+        val offHit = CachedFoodEntity(
+            id = "off:555", name = "Sparkling Water", source = "off",
+            basisUnit = "per_100g", caloriesPer = 0.0, barcode = "555",
+            lastRefreshedEpochMs = 1L,
+        )
+        val repo = repo("u1", offBarcodeResult = offHit)
+
+        val resolved = repo.resolveBarcode("555")
+        assertEquals("Sparkling Water", resolved?.name)
+        // Cached for the next lookup.
+        assertEquals("off:555", foodDao.getByBarcode("555")?.id)
     }
 
     @Test
