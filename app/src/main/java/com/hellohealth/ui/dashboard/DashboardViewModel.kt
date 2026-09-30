@@ -6,6 +6,7 @@ import androidx.health.connect.client.HealthConnectClient
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.DailyHealthSnapshot
 import com.hellohealth.domain.model.HealthSummary
@@ -42,7 +43,8 @@ data class DashboardUiState(
 class DashboardViewModel @Inject constructor(
     private val activityRepository: ActivityRepository,
     private val authRepository: AuthRepository,
-    private val goalsRepository: GoalsRepository
+    private val goalsRepository: GoalsRepository,
+    private val selectedDateHolder: SelectedDateHolder
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -164,6 +166,8 @@ class DashboardViewModel @Inject constructor(
     fun selectDate(date: LocalDate) {
         if (date.isAfter(LocalDate.now())) return
         _uiState.update { it.copy(selectedDate = date) }
+        // Propagate to every date-aware card VM (nutrition/emotions/vitals/insights/coaching).
+        selectedDateHolder.set(date)
         loadHealthSummary(forceRefresh = _uiState.value.hasHealthPermissions && date == LocalDate.now())
     }
 
@@ -181,6 +185,7 @@ class DashboardViewModel @Inject constructor(
                 visibleMonth = YearMonth.from(today)
             )
         }
+        selectedDateHolder.set(today)
         if (monthChanged) {
             loadMonthSnapshots()
         }

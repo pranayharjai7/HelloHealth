@@ -37,6 +37,13 @@ interface ActivityRepository {
      * Emits 0.0 when there is no signed-in user or no snapshot for today; never throws.
      */
     fun observeTodayCaloriesOut(): Flow<Double>
+    /**
+     * "Calories out" (active + BMR) for a specific local day (ISO `yyyy-MM-dd`), as a reactive Flow,
+     * so a date-aware card can compute energy balance for the selected day. Emits **null** when there
+     * is no signed-in user OR no persisted snapshot for that day — the caller must dash (not zero) a
+     * missing day rather than imply a real 0-kcal burn. Never throws.
+     */
+    fun observeCaloriesOutForDay(localDate: String): Flow<Double?>
     fun getRequiredPermissions(): Set<String>
     fun getAvailability(): Int
     fun getSettingsIntent(context: Context): Intent

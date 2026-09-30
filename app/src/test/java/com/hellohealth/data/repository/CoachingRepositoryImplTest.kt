@@ -64,6 +64,7 @@ class CoachingRepositoryImplTest {
         override suspend fun hasPermissions() = true
         override suspend fun fetchLatestBodyMetrics() = BodyMetrics()
         override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(0.0)
+        override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flowOf(null)
         override fun getRequiredPermissions() = emptySet<String>()
         override fun getAvailability() = 0
         override fun getSettingsIntent(context: android.content.Context) = android.content.Intent()

@@ -80,6 +80,7 @@ class InsightsPreviewViewModelTest {
         override suspend fun hasPermissions() = true
         override suspend fun fetchLatestBodyMetrics() = com.hellohealth.domain.model.BodyMetrics()
         override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(caloriesOut)
+        override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flowOf(caloriesOut)
         override fun getRequiredPermissions() = emptySet<String>()
         override fun getAvailability() = 0
         override fun getSettingsIntent(context: android.content.Context) = android.content.Intent()

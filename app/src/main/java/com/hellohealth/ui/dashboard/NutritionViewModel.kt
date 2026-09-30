@@ -2,6 +2,7 @@ package com.hellohealth.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.health.MacroTargets
 import com.hellohealth.domain.model.nutrition.EnergyBalance
@@ -10,13 +11,13 @@ import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.NutritionRepository
 import com.hellohealth.domain.repository.ProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
-import java.time.LocalDate
-import java.time.ZoneId
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
@@ -38,6 +39,8 @@ data class NutritionUiState(
     val remainingLabel: String = DASH,
     val netLabel: String = DASH,
     val isDeficit: Boolean = true,
+    /** False when calories-out is unknown for the day (no snapshot) — the card hides the net chip. */
+    val netKnown: Boolean = false,
     val proteinG: Int = 0,
     val carbsG: Int = 0,
     val fatG: Int = 0,
@@ -63,15 +66,19 @@ data class NutritionUiState(
  * later profile change still refreshes the budget on the next collection. With no signed-in user the
  * repo flows emit their empty/zero defaults, so the state collapses to the zero state without any
  * special-casing.
+ *
+ * Date-aware: the reads are keyed on [SelectedDateHolder.selectedDate] via `flatMapLatest`, so
+ * changing the dashboard calendar re-drives this card for the selected day. Calories-out for a past
+ * day may be absent (no snapshot) — then the energy-balance net is unknown and dashed, not faked to 0.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class NutritionViewModel @Inject constructor(
     nutritionRepository: NutritionRepository,
     activityRepository: ActivityRepository,
     profileRepository: ProfileRepository,
+    selectedDateHolder: SelectedDateHolder,
 ) : ViewModel() {
-
-    private val today: String = LocalDate.now(ZoneId.systemDefault()).toString()
 
     // Budget + macro targets derived once from the profile. A sparse profile yields null budget
     // (BodyEnergy returns null), which the UI reads as "no target" rather than zero. Never throws.
@@ -83,12 +90,15 @@ class NutritionViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<NutritionUiState> =
-        combine(
-            nutritionRepository.observeDaySummary(today),
-            activityRepository.observeTodayCaloriesOut(),
-            budgetFlow,
-        ) { summary, caloriesOut, targets ->
-            toUiState(summary, caloriesOut, targets)
+        selectedDateHolder.selectedDate.flatMapLatest { date ->
+            val iso = date.toString()
+            combine(
+                nutritionRepository.observeDaySummary(iso),
+                activityRepository.observeCaloriesOutForDay(iso),
+                budgetFlow,
+            ) { summary, caloriesOut, targets ->
+                toUiState(summary, caloriesOut, targets)
+            }
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -97,14 +107,9 @@ class NutritionViewModel @Inject constructor(
 
     private fun toUiState(
         summary: NutritionDaySummary,
-        caloriesOut: Double,
+        caloriesOut: Double?,
         targets: BudgetTargets,
     ): NutritionUiState {
-        val balance = EnergyBalance(
-            caloriesIn = summary.caloriesConsumed,
-            caloriesOut = caloriesOut,
-            budget = targets.budget,
-        )
         val consumed = summary.caloriesConsumed
         val budget = targets.budget
         val progress = if (budget != null && budget > 0) {
@@ -112,9 +117,14 @@ class NutritionViewModel @Inject constructor(
         } else {
             0f
         }
-        val net = balance.net
+        // Net energy balance only when calories-out is known for the day; else dash (don't fake 0).
+        val netKnown = caloriesOut != null
+        val balance = caloriesOut?.let {
+            EnergyBalance(caloriesIn = consumed, caloriesOut = it, budget = budget)
+        }
+        val net = balance?.net ?: 0.0
         // A day with no entries, no burn, and no budget is the true zero state.
-        val hasData = consumed > 0.0 || caloriesOut > 0.0 || budget != null
+        val hasData = consumed > 0.0 || (caloriesOut ?: 0.0) > 0.0 || budget != null
 
         return NutritionUiState(
             caloriesConsumed = consumed.roundToInt(),
@@ -122,10 +132,11 @@ class NutritionViewModel @Inject constructor(
             caloriesProgress = progress,
             caloriesConsumedLabel = "${consumed.roundToInt()} kcal",
             budgetLabel = budget?.let { "$it kcal" } ?: NutritionUiState.DASH,
-            remainingLabel = balance.remainingToBudget?.let { "${it.roundToInt()} kcal left" }
+            remainingLabel = balance?.remainingToBudget?.let { "${it.roundToInt()} kcal left" }
                 ?: NutritionUiState.DASH,
-            netLabel = formatNet(net),
+            netLabel = if (netKnown) formatNet(net) else NutritionUiState.DASH,
             isDeficit = net >= 0,
+            netKnown = netKnown,
             proteinG = summary.proteinG.roundToInt(),
             carbsG = summary.carbsG.roundToInt(),
             fatG = summary.fatG.roundToInt(),
