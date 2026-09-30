@@ -1,6 +1,7 @@
 package com.hellohealth.ui.dashboard
 
 import app.cash.turbine.test
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.model.EmotionType
@@ -58,7 +59,8 @@ class InsightsPreviewViewModelTest {
     private class FakeEmotions(private val today: List<EmotionRecord>) : EmotionsRepository {
         override fun observeToday(): Flow<List<EmotionRecord>> = flowOf(today)
         override fun observeLatest(): Flow<EmotionRecord?> = flowOf(today.firstOrNull())
-        override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(emptyList())
+        // The preview VM now counts mood via observeWindow (per-day); serve the same fixture.
+        override fun observeWindow(startEpochDay: Long, endEpochDay: Long): Flow<List<EmotionRecord>> = flowOf(today)
         override suspend fun logEmotion(emotion: EmotionType, confidence: Double, source: String, note: String?, visibility: String): String? = null
         override suspend fun delete(id: String) = Unit
     }
@@ -95,7 +97,7 @@ class InsightsPreviewViewModelTest {
 
     @Test
     fun `counts zero when nothing is tracked today`() = runTest {
-        val vm = InsightsPreviewViewModel(FakeNutrition(emptySummary()), FakeEmotions(emptyList()), FakeVitals(null), FakeActivity(0.0))
+        val vm = InsightsPreviewViewModel(FakeNutrition(emptySummary()), FakeEmotions(emptyList()), FakeVitals(null), FakeActivity(0.0), SelectedDateHolder())
         vm.uiState.test {
             var s = awaitItem()
             while (s.isLoading) s = awaitItem()
@@ -114,6 +116,7 @@ class InsightsPreviewViewModelTest {
             FakeEmotions(listOf(mood())),
             FakeVitals(latestVitals()),
             FakeActivity(500.0),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var s = awaitItem()
@@ -131,6 +134,7 @@ class InsightsPreviewViewModelTest {
             FakeEmotions(listOf(mood())),
             FakeVitals(null),
             FakeActivity(0.0),
+            SelectedDateHolder(),
         )
         vm.uiState.test {
             var s = awaitItem()

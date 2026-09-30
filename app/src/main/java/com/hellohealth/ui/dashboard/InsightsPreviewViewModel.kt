@@ -2,32 +2,36 @@ package com.hellohealth.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.repository.NutritionRepository
 import com.hellohealth.domain.repository.VitalsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 /**
  * Lightweight VM for the dashboard's Insights entry card. It does NOT recompute the full weekly
  * cross-dimension series (that's the Insights screen's job) — it just counts how many of the four
- * dimensions have data TODAY, so the card can say "3 of 4 tracked today · see weekly trends" and
- * invite a tap. Cheap today-only reads; never throws (each guarded, missing → not counted).
+ * dimensions have data for the SELECTED day, so the card can say "N of 4 tracked" and invite a tap.
+ *
+ * Date-aware: reads are keyed on [SelectedDateHolder.selectedDate] via `flatMapLatest`, so the count
+ * reflects the day being browsed. All per-day reads; never throws (missing dimension → not counted).
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class InsightsPreviewViewModel @Inject constructor(
-    private val nutritionRepository: NutritionRepository,
-    private val emotionsRepository: EmotionsRepository,
-    private val vitalsRepository: VitalsRepository,
-    private val activityRepository: ActivityRepository,
+    nutritionRepository: NutritionRepository,
+    emotionsRepository: EmotionsRepository,
+    vitalsRepository: VitalsRepository,
+    activityRepository: ActivityRepository,
+    selectedDateHolder: SelectedDateHolder,
 ) : ViewModel() {
 
     data class InsightsPreviewUiState(
@@ -36,33 +40,25 @@ class InsightsPreviewViewModel @Inject constructor(
         val isLoading: Boolean = true,
     )
 
-    private val _uiState = MutableStateFlow(InsightsPreviewUiState())
-    val uiState: StateFlow<InsightsPreviewUiState> = _uiState.asStateFlow()
-
-    init { refresh() }
-
-    fun refresh() {
-        viewModelScope.launch {
-            val today = LocalDate.now(ZoneId.systemDefault()).toString()
-            var tracked = 0
-
-            // Nutrition — any calories logged today.
-            runCatching { nutritionRepository.observeDaySummary(today).first() }
-                .getOrNull()?.let { if (it.caloriesConsumed > 0 || it.waterMl > 0) tracked++ }
-
-            // Mood — any log today.
-            runCatching { emotionsRepository.observeToday().first() }
-                .getOrDefault(emptyList()).let { if (it.isNotEmpty()) tracked++ }
-
-            // Vitals — a latest rollup exists.
-            runCatching { vitalsRepository.observeLatestVitals().first() }
-                .getOrNull()?.let { tracked++ }
-
-            // Activity — any calories-out today.
-            runCatching { activityRepository.observeTodayCaloriesOut().first() }
-                .getOrDefault(0.0).let { if (it > 0) tracked++ }
-
-            _uiState.value = InsightsPreviewUiState(dimensionsTracked = tracked, isLoading = false)
-        }
-    }
+    val uiState: StateFlow<InsightsPreviewUiState> =
+        selectedDateHolder.selectedDate.flatMapLatest { date ->
+            val iso = date.toString()
+            combine(
+                nutritionRepository.observeDaySummary(iso),
+                emotionsRepository.observeWindow(date.toEpochDay(), date.toEpochDay()),
+                vitalsRepository.observeVitalsForDay(iso),
+                activityRepository.observeCaloriesOutForDay(iso),
+            ) { nutrition, moods, vitals, caloriesOut ->
+                var tracked = 0
+                if (nutrition.caloriesConsumed > 0 || nutrition.waterMl > 0) tracked++
+                if (moods.isNotEmpty()) tracked++
+                if (vitals != null) tracked++
+                if ((caloriesOut ?: 0.0) > 0) tracked++
+                InsightsPreviewUiState(dimensionsTracked = tracked, isLoading = false)
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = InsightsPreviewUiState(),
+        )
 }
