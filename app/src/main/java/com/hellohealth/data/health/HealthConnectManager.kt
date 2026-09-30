@@ -121,7 +121,16 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        // P3 Vitals & Recovery — the gate keys on permission GRANTED, not data present. These are
+        // standard record-read permissions (unlike per-session READ_EXERCISE_ROUTES, deliberately
+        // kept OUT of this set): once granted they stay granted, and a device that simply lacks a
+        // sensor degrades to null via safeFetch — so granted-but-empty is NOT stuck "disconnected".
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        HealthPermission.getReadPermission(BodyTemperatureRecord::class),
+        HealthPermission.getReadPermission(HydrationRecord::class)
     )
 
     suspend fun hasAllPermissions(): Boolean {

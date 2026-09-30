@@ -2,8 +2,13 @@ package com.hellohealth.data.health
 
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.BodyTemperatureRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.HydrationRecord
+import androidx.health.connect.client.records.RespiratoryRateRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertFalse
@@ -33,7 +38,13 @@ class HealthConnectManagerTest {
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        // P3 vitals perms are part of the gate now (all standing record-read permissions).
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        HealthPermission.getReadPermission(BodyTemperatureRecord::class),
+        HealthPermission.getReadPermission(HydrationRecord::class)
     )
 
     @Test
@@ -51,6 +62,17 @@ class HealthConnectManagerTest {
     fun `missing an essential permission is not connected`() {
         assertFalse(
             manager.isConnected(essentialGranted - HealthPermission.getReadPermission(StepsRecord::class))
+        )
+    }
+
+    @Test
+    fun `denying a single vitals permission drops the gate`() {
+        // Decision #4: the five vitals perms join the gate. Denying any one correctly reports
+        // not-connected (a denied perm is a real disconnect, unlike granted-but-empty data).
+        assertFalse(
+            manager.isConnected(
+                essentialGranted - HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class)
+            )
         )
     }
 
