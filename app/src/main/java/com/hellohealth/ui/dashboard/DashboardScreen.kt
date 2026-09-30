@@ -47,6 +47,7 @@ import com.hellohealth.ui.auth.AuthViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.CoachingCard
+import com.hellohealth.ui.dashboard.components.InsightsCard
 import com.hellohealth.ui.dashboard.components.LogMoodSheet
 import com.hellohealth.ui.dashboard.components.NutritionCard
 import com.hellohealth.ui.dashboard.components.VitalsCard
@@ -92,6 +93,8 @@ fun DashboardScreen(
     val nutritionState by nutritionViewModel.uiState.collectAsState()
     val coachingViewModel: CoachingViewModel = hiltViewModel()
     val coachingState by coachingViewModel.uiState.collectAsState()
+    val insightsPreviewViewModel: InsightsPreviewViewModel = hiltViewModel()
+    val insightsPreviewState by insightsPreviewViewModel.uiState.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -388,6 +391,13 @@ fun DashboardScreen(
                 CoachingCard(
                     state = coachingState,
                     onClick = onNavigateToCoaching
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                InsightsCard(
+                    state = insightsPreviewState,
+                    onClick = onNavigateToInsights
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
