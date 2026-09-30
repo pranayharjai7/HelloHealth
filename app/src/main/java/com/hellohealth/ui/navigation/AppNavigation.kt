@@ -140,8 +140,7 @@ fun AppNavigation(
                     navController.navigate(Screen.EmotionCapture.createRoute(startInGallery = true))
                 },
                 onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) },
-                // Wired to the trends route in Step 10; a no-op keeps Step 9 compiling.
-                onNavigateToVitalsTrends = { }
+                onNavigateToVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) }
             )
         }
         
@@ -311,6 +310,20 @@ fun AppNavigation(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
                 onOpenInsights = { navController.navigate(Screen.EmotionInsights.route) }
+            )
+        }
+
+        composable(
+            route = Screen.VitalsTrends.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: com.hellohealth.ui.vitals.VitalsTrendsViewModel = hiltViewModel()
+            com.hellohealth.ui.vitals.VitalsTrendsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -496,6 +509,7 @@ sealed class Screen(val route: String) {
     }
     object EmotionInsights : Screen("emotion_insights")
     object MoodTimeline : Screen("mood_timeline")
+    object VitalsTrends : Screen("vitals_trends")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")

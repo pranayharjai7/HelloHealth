@@ -30,6 +30,12 @@ interface VitalsRepository {
     fun observeRecentRollups(days: Int): Flow<List<HealthMetricsData>>
 
     /**
+     * Recent daily rollups as full [LatestVitals] (all six vitals), ascending by date — feeds the
+     * trends screen's per-metric charts. Empty when no user / no data.
+     */
+    fun observeRecentVitals(days: Int): Flow<List<LatestVitals>>
+
+    /**
      * The most recent day's raw vitals for the dashboard card's chips, or null when there is no
      * signed-in user or no rollup yet. Nullable fields render as dashes in the UI.
      */

@@ -87,19 +87,23 @@ class VitalsRepositoryImpl @Inject constructor(
             return@flow
         }
         emitAll(
-            vitalsSampleDao.observeLatestRollup(userId).map { row ->
-                row?.let {
-                    LatestVitals(
-                        localDate = it.localDate,
-                        restingHeartRate = it.restingHeartRate,
-                        hrvRmssd = it.hrvRmssd,
-                        respiratoryRate = it.respiratoryRate,
-                        bodyTemperature = it.bodyTemperature,
-                        hydrationMl = it.hydrationMl,
-                        spo2 = it.spo2
-                    )
-                }
-            }
+            vitalsSampleDao.observeLatestRollup(userId).map { row -> row?.toLatestVitals() }
+        )
+    }.flowOn(Dispatchers.IO)
+
+    override fun observeRecentVitals(days: Int): Flow<List<LatestVitals>> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(emptyList())
+            return@flow
+        }
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val startDate = today.minusDays(days.toLong()).toString()
+        val endDate = today.toString()
+        emitAll(
+            vitalsSampleDao.observeRollupsForUser(userId, startDate, endDate)
+                .map { rows -> rows.map { it.toLatestVitals() } }
         )
     }.flowOn(Dispatchers.IO)
 
@@ -201,6 +205,16 @@ class VitalsRepositoryImpl @Inject constructor(
         restingHeartRate = restingHeartRate,
         sleepDurationMinutes = sleepDurationMinutes,
         deepSleepMinutes = deepSleepMinutes
+    )
+
+    private fun VitalsSampleEntity.toLatestVitals() = LatestVitals(
+        localDate = localDate,
+        restingHeartRate = restingHeartRate,
+        hrvRmssd = hrvRmssd,
+        respiratoryRate = respiratoryRate,
+        bodyTemperature = bodyTemperature,
+        hydrationMl = hydrationMl,
+        spo2 = spo2
     )
 
     companion object {
