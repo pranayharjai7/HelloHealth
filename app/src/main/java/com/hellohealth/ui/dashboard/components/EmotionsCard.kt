@@ -61,10 +61,13 @@ fun EmotionsCard(
     dominantToday: EmotionType?,
     todayCount: Int,
     today: List<EmotionRecord>,
+    selectedDate: java.time.LocalDate = java.time.LocalDate.now(),
     onLog: () -> Unit,
     onOpenTimeline: () -> Unit
 ) {
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val isToday = selectedDate == java.time.LocalDate.now()
+    val dayWord = if (isToday) "today" else "that day"
 
     // Press feedback: spring the card down on touch and release. Compose's ripple (from .clickable)
     // still plays on top.
@@ -121,10 +124,11 @@ fun EmotionsCard(
                         color = onSurfaceColor
                     )
                     val subtitle = when {
-                        latest == null -> "Tap to log your first mood"
+                        todayCount == 0 && latest == null -> "Tap to log your first mood"
+                        todayCount == 0 -> if (isToday) "No mood logged today" else "No mood logged that day"
                         todayCount > 1 && dominantToday != null ->
-                            "Today mostly ${dominantToday.displayLabel().lowercase()} · $todayCount logged"
-                        else -> "Logged today"
+                            "${if (isToday) "Today" else "That day"} mostly ${dominantToday.displayLabel().lowercase()} · $todayCount logged"
+                        else -> "Logged $dayWord"
                     }
                     Text(
                         text = subtitle,
