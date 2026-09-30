@@ -21,5 +21,6 @@ enum class FeatureTag(val tag: String) {
     WORKOUT_DAY("HH.WorkoutDay"),
     PLANNED_EXERCISE("HH.PlannedExercise"),
     VITALS("HH.Vitals"),
-    NUTRITION("HH.Nutrition")
+    NUTRITION("HH.Nutrition"),
+    COACHING("HH.Coaching")
 }

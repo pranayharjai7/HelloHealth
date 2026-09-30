@@ -43,6 +43,12 @@ android {
             "USDA_FDC_API_KEY",
             "\"${localProperties.getProperty("USDA_FDC_API_KEY")?.takeIf { it.isNotBlank() } ?: "DEMO_KEY"}\""
         )
+        // AI Coaching LLM keys (Nutrition/AI). Gemini is the default provider; OpenRouter is the
+        // automatic fallback when Gemini fails/quota-limits. Blank when unset — the CoachingProvider
+        // then skips that provider and degrades to the rule-based local coach, so a fresh clone builds
+        // and the feature never crashes for lack of a key.
+        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY") ?: ""}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${localProperties.getProperty("OPENROUTER_API_KEY") ?: ""}\"")
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
     }
 
