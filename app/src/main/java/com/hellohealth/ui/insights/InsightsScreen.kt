@@ -153,6 +153,8 @@ fun InsightsScreen(
                         color = Color(0xFF5C6BC0)
                     )
 
+                    CrossInsightsSection(uiState.crossInsights)
+
                     InsightCardsSection(uiState.weeklyInsights)
                 }
             
