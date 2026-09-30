@@ -17,14 +17,16 @@ data class ChatMessage(
 
 /**
  * A generation request: an optional [system] instruction, the ordered conversation [messages], and
- * generation knobs. [maxOutputTokens] is kept modest — coaching replies are short, and a cap bounds
- * both latency and cost.
+ * generation knobs. [maxOutputTokens] is generous on purpose: `gemini-flash-latest` is a *thinking*
+ * model that spends output-token budget on internal reasoning before emitting any text, so a low cap
+ * makes it return `finishReason=MAX_TOKENS` with EMPTY content (verified on-device). 2048 leaves room
+ * for the reasoning plus the short coaching reply; the answer itself stays brief via the prompt.
  */
 data class ChatRequest(
     val system: String?,
     val messages: List<ChatMessage>,
     val temperature: Double = 0.7,
-    val maxOutputTokens: Int = 512,
+    val maxOutputTokens: Int = 2048,
 )
 
 /**
