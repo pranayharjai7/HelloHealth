@@ -2,14 +2,17 @@ package com.hellohealth.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.model.EmotionRecord
 import com.hellohealth.domain.model.EmotionType
 import com.hellohealth.domain.repository.EmotionsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -18,34 +21,48 @@ data class EmotionsCardUiState(
     val latest: EmotionRecord? = null,
     val dominantToday: EmotionType? = null,
     val todayCount: Int = 0,
-    /** Today's live logs, newest first — backs the card's "shape of my day" mood-dot strip. */
+    /** The selected day's live logs, newest first — backs the card's "shape of my day" mood-dot strip. */
     val today: List<EmotionRecord> = emptyList()
 )
 
 /**
  * Feeds the dashboard [com.hellohealth.ui.dashboard.components.EmotionsCard]. Kept separate from
  * [DashboardViewModel] (which owns the Health Connect flow) so the mood surface stays a small,
- * self-contained concern. Latest + today's dominant are derived live from the same repository the
- * theme reads, so the card and the app tint always agree.
+ * self-contained concern.
+ *
+ * Date-aware: the per-day fields ([EmotionsCardUiState.dominantToday]/[todayCount]/[today]) track the
+ * dashboard's [SelectedDateHolder] via `observeWindow(day, day)`, so browsing to a past day shows
+ * THAT day's moods. [latest] is deliberately NOT re-scoped — it stays the user's most-recent mood so
+ * the app's theme tint reflects how they feel *now*, not whatever day they happen to be viewing.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class EmotionsViewModel @Inject constructor(
-    private val emotionsRepository: EmotionsRepository
+    private val emotionsRepository: EmotionsRepository,
+    private val selectedDateHolder: SelectedDateHolder,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EmotionsCardUiState())
     val uiState: StateFlow<EmotionsCardUiState> = _uiState.asStateFlow()
 
     init {
+        // Latest mood drives the theme tint — always "now", independent of the selected date.
         viewModelScope.launch {
             emotionsRepository.observeLatest().collectLatest { latest ->
                 _uiState.update { it.copy(latest = latest) }
             }
         }
+        // The day fields track the selected date (observeWindow of a single day).
         viewModelScope.launch {
-            emotionsRepository.observeToday().collectLatest { today ->
+            selectedDateHolder.selectedDate.flatMapLatest { date ->
+                val epochDay = date.toEpochDay()
+                emotionsRepository.observeWindow(epochDay, epochDay)
+            }.collectLatest { windowLogs ->
+                // observeWindow returns ASC (oldest-first); the card + dominantOf expect newest-first
+                // (the tie-break favors the most recent mood), matching the prior observeToday contract.
+                val logs = windowLogs.sortedByDescending { it.timestampUtcEpochMs }
                 _uiState.update {
-                    it.copy(dominantToday = dominantOf(today), todayCount = today.size, today = today)
+                    it.copy(dominantToday = dominantOf(logs), todayCount = logs.size, today = logs)
                 }
             }
         }
