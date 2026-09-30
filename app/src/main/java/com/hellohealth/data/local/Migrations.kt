@@ -421,3 +421,17 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
         )
     }
 }
+
+/**
+ * v11 -> v12: add the `aiCoachingEnabled` consent flag to `profile` (AI Coaching phase).
+ *
+ * Additive `ALTER TABLE ADD COLUMN`, the exact precedent being MIGRATION_6_7 (`isDynamicTheme`).
+ * SQLite appends the column, matching [com.hellohealth.data.local.entities.ProfileEntity] where
+ * `aiCoachingEnabled` is declared last. NOT NULL with DEFAULT 0 (Boolean false) backfills existing
+ * rows to the feature's default-OFF (opt-in) behavior. Validated against 12.json by MigrationTest.
+ */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `profile` ADD COLUMN `aiCoachingEnabled` INTEGER NOT NULL DEFAULT 0")
+    }
+}

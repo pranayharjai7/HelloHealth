@@ -66,7 +66,8 @@ class ProfileRepositoryImpl @Inject constructor(
                 targetRateKgPerWeek = profile.targetRateKgPerWeek,
                 unitPreference = profile.unitPreference.name,
                 hasOnboarded = profile.hasOnboarded,
-                isDynamicTheme = profile.isDynamicTheme
+                isDynamicTheme = profile.isDynamicTheme,
+                aiCoachingEnabled = profile.aiCoachingEnabled
             )
         )
         AppLogger.d(FeatureTag.PROFILE, "profile written locally; requesting sync")
@@ -95,6 +96,27 @@ class ProfileRepositoryImpl @Inject constructor(
         emitAll(profileDao.observe(userId).map { it?.isDynamicTheme ?: true })
     }.flowOn(Dispatchers.IO)
 
+    override suspend fun setAiCoachingEnabled(enabled: Boolean) {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            AppLogger.w(FeatureTag.PROFILE, "setAiCoachingEnabled with no signed-in user; dropping write")
+            return
+        }
+        // Load-then-copy, same single-owner discipline as setDynamicTheme.
+        val current = profileDao.get(userId)?.toDomain() ?: UserProfile()
+        upsertProfile(current.copy(aiCoachingEnabled = enabled))
+    }
+
+    override fun observeAiCoachingEnabled(): Flow<Boolean> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(false)
+            return@flow
+        }
+        // No row yet -> default-off (opt-in); a present row reports its stored flag.
+        emitAll(profileDao.observe(userId).map { it?.aiCoachingEnabled ?: false })
+    }.flowOn(Dispatchers.IO)
+
     private fun ProfileEntity.toDomain() = UserProfile(
         displayName = displayName,
         gender = gender.toEnumOrNull<Gender>(),
@@ -107,7 +129,8 @@ class ProfileRepositoryImpl @Inject constructor(
         targetRateKgPerWeek = targetRateKgPerWeek,
         unitPreference = unitPreference.toEnumOrNull<UnitPreference>() ?: UnitPreference.METRIC,
         hasOnboarded = hasOnboarded,
-        isDynamicTheme = isDynamicTheme
+        isDynamicTheme = isDynamicTheme,
+        aiCoachingEnabled = aiCoachingEnabled
     )
 }
 

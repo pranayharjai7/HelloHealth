@@ -41,6 +41,8 @@ class ThemeViewModelTest {
         override suspend fun upsertProfile(profile: UserProfile) {}
         override suspend fun setDynamicTheme(enabled: Boolean) {}
         override fun observeDynamicTheme(): Flow<Boolean> = flowOf(dynamicOn)
+        override suspend fun setAiCoachingEnabled(enabled: Boolean) {}
+        override fun observeAiCoachingEnabled(): Flow<Boolean> = flowOf(false)
     }
 
     private fun record(emotion: EmotionType) = EmotionRecord(

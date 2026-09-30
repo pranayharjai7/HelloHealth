@@ -74,6 +74,10 @@ class OnboardingViewModelTest {
             upsertProfile((saved ?: UserProfile()).copy(isDynamicTheme = enabled))
         }
         override fun observeDynamicTheme() = flowOf(saved?.isDynamicTheme ?: true)
+        override suspend fun setAiCoachingEnabled(enabled: Boolean) {
+            upsertProfile((saved ?: UserProfile()).copy(aiCoachingEnabled = enabled))
+        }
+        override fun observeAiCoachingEnabled() = flowOf(saved?.aiCoachingEnabled ?: false)
     }
 
     private class FakeGoalsRepository : GoalsRepository {

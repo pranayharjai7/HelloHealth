@@ -1,6 +1,7 @@
 package com.hellohealth.di
 
 import com.hellohealth.data.repository.AuthRepositoryImpl
+import com.hellohealth.data.repository.CoachingRepositoryImpl
 import com.hellohealth.data.repository.EmotionDetectionRepositoryImpl
 import com.hellohealth.data.repository.EmotionsRepositoryImpl
 import com.hellohealth.data.repository.ExerciseRepositoryImpl
@@ -11,6 +12,7 @@ import com.hellohealth.data.repository.UserRepositoryImpl
 import com.hellohealth.data.repository.VitalsRepositoryImpl
 import com.hellohealth.data.repository.WorkoutPlanRepositoryImpl
 import com.hellohealth.domain.repository.AuthRepository
+import com.hellohealth.domain.repository.CoachingRepository
 import com.hellohealth.domain.repository.EmotionDetectionRepository
 import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.repository.ExerciseRepository
@@ -89,4 +91,10 @@ abstract class RepositoryModule {
     abstract fun bindNutritionRepository(
         nutritionRepositoryImpl: NutritionRepositoryImpl
     ): NutritionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCoachingRepository(
+        coachingRepositoryImpl: CoachingRepositoryImpl
+    ): CoachingRepository
 }

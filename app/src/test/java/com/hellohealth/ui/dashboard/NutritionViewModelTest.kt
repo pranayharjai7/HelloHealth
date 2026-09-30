@@ -87,6 +87,8 @@ class NutritionViewModelTest {
         override suspend fun upsertProfile(profile: UserProfile) = Unit
         override suspend fun setDynamicTheme(enabled: Boolean) = Unit
         override fun observeDynamicTheme(): Flow<Boolean> = flowOf(true)
+        override suspend fun setAiCoachingEnabled(enabled: Boolean) = Unit
+        override fun observeAiCoachingEnabled(): Flow<Boolean> = flowOf(false)
     }
 
     /** A complete profile whose budget/macros are computable (drives the non-DASH path). */

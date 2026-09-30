@@ -16,4 +16,16 @@ interface ProfileRepository {
      * a missing profile.
      */
     fun observeDynamicTheme(): Flow<Boolean>
+
+    /**
+     * Set the AI Coaching consent flag, preserving all other profile fields (load-then-copy). When
+     * false (the default), no coaching data leaves the device. Mirrors [setDynamicTheme].
+     */
+    suspend fun setAiCoachingEnabled(enabled: Boolean)
+
+    /**
+     * Reactive read of the AI Coaching consent flag. Emits false (default-off) when no profile row
+     * exists yet or no user is signed in, so the coaching layer stays disabled until explicit opt-in.
+     */
+    fun observeAiCoachingEnabled(): Flow<Boolean>
 }
