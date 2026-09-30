@@ -18,7 +18,10 @@ data class HealthSummary(
     val weight: Double? = null,
     val height: Double? = null,
     val bodyFat: Double? = null,
-    
+    val leanBodyMassKg: Double? = null,
+    val boneMassKg: Double? = null,
+    val bodyWaterMassKg: Double? = null,
+
     // Heart & Vitals
     val heartRateAvg: Int? = null,
     val oxygenSaturation: Double? = null,
