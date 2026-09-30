@@ -375,6 +375,20 @@ fun AppNavigation(
         }
 
         composable(
+            route = Screen.Coaching.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: com.hellohealth.ui.coaching.CoachingScreenViewModel = hiltViewModel()
+            com.hellohealth.ui.coaching.CoachingScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
             route = Screen.ActivitySettings.route,
             enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
             exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
