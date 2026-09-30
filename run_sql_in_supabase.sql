@@ -433,3 +433,76 @@ GRANT SELECT, INSERT, UPDATE ON public.vitals_samples TO authenticated;
 -- Refresh PostgREST's schema cache so vitals_samples is visible to the API before
 -- the client's first push. Harmless to run repeatedly.
 NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- P5 — Nutrition (HealthifyMe-style): public.nutrition_entries
+-- ----------------------------------------------------------------------------
+-- DROP LEGACY FIRST. The pre-existing `foods` + `food_logs` tables (0 rows, no
+-- Kotlin references anywhere in the app) predate the sync contract and are not
+-- RLS/trigger-compliant. They are replaced wholesale by nutrition_entries, so
+-- drop them before creating the new table. CASCADE clears any dependent objects.
+DROP TABLE IF EXISTS public.food_logs CASCADE;
+DROP TABLE IF EXISTS public.foods CASCADE;
+
+-- NEW table — the per-user food + water log, multi-row per user, conflict key
+-- `id` (a client-generated random UUID string), matching
+-- NutritionEntrySyncer.NutritionEntryDto 1:1 (snake_case). A single table carries
+-- both kinds via the `kind` discriminator ('food'|'water') — a water row sets
+-- water_ml + food_name='Water' + entry_method='water' with null macros, mirroring
+-- the vitals_samples `kind` pattern (no separate water table). Macros
+-- (protein/carbs/fat/fibre grams) and water_ml are nullable — a quick-add may
+-- carry only calories, and a water row carries no macros. updated_at/deleted_at
+-- carry the same LWW-clock + tombstone semantics as the other tables; the
+-- set_updated_at trigger stamps updated_at on UPDATE.
+--
+-- The read-only USDA/OFF food catalog (cached_foods) is Room-only, per-device and
+-- un-synced (like `exercises`) — it has NO Supabase table and NO syncer by design.
+--
+-- DEPLOY ORDER (critical): the client ALWAYS pushes every column, so this block
+-- must run — and PostgREST must reload — BEFORE shipping the Nutrition client, or
+-- every nutrition upsert returns PGRST204 and the whole push fails.
+CREATE TABLE IF NOT EXISTS public.nutrition_entries (
+    id             text PRIMARY KEY,
+    user_id        text NOT NULL,
+    local_date     text NOT NULL,
+    timestamp_utc  timestamptz NOT NULL,
+    tz_offset      integer NOT NULL DEFAULT 0,
+    kind           text NOT NULL,
+    meal_category  text,
+    food_id        text,
+    food_name      text NOT NULL,
+    quantity       double precision NOT NULL,
+    unit           text NOT NULL,
+    calories       double precision NOT NULL,
+    protein_g      double precision,
+    carbs_g        double precision,
+    fat_g          double precision,
+    fibre_g        double precision,
+    water_ml       double precision,
+    entry_method   text NOT NULL,
+    updated_at     timestamptz NOT NULL DEFAULT now(),
+    deleted_at     timestamptz
+);
+-- Pull filters by user_id; index it for the per-user select.
+CREATE INDEX IF NOT EXISTS idx_nutrition_entries_user_id ON public.nutrition_entries (user_id);
+
+DROP TRIGGER IF EXISTS trg_nutrition_entries_set_updated_at ON public.nutrition_entries;
+CREATE TRIGGER trg_nutrition_entries_set_updated_at
+    BEFORE UPDATE ON public.nutrition_entries
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- RLS: owner-only, same shape as vitals_samples (user_id is text).
+ALTER TABLE public.nutrition_entries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS nutrition_entries_owner ON public.nutrition_entries;
+CREATE POLICY nutrition_entries_owner ON public.nutrition_entries
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+-- Table privileges (RLS + GRANT are separate gates; both must pass). No DELETE —
+-- the client soft-deletes via a deleted_at tombstone (an UPDATE).
+GRANT SELECT, INSERT, UPDATE ON public.nutrition_entries TO authenticated;
+
+-- Refresh PostgREST's schema cache so nutrition_entries is visible to the API
+-- before the client's first push. Harmless to run repeatedly.
+NOTIFY pgrst, 'reload schema';

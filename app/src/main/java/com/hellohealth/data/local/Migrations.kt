@@ -345,3 +345,79 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         )
     }
 }
+
+/**
+ * v10 → v11: adds the Nutrition phase tables. Additive-only — no existing table is touched, so a
+ * migrated user's data (including the read-only Health Connect activity path) is preserved.
+ *
+ *  - `nutrition_entries` — the per-user food+water log. A syncable multi-row table: feature columns
+ *    first, the four Syncable sync-meta columns LAST, to match
+ *    [com.hellohealth.data.local.entities.NutritionEntryEntity]. `Long`/`Int`/`Boolean` → INTEGER,
+ *    `Double` → REAL NOT NULL, `Double?`/`String?` → nullable (no NOT NULL).
+ *  - `cached_foods` — the read-only, per-device food-facts cache. Global and NOT synced (like
+ *    `exercises`): NO `userId`, NONE of the Syncable columns, no Supabase table/syncer.
+ *
+ * Affinities match Room's generated v11 schema (validated against 11.json by MigrationTest). Each
+ * `CREATE INDEX` matches an `@Index` on the corresponding entity.
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `nutrition_entries` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`timestampUtcEpochMs` INTEGER NOT NULL, " +
+                "`tzOffsetMinutes` INTEGER NOT NULL, " +
+                "`kind` TEXT NOT NULL, " +
+                "`mealCategory` TEXT, " +
+                "`foodId` TEXT, " +
+                "`foodName` TEXT NOT NULL, " +
+                "`quantity` REAL NOT NULL, " +
+                "`unit` TEXT NOT NULL, " +
+                "`calories` REAL NOT NULL, " +
+                "`proteinG` REAL, " +
+                "`carbsG` REAL, " +
+                "`fatG` REAL, " +
+                "`fibreG` REAL, " +
+                "`waterMl` REAL, " +
+                "`entryMethod` TEXT NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_nutrition_entries_userId` ON `nutrition_entries` (`userId`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_nutrition_entries_isSynced` ON `nutrition_entries` (`isSynced`)"
+        )
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `cached_foods` (" +
+                "`id` TEXT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`brand` TEXT, " +
+                "`source` TEXT NOT NULL, " +
+                "`basisUnit` TEXT NOT NULL, " +
+                "`servingLabel` TEXT, " +
+                "`servingGrams` REAL, " +
+                "`caloriesPer` REAL NOT NULL, " +
+                "`proteinGPer` REAL, " +
+                "`carbsGPer` REAL, " +
+                "`fatGPer` REAL, " +
+                "`fibreGPer` REAL, " +
+                "`barcode` TEXT, " +
+                "`lastRefreshedEpochMs` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_cached_foods_name` ON `cached_foods` (`name`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_cached_foods_barcode` ON `cached_foods` (`barcode`)"
+        )
+    }
+}

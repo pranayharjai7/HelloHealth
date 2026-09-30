@@ -35,6 +35,9 @@ keystore.properties
 # ...and the bundled exercise catalog is a required app asset (free-exercise-db, ~1MB), not a secret.
 !app/src/main/assets/exercises.json
 
+# ...and the bundled common-foods catalog is a required app asset (nutrition seed), not a secret.
+!app/src/main/assets/common_foods.json
+
 # Mac files
 .DS_Store
 

@@ -107,6 +107,8 @@ class OnboardingViewModelTest {
         override suspend fun fetchWeeklyStats() = com.hellohealth.domain.model.WeeklyStats()
         override suspend fun hasPermissions() = false
         override suspend fun fetchLatestBodyMetrics(): BodyMetrics = metrics
+        override fun observeTodayCaloriesOut(): kotlinx.coroutines.flow.Flow<Double> =
+            kotlinx.coroutines.flow.flowOf(0.0)
         override fun getRequiredPermissions(): Set<String> = emptySet()
         override fun getAvailability(): Int = 0
         override fun getSettingsIntent(context: android.content.Context) = android.content.Intent()

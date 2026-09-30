@@ -7,6 +7,7 @@ import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.BodyMetrics
 import com.hellohealth.domain.model.DailyHealthSnapshot
 import com.hellohealth.domain.model.HealthSummary
+import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -30,6 +31,12 @@ interface ActivityRepository {
      * fields when Health Connect is unavailable, unconnected, or holds no such records — never throws.
      */
     suspend fun fetchLatestBodyMetrics(): BodyMetrics
+    /**
+     * Today's "calories out" (active + BMR) from the persisted daily snapshot, as a reactive Flow so
+     * the Nutrition card can compute energy balance (`net = caloriesOut − caloriesIn`) at read time.
+     * Emits 0.0 when there is no signed-in user or no snapshot for today; never throws.
+     */
+    fun observeTodayCaloriesOut(): Flow<Double>
     fun getRequiredPermissions(): Set<String>
     fun getAvailability(): Int
     fun getSettingsIntent(context: Context): Intent
