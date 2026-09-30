@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import com.hellohealth.data.exercise.ExerciseSeeder
+import com.hellohealth.data.vitals.VitalsBackfiller
 import com.hellohealth.ui.navigation.AppNavigation
 import com.hellohealth.ui.theme.HelloHealthTheme
 import com.hellohealth.ui.theme.ThemeViewModel
@@ -30,6 +31,13 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var exerciseSeeder: ExerciseSeeder
 
+    /**
+     * Seeds the daily vitals rollup from Health Connect history (P3). Idempotent, count-gated, and a
+     * no-op until a user is signed in with vitals permissions granted — see [VitalsBackfiller].
+     */
+    @Inject
+    lateinit var vitalsBackfiller: VitalsBackfiller
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -39,6 +47,11 @@ class MainActivity : ComponentActivity() {
         // Populate the exercise catalog if empty. Fire-and-forget on the lifecycle scope: the seeder
         // is IO-dispatched and never throws, so this can't block or crash app start.
         lifecycleScope.launch { exerciseSeeder.seedIfNeeded() }
+
+        // Backfill ~30 days of vitals rollup from Health Connect on first eligible launch. Same
+        // fire-and-forget contract: IO-dispatched, count-gated, runCatching-wrapped — never blocks
+        // or crashes app start, and self-skips once the rollup is populated.
+        lifecycleScope.launch { vitalsBackfiller.backfillIfNeeded() }
 
         setContent {
             val themeViewModel: ThemeViewModel = hiltViewModel()

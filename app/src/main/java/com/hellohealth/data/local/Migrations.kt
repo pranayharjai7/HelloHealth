@@ -305,3 +305,43 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         )
     }
 }
+
+/**
+ * v9 → v10: adds the `vitals_samples` table (P3 Vitals & Recovery). Additive-only — no existing
+ * table is touched, so a migrated user's data is preserved. Feature columns first, the four
+ * Syncable sync-meta columns LAST; affinities match Room's generated v10 schema (validated against
+ * 10.json by MigrationTest): `Long`/`Int`/`Boolean` → INTEGER NOT NULL, `Double?` → REAL nullable,
+ * `Int?` → INTEGER nullable. The `userId` / `isSynced` indices match the entity `@Index` set.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `vitals_samples` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`timestampUtcEpochMs` INTEGER NOT NULL, " +
+                "`tzOffsetMinutes` INTEGER NOT NULL, " +
+                "`kind` TEXT NOT NULL, " +
+                "`restingHeartRate` REAL, " +
+                "`hrvRmssd` REAL, " +
+                "`respiratoryRate` REAL, " +
+                "`bodyTemperature` REAL, " +
+                "`hydrationMl` REAL, " +
+                "`spo2` REAL, " +
+                "`sleepDurationMinutes` INTEGER, " +
+                "`deepSleepMinutes` INTEGER, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_vitals_samples_userId` ON `vitals_samples` (`userId`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_vitals_samples_isSynced` ON `vitals_samples` (`isSynced`)"
+        )
+    }
+}

@@ -362,4 +362,85 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 9 to 10 adds vitals_samples and preserves existing data`() {
+        // A genuine v9 user has a profile row. MIGRATION_9_10 is purely additive: it CREATEs
+        // vitals_samples and touches nothing else, so the profile must survive untouched.
+        helper.createDatabase(dbName, 9).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded, isDynamicTheme) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 1, 1)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_9_10 and validate the resulting schema matches 10.json exactly. This is
+        // the structural guard that the hand-written CREATE TABLE / indices match Room's v10 entity.
+        val db = helper.runMigrationsAndValidate(dbName, 10, true, MIGRATION_9_10)
+
+        // The pre-existing profile row is untouched by the additive create.
+        db.query("SELECT displayName FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+        }
+
+        // The new table exists and is empty.
+        db.query("SELECT count(*) FROM vitals_samples").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("vitals_samples should be empty after migration", 0, c.getInt(0))
+        }
+
+        // Row A: every nullable vitals column populated — proves the REAL/INTEGER affinities round-trip.
+        db.execSQL(
+            "INSERT INTO vitals_samples " +
+                "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, restingHeartRate, " +
+                "hrvRmssd, respiratoryRate, bodyTemperature, hydrationMl, spo2, sleepDurationMinutes, " +
+                "deepSleepMinutes, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|rollup|2026-09-30', 'u1', '2026-09-30', 1000, 0, 'rollup', 58.0, " +
+                "65.5, 14.2, 36.6, 750.0, 98.0, 420, 90, 1000, 0, NULL, 0)"
+        )
+        db.query(
+            "SELECT kind, restingHeartRate, hrvRmssd, respiratoryRate, bodyTemperature, hydrationMl, " +
+                "spo2, sleepDurationMinutes, deepSleepMinutes FROM vitals_samples " +
+                "WHERE id = 'u1|rollup|2026-09-30'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("rollup", c.getString(0))
+            assertEquals(58.0, c.getDouble(1), 0.0001)
+            assertEquals(65.5, c.getDouble(2), 0.0001)
+            assertEquals(14.2, c.getDouble(3), 0.0001)
+            assertEquals(36.6, c.getDouble(4), 0.0001)
+            assertEquals(750.0, c.getDouble(5), 0.0001)
+            assertEquals(98.0, c.getDouble(6), 0.0001)
+            assertEquals(420, c.getInt(7))
+            assertEquals(90, c.getInt(8))
+        }
+
+        // Row B: every nullable vitals column left NULL — proves the nullable affinities round-trip both ways.
+        db.execSQL(
+            "INSERT INTO vitals_samples " +
+                "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|sample|2000|sample', 'u1', '2026-09-30', 2000, 0, 'sample', 2000, 0, NULL, 0)"
+        )
+        db.query(
+            "SELECT restingHeartRate, hrvRmssd, respiratoryRate, bodyTemperature, hydrationMl, " +
+                "spo2, sleepDurationMinutes, deepSleepMinutes FROM vitals_samples " +
+                "WHERE id = 'u1|sample|2000|sample'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertTrue("restingHeartRate should be null", c.isNull(0))
+            assertTrue("hrvRmssd should be null", c.isNull(1))
+            assertTrue("respiratoryRate should be null", c.isNull(2))
+            assertTrue("bodyTemperature should be null", c.isNull(3))
+            assertTrue("hydrationMl should be null", c.isNull(4))
+            assertTrue("spo2 should be null", c.isNull(5))
+            assertTrue("sleepDurationMinutes should be null", c.isNull(6))
+            assertTrue("deepSleepMinutes should be null", c.isNull(7))
+        }
+        db.close()
+    }
 }

@@ -47,6 +47,7 @@ import com.hellohealth.ui.auth.AuthViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.LogMoodSheet
+import com.hellohealth.ui.dashboard.components.VitalsCard
 import com.hellohealth.ui.dashboard.components.WorkoutCard
 import com.hellohealth.ui.dashboard.components.WorkoutPlanCard
 import java.time.DayOfWeek
@@ -73,13 +74,16 @@ fun DashboardScreen(
     onNavigateToLogEmotion: () -> Unit,
     onNavigateToEmotionCapture: () -> Unit,
     onNavigateToEmotionGallery: () -> Unit,
-    onNavigateToMoodTimeline: () -> Unit
+    onNavigateToMoodTimeline: () -> Unit,
+    onNavigateToVitalsTrends: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
     val emotionsState by emotionsViewModel.uiState.collectAsState()
     val workoutPlanViewModel: WorkoutPlanViewModel = hiltViewModel()
     val workoutPlanSummary by workoutPlanViewModel.summary.collectAsState()
+    val vitalsViewModel: VitalsViewModel = hiltViewModel()
+    val vitalsState by vitalsViewModel.uiState.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -346,6 +350,22 @@ fun DashboardScreen(
                     today = emotionsState.today,
                     onLog = { showLogMoodSheet = true },
                     onOpenTimeline = onNavigateToMoodTimeline
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                VitalsCard(
+                    state = vitalsState,
+                    // Same "connected" definition as WorkoutCard: permission granted OR a cached
+                    // snapshot exists (offline-first). Keys on grant, not data present.
+                    isConnected = uiState.hasHealthPermissions || uiState.lastSyncTime != null,
+                    onConnect = {
+                        val permissions = dashboardViewModel.getHealthPermissions()
+                        if (permissions.isNotEmpty()) {
+                            permissionLauncher.launch(permissions)
+                        }
+                    },
+                    onClick = onNavigateToVitalsTrends
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))

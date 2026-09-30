@@ -18,6 +18,7 @@ import com.hellohealth.domain.model.SnapshotSyncStatus
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.domain.repository.ActivityRepository
 import com.hellohealth.domain.repository.ProfileRepository
+import com.hellohealth.domain.repository.VitalsRepository
 import com.hellohealth.sync.SyncScheduler
 import java.time.Instant
 import java.time.LocalDate
@@ -40,7 +41,8 @@ class ActivityRepositoryImpl @Inject constructor(
     private val snapshotDao: SnapshotDao,
     private val sessionManager: SupabaseSessionManager,
     private val syncScheduler: SyncScheduler,
-    private val profileRepository: ProfileRepository
+    private val profileRepository: ProfileRepository,
+    private val vitalsRepository: VitalsRepository
 ) : ActivityRepository {
 
     override suspend fun fetchSummary(
@@ -69,6 +71,10 @@ class ActivityRepositoryImpl @Inject constructor(
                     summary = freshSummary,
                     syncStatus = if (date == LocalDate.now()) SnapshotSyncStatus.PARTIAL else SnapshotSyncStatus.COMPLETE
                 )
+                // Persist a daily vitals rollup for the fetched day. Idempotent via the deterministic
+                // rollup id, off the dashboard's critical path (runCatching), and a no-op when no user
+                // is signed in — so a rollup problem can never disturb the summary that just succeeded.
+                persistVitalsRollup(date, freshSummary)
                 return freshSummary
             } else if (cachedSnapshot != null) {
                 // Health Connect has no data (e.g. past-30-days read restriction) — use the cache.
@@ -146,6 +152,32 @@ class ActivityRepositoryImpl @Inject constructor(
         }.getOrElse { e ->
             AppLogger.e(FeatureTag.ACTIVITY, "loadSnapshot failed for $date", e)
             null
+        }
+    }
+
+    /**
+     * Upsert the daily vitals rollup for [date] from a freshly-fetched Health Connect summary.
+     * Idempotent (deterministic rollup id in [VitalsRepository]) and defensive — any failure is
+     * swallowed so it can never disturb the dashboard summary that just succeeded. SpO2 rides in as
+     * the natural 0–100 percentage; sleep is the summary's minutes (0 → null so it doesn't read as a
+     * zero-hour night). Deep sleep isn't exposed by [HealthSummary], so it stays null.
+     */
+    private suspend fun persistVitalsRollup(date: LocalDate, summary: HealthSummary) {
+        runCatching {
+            vitalsRepository.upsertRollup(
+                localDate = date.toString(),
+                timestampUtcEpochMs = Timestamps.nowEpochMs(),
+                restingHeartRate = summary.restingHeartRate,
+                hrvRmssd = summary.hrvRmssd,
+                respiratoryRate = summary.respiratoryRate,
+                bodyTemperature = summary.bodyTemperature,
+                hydrationMl = summary.hydrationMl,
+                spo2 = summary.oxygenSaturation,
+                sleepDurationMinutes = summary.sleepDurationMinutes.toInt().takeIf { it > 0 },
+                deepSleepMinutes = null
+            )
+        }.onFailure { e ->
+            AppLogger.e(FeatureTag.VITALS, "persistVitalsRollup failed for $date", e)
         }
     }
 
