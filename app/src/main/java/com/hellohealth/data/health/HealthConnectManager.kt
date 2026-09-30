@@ -95,7 +95,14 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(Vo2MaxRecord::class),
         HealthPermission.getReadPermission(NutritionRecord::class),
         HealthPermission.getReadPermission(ElevationGainedRecord::class),
-        HealthPermission.getReadPermission(SpeedRecord::class)
+        HealthPermission.getReadPermission(SpeedRecord::class),
+        // P3 Vitals & Recovery: recovery-relevant vitals. Each read is safeFetch-wrapped so a
+        // granted-but-empty type (no sensor / no data) degrades to null rather than failing.
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        HealthPermission.getReadPermission(BodyTemperatureRecord::class),
+        HealthPermission.getReadPermission(HydrationRecord::class)
     )
 
     /**
@@ -211,6 +218,13 @@ class HealthConnectManager @Inject constructor(
             val glucose = safeFetch { fetchLatestBloodGlucose(endOfDay) }
             val sleep = try { fetchSleepSummary(startOfDay, endOfDay) } catch (e: Exception) { null }
 
+            // P3 vitals — each degrades to null independently (granted-but-empty or read error).
+            val restingHeartRate = safeFetch { fetchLatestRestingHeartRate(endOfDay) }
+            val hrvRmssd = safeFetch { fetchLatestHrvRmssd(endOfDay) }
+            val respiratoryRate = safeFetch { fetchLatestRespiratoryRate(endOfDay) }
+            val bodyTemperature = safeFetch { fetchLatestBodyTemperature(endOfDay) }
+            val hydrationMl = safeFetch { fetchHydrationMl(startOfDay, endOfDay) }
+
             val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
                 if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
             )
@@ -234,6 +248,11 @@ class HealthConnectManager @Inject constructor(
                 bloodPressureSystolic = bloodPressure?.first,
                 bloodPressureDiastolic = bloodPressure?.second,
                 bloodGlucose = glucose,
+                restingHeartRate = restingHeartRate,
+                hrvRmssd = hrvRmssd,
+                respiratoryRate = respiratoryRate,
+                bodyTemperature = bodyTemperature,
+                hydrationMl = hydrationMl,
                 sleepDurationMinutes = sleep?.first ?: 0,
                 sleepStartTime = sleep?.second,
                 sleepEndTime = sleep?.third,
@@ -564,6 +583,61 @@ class HealthConnectManager @Inject constructor(
             ReadRecordsRequest(recordType = OxygenSaturationRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.percentage?.value
+    }
+
+    // --- P3 Vitals & Recovery reads ---------------------------------------------------------
+    // All vitals are returned in their NATURAL HUMAN UNITS, matching the existing convention:
+    // OxygenSaturation above returns `percentage.value` = the 0-100 number (NOT a 0-1 fraction),
+    // and callers/UI consume it directly. Do the same here — do NOT normalise SpO2 to a fraction
+    // or scale temperature/rate. Each read follows the fetch-latest idiom (before-filter,
+    // descending, pageSize=1) and is meant to be wrapped in safeFetch by the caller so a granted
+    // permission with no underlying data yields null instead of throwing.
+
+    /** Latest resting heart rate in beats per minute, or null if none recorded. */
+    private suspend fun fetchLatestRestingHeartRate(before: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = RestingHeartRateRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.beatsPerMinute?.toDouble()
+    }
+
+    /** Latest HRV as RMSSD in milliseconds, or null if none recorded. */
+    private suspend fun fetchLatestHrvRmssd(before: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = HeartRateVariabilityRmssdRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.heartRateVariabilityMillis
+    }
+
+    /** Latest respiratory rate in breaths per minute, or null if none recorded. */
+    private suspend fun fetchLatestRespiratoryRate(before: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = RespiratoryRateRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.rate
+    }
+
+    /** Latest body temperature in degrees Celsius, or null if none recorded. */
+    private suspend fun fetchLatestBodyTemperature(before: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = BodyTemperatureRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.temperature?.inCelsius
+    }
+
+    /**
+     * Total hydration in millilitres over the given window. Hydration is cumulative (many small
+     * interval records across the day), so this SUMS every record in range rather than taking the
+     * latest. Returns null when there are no records so the caller can distinguish "no data" from
+     * "0 ml logged".
+     */
+    private suspend fun fetchHydrationMl(start: Instant, end: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = HydrationRecord::class, timeRangeFilter = TimeRangeFilter.between(start, end))
+        )
+        val records = response?.records ?: return null
+        if (records.isEmpty()) return null
+        return records.sumOf { it.volume.inMilliliters }
     }
 
     private suspend fun fetchLatestVo2Max(before: Instant): Double? {

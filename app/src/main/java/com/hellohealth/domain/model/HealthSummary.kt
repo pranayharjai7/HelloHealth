@@ -25,7 +25,15 @@ data class HealthSummary(
     val bloodPressureSystolic: Double? = null,
     val bloodPressureDiastolic: Double? = null,
     val bloodGlucose: Double? = null,
-    
+
+    // Recovery vitals (P3). All in natural human units: bpm, ms (HRV RMSSD),
+    // breaths/min, °C, ml. Nullable — a device without the sensor/data leaves them null.
+    val restingHeartRate: Double? = null,
+    val hrvRmssd: Double? = null,
+    val respiratoryRate: Double? = null,
+    val bodyTemperature: Double? = null,
+    val hydrationMl: Double? = null,
+
     // Performance
     val vo2max: Double? = null,
     
