@@ -143,7 +143,8 @@ fun AppNavigation(
                 },
                 onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) },
                 onNavigateToVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) },
-                onNavigateToNutrition = { navController.navigate(Screen.Nutrition.route) }
+                onNavigateToNutrition = { navController.navigate(Screen.Nutrition.route) },
+                onNavigateToCoaching = { navController.navigate(Screen.Coaching.route) }
             )
         }
         
@@ -374,6 +375,20 @@ fun AppNavigation(
         }
 
         composable(
+            route = Screen.Coaching.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: com.hellohealth.ui.coaching.CoachingScreenViewModel = hiltViewModel()
+            com.hellohealth.ui.coaching.CoachingScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
             route = Screen.ActivitySettings.route,
             enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
             exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
@@ -558,6 +573,7 @@ sealed class Screen(val route: String) {
     object VitalsTrends : Screen("vitals_trends")
     object Nutrition : Screen("nutrition")
     object BarcodeScan : Screen("barcode_scan")
+    object Coaching : Screen("coaching")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")

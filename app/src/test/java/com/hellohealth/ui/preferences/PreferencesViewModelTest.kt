@@ -74,6 +74,10 @@ class PreferencesViewModelTest {
             profile = (profile ?: UserProfile()).copy(isDynamicTheme = enabled)
         }
         override fun observeDynamicTheme() = flowOf(profile?.isDynamicTheme ?: true)
+        override suspend fun setAiCoachingEnabled(enabled: Boolean) {
+            profile = (profile ?: UserProfile()).copy(aiCoachingEnabled = enabled)
+        }
+        override fun observeAiCoachingEnabled() = flowOf(profile?.aiCoachingEnabled ?: false)
     }
 
     private class FakeGoalsRepository(

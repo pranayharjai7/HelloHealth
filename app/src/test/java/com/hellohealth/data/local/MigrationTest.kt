@@ -545,4 +545,43 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 11 to 12 adds aiCoachingEnabled and preserves existing data`() {
+        // A genuine v11 user has a profile row (with the v11 nutrition tables already present, but
+        // MIGRATION_11_12 only touches `profile`). The migration is a single additive ALTER on
+        // `profile`, so the row must survive and the new column must default to 0 (opt-in / false).
+        helper.createDatabase(dbName, 11).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded, isDynamicTheme) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 1, 1)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_11_12 and validate the resulting schema matches 12.json exactly.
+        val db = helper.runMigrationsAndValidate(dbName, 12, true, MIGRATION_11_12)
+
+        // The pre-existing row survived AND the new column backfilled to 0 (false / opt-in default).
+        db.query("SELECT displayName, aiCoachingEnabled FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+            assertEquals(0, c.getInt(1))
+        }
+
+        // A fresh row can opt in (1) and round-trip.
+        db.execSQL(
+            "INSERT INTO profile " +
+                "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                "isSynced, unitPreference, hasOnboarded, isDynamicTheme, aiCoachingEnabled) " +
+                "VALUES ('u2', 'Bob', 200, 0, NULL, 0, 'METRIC', 1, 1, 1)"
+        )
+        db.query("SELECT aiCoachingEnabled FROM profile WHERE userId = 'u2'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(1, c.getInt(0))
+        }
+        db.close()
+    }
 }

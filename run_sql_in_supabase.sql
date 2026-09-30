@@ -90,6 +90,11 @@ ALTER TABLE public.profiles
 ALTER TABLE public.profiles
     ADD COLUMN IF NOT EXISTS is_dynamic_theme boolean NOT NULL DEFAULT true;
 
+-- AI Coaching: consent flag (opt-in). Client (ProfileSyncDto) pushes ai_coaching_enabled; kept
+-- NULLABLE (no default) so old rows read as "not yet opted in" and the client maps null -> false.
+ALTER TABLE public.profiles
+    ADD COLUMN IF NOT EXISTS ai_coaching_enabled boolean;
+
 DROP TRIGGER IF EXISTS trg_profiles_set_updated_at ON public.profiles;
 CREATE TRIGGER trg_profiles_set_updated_at
     BEFORE UPDATE ON public.profiles

@@ -49,7 +49,7 @@ import com.hellohealth.data.local.entities.WorkoutPlanEntity
         NutritionEntryEntity::class,
         CachedFoodEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

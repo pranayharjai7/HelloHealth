@@ -27,7 +27,8 @@ data class UserProfile(
     val targetRateKgPerWeek: Double? = null,
     val unitPreference: UnitPreference = UnitPreference.METRIC,
     val hasOnboarded: Boolean = false,
-    val isDynamicTheme: Boolean = true
+    val isDynamicTheme: Boolean = true,
+    val aiCoachingEnabled: Boolean = false
 ) {
     /**
      * Whole years between [birthDateEpochDay] and [today], or null if birth date is unset.

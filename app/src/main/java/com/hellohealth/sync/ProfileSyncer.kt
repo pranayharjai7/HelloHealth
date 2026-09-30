@@ -36,6 +36,7 @@ class ProfileSyncer @Inject constructor(
         val unit_preference: String? = null,
         val has_onboarded: Boolean? = null,
         val is_dynamic_theme: Boolean? = null,
+        val ai_coaching_enabled: Boolean? = null,
         val updated_at: String? = null,
         val deleted_at: String? = null
     )
@@ -87,7 +88,8 @@ class ProfileSyncer @Inject constructor(
                 targetRateKgPerWeek = remote.target_rate_kg_per_week,
                 unitPreference = remote.unit_preference ?: "METRIC",
                 hasOnboarded = remote.has_onboarded ?: false,
-                isDynamicTheme = remote.is_dynamic_theme ?: true
+                isDynamicTheme = remote.is_dynamic_theme ?: true,
+                aiCoachingEnabled = remote.ai_coaching_enabled ?: false
             )
         )
         AppLogger.d(FeatureTag.PROFILE, "pulled remote profile (remote won LWW)")
@@ -108,6 +110,7 @@ class ProfileSyncer @Inject constructor(
         unit_preference = unitPreference,
         has_onboarded = hasOnboarded,
         is_dynamic_theme = isDynamicTheme,
+        ai_coaching_enabled = aiCoachingEnabled,
         updated_at = Timestamps.epochMsToServerTimestamp(updatedAtEpochMs),
         deleted_at = deletedAtEpochMs?.let { Timestamps.epochMsToServerTimestamp(it) }
     )
