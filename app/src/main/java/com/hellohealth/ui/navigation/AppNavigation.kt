@@ -179,6 +179,35 @@ fun AppNavigation(
         }
 
         composable(
+            route = Screen.Health.route,
+            enterTransition = {
+                fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 2 }
+            },
+            exitTransition = {
+                fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 }
+            }
+        ) {
+            val healthViewModel: com.hellohealth.ui.health.HealthViewModel = hiltViewModel()
+            com.hellohealth.ui.health.HealthScreen(
+                viewModel = healthViewModel,
+                onBack = { navController.popBackStack() },
+                onOpenActivityDetail = { session ->
+                    if (session.id.isNotBlank()) {
+                        navController.navigate(
+                            Screen.ActivityDetail.createRoute(
+                                activityId = session.id,
+                                sessionStart = session.startTime.toEpochMilli(),
+                                sessionEnd = session.endTime.toEpochMilli()
+                            )
+                        )
+                    }
+                },
+                onOpenVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) },
+                onOpenInsights = { navController.navigate(Screen.Insights.route) },
+            )
+        }
+
+        composable(
             route = Screen.ActivityDetail.route,
             arguments = listOf(
                 navArgument(Screen.ActivityDetail.activityIdArg) { type = NavType.StringType },
@@ -571,6 +600,7 @@ sealed class Screen(val route: String) {
     object EmotionInsights : Screen("emotion_insights")
     object MoodTimeline : Screen("mood_timeline")
     object VitalsTrends : Screen("vitals_trends")
+    object Health : Screen("health")
     object Nutrition : Screen("nutrition")
     object BarcodeScan : Screen("barcode_scan")
     object Coaching : Screen("coaching")
