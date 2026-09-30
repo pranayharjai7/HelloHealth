@@ -584,4 +584,69 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 12 to 13 adds the body_metrics table and preserves existing data`() {
+        // A genuine v12 user has a profile row. MIGRATION_12_13 is purely additive: it CREATEs
+        // body_metrics and touches nothing else, so the profile must survive.
+        helper.createDatabase(dbName, 12).apply {
+            execSQL(
+                "INSERT INTO profile " +
+                    "(userId, displayName, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, " +
+                    "isSynced, unitPreference, hasOnboarded, isDynamicTheme, aiCoachingEnabled) " +
+                    "VALUES ('u1', 'Ann', 100, 0, NULL, 0, 'METRIC', 1, 1, 0)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_12_13 and validate the resulting schema matches 13.json exactly — the guard
+        // that the hand-written CREATE matches Room's generated v13 entity (column order + affinities).
+        val db = helper.runMigrationsAndValidate(dbName, 13, true, MIGRATION_12_13)
+
+        // The pre-existing profile row is untouched by the additive create.
+        db.query("SELECT displayName FROM profile WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Ann", c.getString(0))
+        }
+
+        // body_metrics exists and is empty.
+        db.query("SELECT count(*) FROM body_metrics").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("body_metrics should be empty after migration", 0, c.getInt(0))
+        }
+
+        // A row with every optional metric populated round-trips (proves the REAL affinities).
+        db.execSQL(
+            "INSERT INTO body_metrics " +
+                "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, weightKg, heightCm, " +
+                "bodyFatPct, leanMassKg, fatMassKg, bodyWaterKg, boneMassKg, bmr, bmi, waistCm, vo2max, " +
+                "source, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|body|2026-09-30', 'u1', '2026-09-30', 1000, 0, 80.0, 180.0, 20.0, 64.0, " +
+                "16.0, 42.0, 3.2, 1780.0, 24.69, 85.0, 48.0, 'health_connect', 1000, 0, NULL, 0)"
+        )
+        db.query(
+            "SELECT weightKg, heightCm, bmi, source, boneMassKg FROM body_metrics WHERE id = 'u1|body|2026-09-30'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(80.0, c.getDouble(0), 0.0001)
+            assertEquals(180.0, c.getDouble(1), 0.0001)
+            assertEquals(24.69, c.getDouble(2), 0.0001)
+            assertEquals("health_connect", c.getString(3))
+            assertEquals(3.2, c.getDouble(4), 0.0001)
+        }
+
+        // A row leaving every nullable metric NULL round-trips (proves the nullable affinities).
+        db.execSQL(
+            "INSERT INTO body_metrics " +
+                "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, source, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|body|2026-09-29', 'u1', '2026-09-29', 900, 0, 'manual', 900, 0, NULL, 0)"
+        )
+        db.query("SELECT weightKg, bmi FROM body_metrics WHERE id = 'u1|body|2026-09-29'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertTrue("weightKg should be null", c.isNull(0))
+            assertTrue("bmi should be null", c.isNull(1))
+        }
+        db.close()
+    }
 }

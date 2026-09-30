@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.hellohealth.data.local.dao.CachedFoodDao
+import com.hellohealth.data.local.dao.BodyMetricDao
 import com.hellohealth.data.local.dao.EmotionRecordsDao
 import com.hellohealth.data.local.dao.ExerciseDao
 import com.hellohealth.data.local.dao.FoodPrefsDao
@@ -23,6 +24,7 @@ import com.hellohealth.data.local.entities.ExerciseEntity
 import com.hellohealth.data.local.entities.FoodPrefsEntity
 import com.hellohealth.data.local.entities.GoalsEntity
 import com.hellohealth.data.local.entities.NutritionEntryEntity
+import com.hellohealth.data.local.entities.BodyMetricEntity
 import com.hellohealth.data.local.entities.PlannedExerciseEntity
 import com.hellohealth.data.local.entities.ProfileEntity
 import com.hellohealth.data.local.entities.SnapshotEntity
@@ -47,9 +49,10 @@ import com.hellohealth.data.local.entities.WorkoutPlanEntity
         ExerciseEntity::class,
         VitalsSampleEntity::class,
         NutritionEntryEntity::class,
-        CachedFoodEntity::class
+        CachedFoodEntity::class,
+        BodyMetricEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -68,4 +71,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun vitalsSampleDao(): VitalsSampleDao
     abstract fun nutritionEntryDao(): NutritionEntryDao
     abstract fun cachedFoodDao(): CachedFoodDao
+    abstract fun bodyMetricDao(): BodyMetricDao
 }
