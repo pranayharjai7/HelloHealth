@@ -46,4 +46,8 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindPlannedExerciseSyncer(impl: PlannedExerciseSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindVitalsSampleSyncer(impl: VitalsSampleSyncer): Syncer
 }

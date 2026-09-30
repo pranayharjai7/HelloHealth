@@ -375,3 +375,61 @@ GRANT SELECT, INSERT, UPDATE ON public.planned_exercises      TO authenticated;
 -- client's onboarding-field upserts stop returning PGRST204. Harmless to run
 -- repeatedly; a no-op if PostgREST isn't the listener.
 NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- P3 — Vitals & Recovery: public.vitals_samples
+-- ----------------------------------------------------------------------------
+-- NEW table (does not exist yet) — multi-row per user, conflict key `id` (a
+-- client-generated deterministic string: "userId|rollup|localDate" for the one
+-- daily rollup row, or "userId|sample|timestampMs" for an intraday reading),
+-- matching VitalsSampleSyncer.VitalsSampleDto. Additive-new, so created in full.
+-- Columns mirror the DTO 1:1 (snake_case): the six vitals are `double precision`
+-- (nullable — a device may lack any sensor), sleep minutes are nullable `integer`,
+-- SpO2 is the natural 0-100 percentage (NOT a 0-1 fraction). updated_at/deleted_at
+-- carry the same LWW-clock + tombstone semantics as the other tables; the
+-- set_updated_at trigger stamps updated_at on UPDATE.
+--
+-- DEPLOY ORDER (critical): the client ALWAYS pushes every column, so this block
+-- must run — and PostgREST must reload — BEFORE shipping the P3 client, or every
+-- vitals upsert returns PGRST204 and the whole push fails.
+CREATE TABLE IF NOT EXISTS public.vitals_samples (
+    id                    text PRIMARY KEY,
+    user_id               text NOT NULL,
+    local_date            text NOT NULL,
+    timestamp_utc         timestamptz NOT NULL,
+    tz_offset             integer NOT NULL DEFAULT 0,
+    kind                  text NOT NULL,
+    resting_heart_rate    double precision,
+    hrv_rmssd             double precision,
+    respiratory_rate      double precision,
+    body_temperature      double precision,
+    hydration_ml          double precision,
+    spo2                  double precision,
+    sleep_duration_minutes integer,
+    deep_sleep_minutes    integer,
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    deleted_at            timestamptz
+);
+-- Pull filters by user_id; index it for the per-user select.
+CREATE INDEX IF NOT EXISTS idx_vitals_samples_user_id ON public.vitals_samples (user_id);
+
+DROP TRIGGER IF EXISTS trg_vitals_samples_set_updated_at ON public.vitals_samples;
+CREATE TRIGGER trg_vitals_samples_set_updated_at
+    BEFORE UPDATE ON public.vitals_samples
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- RLS: owner-only, same shape as emotion_records (user_id is text).
+ALTER TABLE public.vitals_samples ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS vitals_samples_owner ON public.vitals_samples;
+CREATE POLICY vitals_samples_owner ON public.vitals_samples
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+-- Table privileges (RLS + GRANT are separate gates; both must pass). No DELETE —
+-- the client soft-deletes via a deleted_at tombstone (an UPDATE).
+GRANT SELECT, INSERT, UPDATE ON public.vitals_samples TO authenticated;
+
+-- Refresh PostgREST's schema cache so vitals_samples is visible to the API before
+-- the client's first push. Harmless to run repeatedly.
+NOTIFY pgrst, 'reload schema';
