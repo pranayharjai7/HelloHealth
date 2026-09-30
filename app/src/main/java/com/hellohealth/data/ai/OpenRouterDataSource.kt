@@ -110,7 +110,11 @@ open class OpenRouterDataSource @Inject constructor(
 
     companion object {
         private const val BASE_URL = "https://openrouter.ai"
-        /** A fast, low-cost fallback model. Bump here if a cheaper/newer id is preferred. */
-        private const val MODEL = "google/gemini-2.0-flash-001"
+        /**
+         * Fallback model, hit only when Gemini fails. Verified reachable on-device for this key
+         * (free-tier `:free` slugs 404 or rate-limit; this one returns 200). Bump if a cheaper/newer
+         * reachable id is preferred.
+         */
+        private const val MODEL = "meta-llama/llama-3.3-70b-instruct"
     }
 }

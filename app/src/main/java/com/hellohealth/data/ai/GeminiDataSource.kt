@@ -115,7 +115,11 @@ open class GeminiDataSource @Inject constructor(
 
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com"
-        /** Fast, low-cost text model. Bump here if a newer flash tier is preferred. */
-        private const val MODEL = "gemini-2.0-flash"
+        /**
+         * Fast, low-cost text model. Uses the `-latest` alias so a Gemini version bump doesn't 404
+         * the app (verified on-device: pinned ids like `gemini-2.0-flash` 404 for this key's API
+         * version, while `gemini-flash-latest` always resolves to the current flash tier).
+         */
+        private const val MODEL = "gemini-flash-latest"
     }
 }
