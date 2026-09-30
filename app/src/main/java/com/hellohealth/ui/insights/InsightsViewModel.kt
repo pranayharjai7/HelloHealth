@@ -3,20 +3,28 @@ package com.hellohealth.ui.insights
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hellohealth.domain.model.ActivityGoals
+import com.hellohealth.domain.model.CrossDimensionInsights
 import com.hellohealth.domain.model.FoodPreferences
 import com.hellohealth.domain.model.WeeklyInsights
 import com.hellohealth.domain.model.WeeklyStats
 import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.EmotionsRepository
 import com.hellohealth.domain.repository.GoalsRepository
+import com.hellohealth.domain.repository.NutritionRepository
 import com.hellohealth.domain.repository.UserRepository
+import com.hellohealth.domain.repository.VitalsRepository
+import com.hellohealth.domain.usecase.BuildCrossInsightsUseCase
 import com.hellohealth.domain.usecase.BuildWeeklyInsightsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 data class InsightsUiState(
@@ -24,6 +32,7 @@ data class InsightsUiState(
     val goals: ActivityGoals = ActivityGoals(),
     val foodPreferences: FoodPreferences = FoodPreferences(),
     val weeklyInsights: WeeklyInsights = WeeklyInsights(),
+    val crossInsights: CrossDimensionInsights = CrossDimensionInsights(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -33,7 +42,11 @@ class InsightsViewModel @Inject constructor(
     private val repository: ActivityRepository,
     private val goalsRepository: GoalsRepository,
     private val userRepository: UserRepository,
-    private val buildWeeklyInsights: BuildWeeklyInsightsUseCase
+    private val emotionsRepository: EmotionsRepository,
+    private val vitalsRepository: VitalsRepository,
+    private val nutritionRepository: NutritionRepository,
+    private val buildWeeklyInsights: BuildWeeklyInsightsUseCase,
+    private val buildCrossInsights: BuildCrossInsightsUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(InsightsUiState())
@@ -70,11 +83,13 @@ class InsightsViewModel @Inject constructor(
                 val goals = goalsRepository.getCurrentActivityGoals()
                 val preferences = userRepository.getCurrentFoodPreferences()
                 val insights = buildWeeklyInsights(stats, goals, preferences)
+                val cross = buildCrossDimension(stats)
                 _uiState.value = _uiState.value.copy(
                     weeklyStats = stats,
                     goals = goals,
                     foodPreferences = preferences,
                     weeklyInsights = insights,
+                    crossInsights = cross,
                     isLoading = false,
                     error = null
                 )
@@ -85,5 +100,45 @@ class InsightsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    /**
+     * Snapshot the other three dimensions for the last 7 days and fold them into the cross-dimension
+     * series. Each repo read is `.first()` (one-shot, matching this loader's style) and wrapped so a
+     * single dimension failing degrades that dimension to empty rather than failing the whole screen.
+     * calories-out per day comes from the activity [WeeklyStats] (active calories) that just loaded.
+     */
+    private suspend fun buildCrossDimension(stats: WeeklyStats): CrossDimensionInsights {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val windowDays = (0..6).map { today.minusDays((6 - it).toLong()) }
+
+        // Emotions: the 7-day window (inclusive) by epoch-day.
+        val emotions = runCatching {
+            emotionsRepository.observeWindow(today.minusDays(6).toEpochDay(), today.toEpochDay()).first()
+        }.getOrDefault(emptyList())
+
+        // Vitals: pull >= 14 days so the readiness calculator has baseline history for the window.
+        val rollups = runCatching { vitalsRepository.observeRecentRollups(21).first() }.getOrDefault(emptyList())
+
+        // Nutrition: per-day only, so snapshot each of the 7 days.
+        val nutritionByDay = windowDays.associate { day ->
+            val iso = day.toString()
+            iso to runCatching { nutritionRepository.observeDaySummary(iso).first() }.getOrNull()
+        }.filterValues { it != null }.mapValues { it.value!! }
+
+        // Calories out per day from the activity weekly stats (active calories).
+        val caloriesOutByDay = stats.dailyStats
+            .filter { it.calories > 0 }
+            .associate { it.date.toString() to it.calories }
+
+        return buildCrossInsights(
+            today = today,
+            zone = zone,
+            emotions = emotions,
+            rollups = rollups,
+            nutritionByDay = nutritionByDay,
+            caloriesOutByDay = caloriesOutByDay,
+        )
     }
 }
