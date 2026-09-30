@@ -5,7 +5,7 @@ import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.data.ai.ChatMessage
 import com.hellohealth.data.ai.ChatRequest
 import com.hellohealth.data.ai.ChatResult
-import com.hellohealth.data.ai.CoachingProvider
+import com.hellohealth.data.ai.CoachingProxyDataSource
 import com.hellohealth.domain.coaching.CoachingPrompt
 import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.model.EmotionType
@@ -40,7 +40,7 @@ class CoachingRepositoryImpl @Inject constructor(
     private val vitalsRepository: VitalsRepository,
     private val emotionsRepository: com.hellohealth.domain.repository.EmotionsRepository,
     private val profileRepository: ProfileRepository,
-    private val coachingProvider: CoachingProvider,
+    private val coachingProxy: CoachingProxyDataSource,
 ) : CoachingRepository {
 
     private fun today(): String = LocalDate.now(ZoneId.systemDefault()).toString()
@@ -113,7 +113,7 @@ class CoachingRepositoryImpl @Inject constructor(
                 system = CoachingPrompt.systemPrompt(),
                 messages = listOf(ChatMessage(ChatMessage.Role.USER, CoachingPrompt.dailyInsightPrompt(ctx))),
             )
-            when (val result = coachingProvider.generate(request)) {
+            when (val result = coachingProxy.generate(request)) {
                 is ChatResult.Success -> return CoachingInsight(result.text, CoachingInsight.Source.LLM)
                 is ChatResult.Failure ->
                     AppLogger.w(FeatureTag.COACHING, "dailyInsight LLM failed (${result.reason}); using rule-based")
@@ -138,7 +138,7 @@ class CoachingRepositoryImpl @Inject constructor(
                     )
                 ),
             )
-            when (val result = coachingProvider.generate(request)) {
+            when (val result = coachingProxy.generate(request)) {
                 is ChatResult.Success -> return CoachingInsight(result.text, CoachingInsight.Source.LLM)
                 is ChatResult.Failure ->
                     AppLogger.w(FeatureTag.COACHING, "ask LLM failed (${result.reason}); using rule-based")
