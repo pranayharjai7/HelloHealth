@@ -5,6 +5,7 @@ import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.model.vitals.ReadinessScoreDebug
 import com.hellohealth.domain.model.vitals.ReadinessStatus
 import kotlin.time.Duration.Companion.days
+import javax.inject.Inject
 
 /**
  * Pure analytic module for computing daily readiness. Ported from TrackMe's
@@ -20,7 +21,7 @@ import kotlin.time.Duration.Companion.days
  * [BASELINE_WINDOW_DAYS] before today; older rows are excluded. The `< 7 days` establishing gate is
  * unchanged, and the recent-value fallbacks (HRV over last 3 days, RHR over last 2) are preserved.
  */
-class ReadinessScoreCalculator {
+class ReadinessScoreCalculator @Inject constructor() {
 
     companion object {
         /**
