@@ -46,12 +46,9 @@ import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
-import com.hellohealth.ui.dashboard.components.CoachingCard
-import com.hellohealth.ui.dashboard.components.InsightsCard
+import com.hellohealth.ui.dashboard.components.HealthCard
 import com.hellohealth.ui.dashboard.components.LogMoodSheet
 import com.hellohealth.ui.dashboard.components.NutritionCard
-import com.hellohealth.ui.dashboard.components.VitalsCard
-import com.hellohealth.ui.dashboard.components.WorkoutCard
 import com.hellohealth.ui.dashboard.components.WorkoutPlanCard
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -66,7 +63,7 @@ fun DashboardScreen(
     dashboardViewModel: DashboardViewModel,
     emotionsViewModel: EmotionsViewModel,
     onLogout: () -> Unit,
-    onNavigateToWorkoutDetails: () -> Unit,
+    onNavigateToHealth: () -> Unit,
     onNavigateToWorkoutPlan: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToGoals: () -> Unit,
@@ -78,7 +75,6 @@ fun DashboardScreen(
     onNavigateToEmotionCapture: () -> Unit,
     onNavigateToEmotionGallery: () -> Unit,
     onNavigateToMoodTimeline: () -> Unit,
-    onNavigateToVitalsTrends: () -> Unit,
     onNavigateToNutrition: () -> Unit,
     onNavigateToCoaching: () -> Unit
 ) {
@@ -93,8 +89,6 @@ fun DashboardScreen(
     val nutritionState by nutritionViewModel.uiState.collectAsState()
     val coachingViewModel: CoachingViewModel = hiltViewModel()
     val coachingState by coachingViewModel.uiState.collectAsState()
-    val insightsPreviewViewModel: InsightsPreviewViewModel = hiltViewModel()
-    val insightsPreviewState by insightsPreviewViewModel.uiState.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -275,11 +269,13 @@ fun DashboardScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Welcome Section
+                // Welcome Section — tappable, with a one-line AI-coach insight (today only).
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClick = onNavigateToCoaching)
+                        .padding(horizontal = 24.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -297,7 +293,7 @@ fun DashboardScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(16.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Welcome back,",
                             style = MaterialTheme.typography.bodyMedium,
@@ -309,38 +305,42 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        Text(
-                            text = if (uiState.selectedDate == LocalDate.now()) {
-                                "Viewing today"
-                            } else {
+                        // AI-coach one-liner on today (tap → coach). On a past day, a neutral line;
+                        // while loading, just the date line (quiet, per the coaching contract).
+                        val coachLine = when {
+                            uiState.selectedDate != LocalDate.now() ->
                                 "Viewing ${uiState.selectedDate.format(DateTimeFormatter.ofPattern("EEE, MMM d"))}"
-                            },
+                            coachingState.isLoading || !coachingState.hasInsight -> "Viewing today"
+                            else -> coachingState.insight
+                        }
+                        Text(
+                            text = coachLine,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI Coach",
+                        tint = primaryColor.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Activity Overview
-                WorkoutCard(
-                    summary = uiState.healthSummary,
+                // Unified Health card (activity + vitals + body + sleep) → Health screen.
+                HealthCard(
                     selectedDate = uiState.selectedDate,
-                    hasPermissions = uiState.hasHealthPermissions,
-                    healthConnectAvailability = uiState.healthConnectAvailability,
-                    isSyncing = uiState.isLoading,
-                    lastSyncTime = uiState.lastSyncTime,
-                    error = uiState.error,
-                    onPermissionRequest = {
-                        val permissions = dashboardViewModel.getHealthPermissions()
-                        if (permissions.isNotEmpty()) {
-                            permissionLauncher.launch(permissions)
-                        }
-                    },
-                    onOpenSettings = { dashboardViewModel.openHealthConnectSettings(context) },
-                    onSync = { dashboardViewModel.refreshSelectedDate() },
-                    onClick = onNavigateToWorkoutDetails
+                    steps = uiState.healthSummary.steps,
+                    goalSteps = uiState.healthSummary.stepsGoal,
+                    activeCalories = uiState.healthSummary.activeCalories,
+                    activeMinutes = uiState.healthSummary.activeTimeMinutes,
+                    vitals = vitalsState,
+                    isConnected = uiState.hasHealthPermissions || uiState.lastSyncTime != null,
+                    onClick = onNavigateToHealth
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -359,24 +359,9 @@ fun DashboardScreen(
                     dominantToday = emotionsState.dominantToday,
                     todayCount = emotionsState.todayCount,
                     today = emotionsState.today,
+                    selectedDate = uiState.selectedDate,
                     onLog = { showLogMoodSheet = true },
                     onOpenTimeline = onNavigateToMoodTimeline
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                VitalsCard(
-                    state = vitalsState,
-                    // Same "connected" definition as WorkoutCard: permission granted OR a cached
-                    // snapshot exists (offline-first). Keys on grant, not data present.
-                    isConnected = uiState.hasHealthPermissions || uiState.lastSyncTime != null,
-                    onConnect = {
-                        val permissions = dashboardViewModel.getHealthPermissions()
-                        if (permissions.isNotEmpty()) {
-                            permissionLauncher.launch(permissions)
-                        }
-                    },
-                    onClick = onNavigateToVitalsTrends
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -384,20 +369,6 @@ fun DashboardScreen(
                 NutritionCard(
                     state = nutritionState,
                     onClick = onNavigateToNutrition
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                CoachingCard(
-                    state = coachingState,
-                    onClick = onNavigateToCoaching
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                InsightsCard(
-                    state = insightsPreviewState,
-                    onClick = onNavigateToInsights
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -424,7 +395,6 @@ fun DashboardScreen(
                         "Daily Goals" -> onNavigateToGoals()
                         "Activity Settings" -> onNavigateToActivitySettings()
                         "Preferences" -> onNavigateToFoodPreferences()
-                        "Insights" -> onNavigateToInsights()
                         "Help & Support" -> onNavigateToHelp()
                         "Sign Out" -> showLogoutDialog = true
                     }
@@ -847,7 +817,6 @@ fun ProfileBottomSheet(
                 ProfileMenuItem(Icons.Default.Person, "Profile", onOption)
                 ProfileMenuItem(Icons.Default.Flag, "Daily Goals", onOption)
                 ProfileMenuItem(Icons.Default.Restaurant, "Preferences", onOption)
-                ProfileMenuItem(Icons.Default.Analytics, "Insights", onOption)
                 ProfileMenuItem(Icons.Default.Settings, "Activity Settings", onOption)
                 ProfileMenuItem(Icons.AutoMirrored.Filled.Help, "Help & Support", onOption)
                 Spacer(modifier = Modifier.height(16.dp))

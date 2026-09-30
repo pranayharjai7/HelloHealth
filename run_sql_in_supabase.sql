@@ -440,6 +440,56 @@ GRANT SELECT, INSERT, UPDATE ON public.vitals_samples TO authenticated;
 NOTIFY pgrst, 'reload schema';
 
 -- ============================================================================
+-- Body composition history: public.body_metrics
+-- ----------------------------------------------------------------------------
+-- NEW table — multi-row per user, conflict key `id` = "userId|body|localDate"
+-- (one row per user per local day), matching BodyMetricSyncer.BodyMetricDto.
+-- The P5 body-analytics history that feeds the unified Health screen's Body
+-- section trends. Masses in kg, height in cm, body fat 0-100 %, all nullable
+-- (a day may carry only weight, only a scan, etc.). source = 'manual' |
+-- 'health_connect'. Same LWW-clock + tombstone + set_updated_at semantics as
+-- vitals_samples. DEPLOY (and reload PostgREST) BEFORE the client, or every
+-- body_metrics upsert returns PGRST204.
+CREATE TABLE IF NOT EXISTS public.body_metrics (
+    id                     text PRIMARY KEY,
+    user_id                text NOT NULL,
+    local_date             text NOT NULL,
+    timestamp_utc          timestamptz NOT NULL,
+    tz_offset              integer NOT NULL DEFAULT 0,
+    weight_kg              double precision,
+    height_cm              double precision,
+    body_fat_pct           double precision,
+    lean_mass_kg           double precision,
+    fat_mass_kg            double precision,
+    body_water_kg          double precision,
+    bone_mass_kg           double precision,
+    bmr                    double precision,
+    bmi                    double precision,
+    waist_cm               double precision,
+    vo2max                 double precision,
+    source                 text NOT NULL,
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    deleted_at             timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_body_metrics_user_id ON public.body_metrics (user_id);
+
+DROP TRIGGER IF EXISTS trg_body_metrics_set_updated_at ON public.body_metrics;
+CREATE TRIGGER trg_body_metrics_set_updated_at
+    BEFORE UPDATE ON public.body_metrics
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.body_metrics ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS body_metrics_owner ON public.body_metrics;
+CREATE POLICY body_metrics_owner ON public.body_metrics
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+GRANT SELECT, INSERT, UPDATE ON public.body_metrics TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
 -- P5 — Nutrition (HealthifyMe-style): public.nutrition_entries
 -- ----------------------------------------------------------------------------
 -- DROP LEGACY FIRST. The pre-existing `foods` + `food_logs` tables (0 rows, no

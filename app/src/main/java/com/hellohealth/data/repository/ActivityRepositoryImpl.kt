@@ -49,7 +49,8 @@ class ActivityRepositoryImpl @Inject constructor(
     private val sessionManager: SupabaseSessionManager,
     private val syncScheduler: SyncScheduler,
     private val profileRepository: ProfileRepository,
-    private val vitalsRepository: VitalsRepository
+    private val vitalsRepository: VitalsRepository,
+    private val bodyMetricsRepository: com.hellohealth.domain.repository.BodyMetricsRepository
 ) : ActivityRepository {
 
     override suspend fun fetchSummary(
@@ -82,6 +83,7 @@ class ActivityRepositoryImpl @Inject constructor(
                 // rollup id, off the dashboard's critical path (runCatching), and a no-op when no user
                 // is signed in — so a rollup problem can never disturb the summary that just succeeded.
                 persistVitalsRollup(date, freshSummary)
+                persistBodyMetrics(date, freshSummary)
                 return freshSummary
             } else if (cachedSnapshot != null) {
                 // Health Connect has no data (e.g. past-30-days read restriction) — use the cache.
@@ -220,6 +222,34 @@ class ActivityRepositoryImpl @Inject constructor(
             )
         }.onFailure { e ->
             AppLogger.e(FeatureTag.VITALS, "persistVitalsRollup failed for $date", e)
+        }
+    }
+
+    /**
+     * Upsert the daily body-composition row from a freshly-fetched Health Connect summary. Idempotent
+     * (deterministic id in the repo), off the dashboard's critical path (runCatching), a no-op when no
+     * user / no body data. HealthSummary.height is in METERS → convert to cm for the canonical store;
+     * BMI and fat mass are derived here (BodyEnergy) so the persisted trend point is self-contained.
+     */
+    private suspend fun persistBodyMetrics(date: LocalDate, summary: HealthSummary) {
+        runCatching {
+            val heightCm = summary.height?.let { it * 100.0 }
+            bodyMetricsRepository.upsertFromHealthConnect(
+                localDate = date.toString(),
+                weightKg = summary.weight,
+                heightCm = heightCm,
+                bodyFatPct = summary.bodyFat,
+                leanMassKg = summary.leanBodyMassKg
+                    ?: BodyEnergy.leanMassKg(summary.weight, summary.bodyFat),
+                fatMassKg = BodyEnergy.fatMassKg(summary.weight, summary.bodyFat),
+                bodyWaterKg = summary.bodyWaterMassKg,
+                boneMassKg = summary.boneMassKg,
+                bmr = summary.basalMetabolicRate.takeIf { it > 0.0 },
+                bmi = BodyEnergy.bmi(summary.weight, heightCm),
+                vo2max = summary.vo2max,
+            )
+        }.onFailure { e ->
+            AppLogger.e(FeatureTag.BODY_METRICS, "persistBodyMetrics failed for $date", e)
         }
     }
 

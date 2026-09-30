@@ -42,6 +42,35 @@ object BodyEnergy {
     }
 
     /**
+     * Body Mass Index (kg/m²) from weight (kg) and height (**cm**). Returns null when either input is
+     * missing or the height is non-positive (avoids a divide-by-zero) — Health Connect often lacks a
+     * Height record, so BMI is frequently unavailable and the UI must dash it.
+     */
+    fun bmi(weightKg: Double?, heightCm: Double?): Double? {
+        if (weightKg == null || heightCm == null || heightCm <= 0.0) return null
+        val heightM = heightCm / 100.0
+        return weightKg / (heightM * heightM)
+    }
+
+    /**
+     * Fat mass (kg) from weight (kg) and body-fat **percentage** (0–100, as Health Connect's
+     * `BodyFatRecord.percentage` reports). Null when either input is missing.
+     */
+    fun fatMassKg(weightKg: Double?, bodyFatPct: Double?): Double? {
+        if (weightKg == null || bodyFatPct == null) return null
+        return weightKg * bodyFatPct / 100.0
+    }
+
+    /**
+     * Lean body mass (kg) = weight − fat mass, derived from body-fat %. Used only when a direct
+     * Health Connect `LeanBodyMassRecord` is absent. Null when weight or body-fat % is missing.
+     */
+    fun leanMassKg(weightKg: Double?, bodyFatPct: Double?): Double? {
+        val fat = fatMassKg(weightKg, bodyFatPct) ?: return null
+        return (weightKg ?: return null) - fat
+    }
+
+    /**
      * Total Daily Energy Expenditure (kcal/day) = BMR × activity multiplier.
      * Falls back to [ActivityLevel.SEDENTARY] when activity level is unset; null if BMR is null.
      */

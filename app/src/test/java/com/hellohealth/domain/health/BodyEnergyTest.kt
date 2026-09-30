@@ -118,4 +118,32 @@ class BodyEnergyTest {
         assertTrue(veryActive.steps > sedentary.steps)
         assertTrue(veryActive.activeMinutes > sedentary.activeMinutes)
     }
+
+    @Test
+    fun `bmi computes from weight kg and height cm`() {
+        // 80 kg at 180 cm → 80 / 1.8^2 = 24.69…
+        assertEquals(24.691, BodyEnergy.bmi(80.0, 180.0)!!, 0.001)
+    }
+
+    @Test
+    fun `bmi is null when height or weight missing or non-positive`() {
+        assertNull(BodyEnergy.bmi(null, 180.0))
+        assertNull(BodyEnergy.bmi(80.0, null))
+        assertNull(BodyEnergy.bmi(80.0, 0.0))
+        assertNull(BodyEnergy.bmi(80.0, -5.0))
+    }
+
+    @Test
+    fun `fatMass and leanMass derive from body-fat percent (0-100)`() {
+        // 80 kg at 20% body fat → 16 kg fat, 64 kg lean.
+        assertEquals(16.0, BodyEnergy.fatMassKg(80.0, 20.0)!!, 0.001)
+        assertEquals(64.0, BodyEnergy.leanMassKg(80.0, 20.0)!!, 0.001)
+    }
+
+    @Test
+    fun `fatMass and leanMass are null when inputs missing`() {
+        assertNull(BodyEnergy.fatMassKg(null, 20.0))
+        assertNull(BodyEnergy.fatMassKg(80.0, null))
+        assertNull(BodyEnergy.leanMassKg(80.0, null))
+    }
 }

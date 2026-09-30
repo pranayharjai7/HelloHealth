@@ -22,7 +22,8 @@ import com.hellohealth.ui.auth.LoginScreen
 import com.hellohealth.ui.dashboard.DashboardScreen
 import com.hellohealth.ui.dashboard.DashboardViewModel
 import com.hellohealth.ui.dashboard.EmotionsViewModel
-import com.hellohealth.ui.dashboard.WorkoutDetailsScreen
+
+
 import com.hellohealth.ui.emotioncapture.EmotionCaptureScreen
 import com.hellohealth.ui.emotioncapture.EmotionCaptureViewModel
 import com.hellohealth.ui.emotioninsights.EmotionInsightsScreen
@@ -124,8 +125,8 @@ fun AppNavigation(
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
                     }
                 },
-                onNavigateToWorkoutDetails = {
-                    navController.navigate(Screen.WorkoutDetails.route)
+                onNavigateToHealth = {
+                    navController.navigate(Screen.Health.route)
                 },
                 onNavigateToWorkoutPlan = {
                     navController.navigate(Screen.Routines.route)
@@ -142,27 +143,23 @@ fun AppNavigation(
                     navController.navigate(Screen.EmotionCapture.createRoute(startInGallery = true))
                 },
                 onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) },
-                onNavigateToVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) },
                 onNavigateToNutrition = { navController.navigate(Screen.Nutrition.route) },
                 onNavigateToCoaching = { navController.navigate(Screen.Coaching.route) }
             )
         }
         
         composable(
-            route = Screen.WorkoutDetails.route,
-            enterTransition = { 
-                fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 2 } 
+            route = Screen.Health.route,
+            enterTransition = {
+                fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 2 }
             },
-            exitTransition = { 
-                fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 } 
+            exitTransition = {
+                fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 }
             }
-        ) { backStackEntry ->
-            val parentEntry = remember(backStackEntry) {
-                navController.getBackStackEntry(Screen.Dashboard.route)
-            }
-            val dashboardViewModel: DashboardViewModel = hiltViewModel(parentEntry)
-            WorkoutDetailsScreen(
-                viewModel = dashboardViewModel,
+        ) {
+            val healthViewModel: com.hellohealth.ui.health.HealthViewModel = hiltViewModel()
+            com.hellohealth.ui.health.HealthScreen(
+                viewModel = healthViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenActivityDetail = { session ->
                     if (session.id.isNotBlank()) {
@@ -174,7 +171,9 @@ fun AppNavigation(
                             )
                         )
                     }
-                }
+                },
+                onOpenVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) },
+                onOpenInsights = { navController.navigate(Screen.Insights.route) },
             )
         }
 
@@ -542,7 +541,6 @@ sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Login : Screen("login")
     object Dashboard : Screen("dashboard")
-    object WorkoutDetails : Screen("workout_details")
     object ActivityDetail : Screen("activity_detail/{activityId}?sessionStart={sessionStart}&sessionEnd={sessionEnd}") {
         const val activityIdArg = "activityId"
         const val sessionStartArg = "sessionStart"
@@ -571,6 +569,7 @@ sealed class Screen(val route: String) {
     object EmotionInsights : Screen("emotion_insights")
     object MoodTimeline : Screen("mood_timeline")
     object VitalsTrends : Screen("vitals_trends")
+    object Health : Screen("health")
     object Nutrition : Screen("nutrition")
     object BarcodeScan : Screen("barcode_scan")
     object Coaching : Screen("coaching")

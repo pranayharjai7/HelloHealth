@@ -102,7 +102,13 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
         HealthPermission.getReadPermission(RespiratoryRateRecord::class),
         HealthPermission.getReadPermission(BodyTemperatureRecord::class),
-        HealthPermission.getReadPermission(HydrationRecord::class)
+        HealthPermission.getReadPermission(HydrationRecord::class),
+        // Body composition (unified Health screen): body water / lean / bone mass. Read-only,
+        // safeFetch-wrapped, and deliberately NOT in essentialPermissions — a device without these
+        // body sensors must still count as "connected".
+        HealthPermission.getReadPermission(LeanBodyMassRecord::class),
+        HealthPermission.getReadPermission(BoneMassRecord::class),
+        HealthPermission.getReadPermission(BodyWaterMassRecord::class)
     )
 
     /**
@@ -220,6 +226,9 @@ class HealthConnectManager @Inject constructor(
             val weight = safeFetch { fetchLatestWeight(endOfDay) }
             val height = safeFetch { fetchLatestHeight(endOfDay) }
             val bodyFat = safeFetch { fetchLatestBodyFat(endOfDay) }
+            val leanBodyMass = safeFetch { fetchLatestLeanBodyMass(endOfDay) }
+            val boneMass = safeFetch { fetchLatestBoneMass(endOfDay) }
+            val bodyWaterMass = safeFetch { fetchLatestBodyWaterMass(endOfDay) }
             val heartRate = safeAggregate { aggregateHeartRate(timeRangeFilter) }?.toInt()
             val oxygen = safeFetch { fetchLatestOxygenSaturation(endOfDay) }
             val vo2max = safeFetch { fetchLatestVo2Max(endOfDay) }
@@ -251,6 +260,9 @@ class HealthConnectManager @Inject constructor(
                 weight = weight,
                 height = height,
                 bodyFat = bodyFat,
+                leanBodyMassKg = leanBodyMass,
+                boneMassKg = boneMass,
+                bodyWaterMassKg = bodyWaterMass,
                 heartRateAvg = heartRate,
                 oxygenSaturation = oxygen,
                 vo2max = vo2max,
@@ -578,6 +590,27 @@ class HealthConnectManager @Inject constructor(
             ReadRecordsRequest(recordType = BodyFatRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
         )
         return response?.records?.firstOrNull()?.percentage?.value
+    }
+
+    private suspend fun fetchLatestLeanBodyMass(before: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = LeanBodyMassRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.mass?.inKilograms
+    }
+
+    private suspend fun fetchLatestBoneMass(before: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = BoneMassRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.mass?.inKilograms
+    }
+
+    private suspend fun fetchLatestBodyWaterMass(before: Instant): Double? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(recordType = BodyWaterMassRecord::class, timeRangeFilter = TimeRangeFilter.before(before), ascendingOrder = false, pageSize = 1)
+        )
+        return response?.records?.firstOrNull()?.mass?.inKilograms
     }
 
     private suspend fun fetchLatestBasalMetabolicRate(before: Instant): Double? {

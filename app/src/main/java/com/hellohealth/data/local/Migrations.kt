@@ -435,3 +435,41 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         db.execSQL("ALTER TABLE `profile` ADD COLUMN `aiCoachingEnabled` INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/**
+ * v12 -> v13: add `body_metrics` (P5 body-analytics history + the unified Health screen's Body
+ * section). One row per user per local day, deterministic id `"$userId|body|$localDate"`. Additive
+ * CREATE only — mirrors MIGRATION_9_10 (vitals_samples). Column order + affinities must match Room's
+ * generated 13.json exactly (feature cols first, 4 Syncable cols LAST), validated by MigrationTest.
+ */
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `body_metrics` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`timestampUtcEpochMs` INTEGER NOT NULL, " +
+                "`tzOffsetMinutes` INTEGER NOT NULL, " +
+                "`weightKg` REAL, " +
+                "`heightCm` REAL, " +
+                "`bodyFatPct` REAL, " +
+                "`leanMassKg` REAL, " +
+                "`fatMassKg` REAL, " +
+                "`bodyWaterKg` REAL, " +
+                "`boneMassKg` REAL, " +
+                "`bmr` REAL, " +
+                "`bmi` REAL, " +
+                "`waistCm` REAL, " +
+                "`vo2max` REAL, " +
+                "`source` TEXT NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_body_metrics_userId` ON `body_metrics` (`userId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_body_metrics_isSynced` ON `body_metrics` (`isSynced`)")
+    }
+}
