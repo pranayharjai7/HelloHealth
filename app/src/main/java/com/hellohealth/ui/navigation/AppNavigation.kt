@@ -143,7 +143,8 @@ fun AppNavigation(
                 },
                 onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) },
                 onNavigateToVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) },
-                onNavigateToNutrition = { navController.navigate(Screen.Nutrition.route) }
+                onNavigateToNutrition = { navController.navigate(Screen.Nutrition.route) },
+                onNavigateToCoaching = { navController.navigate(Screen.Coaching.route) }
             )
         }
         
@@ -558,6 +559,7 @@ sealed class Screen(val route: String) {
     object VitalsTrends : Screen("vitals_trends")
     object Nutrition : Screen("nutrition")
     object BarcodeScan : Screen("barcode_scan")
+    object Coaching : Screen("coaching")
     object ActivitySettings : Screen("activity_settings")
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")
