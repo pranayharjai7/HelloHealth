@@ -14,6 +14,7 @@ import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.model.vitals.ReadinessStatus
 import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.BodyLogUndo
 import com.hellohealth.domain.repository.BodyMetricsRepository
 import com.hellohealth.domain.repository.GoalsRepository
 import com.hellohealth.domain.repository.ProfileRepository
@@ -69,6 +70,10 @@ class HealthViewModel @Inject constructor(
 
     // Bumped by refresh() (pull-to-refresh) to force a live Health Connect re-fetch of the summary.
     private val refreshTrigger = MutableStateFlow(0)
+
+    // The Undo token for the most recent manual weight log, consumed by undoLastLog(). Single-slot:
+    // only the latest log is undoable, which matches the single-snackbar UX.
+    private var lastUndo: BodyLogUndo? = null
 
     val uiState: StateFlow<HealthUiState> =
         selectedDateHolder.selectedDate.flatMapLatest { date ->
@@ -133,14 +138,26 @@ class HealthViewModel @Inject constructor(
     /**
      * Log a manual weight (kg) — and optional waist (cm) — for the currently-selected day. Writes
      * through the repository (Room-first, load-then-merge so same-day Health Connect fields survive),
-     * then nudges the body flow to re-read via the refresh trigger. No-op on a blank weight.
+     * stashes the returned Undo token, then nudges the body flow to re-read. No-op on a blank weight.
      */
     fun logWeight(weightKg: Double, waistCm: Double? = null) {
         if (weightKg <= 0) return
         val date = selectedDateHolder.selectedDate.value
         viewModelScope.launch {
             runCatching { bodyMetricsRepository.logWeight(date.toString(), weightKg, waistCm) }
+                .onSuccess { lastUndo = it }
                 .onFailure { AppLogger.w(FeatureTag.BODY_METRICS, "logWeight failed: ${it.message}") }
+            refreshTrigger.value += 1
+        }
+    }
+
+    /** Reverse the most recent [logWeight] (restores the day's prior state), if one is pending. */
+    fun undoLastLog() {
+        val token = lastUndo ?: return
+        lastUndo = null
+        viewModelScope.launch {
+            runCatching { bodyMetricsRepository.undoLog(token) }
+                .onFailure { AppLogger.w(FeatureTag.BODY_METRICS, "undoLog failed: ${it.message}") }
             refreshTrigger.value += 1
         }
     }

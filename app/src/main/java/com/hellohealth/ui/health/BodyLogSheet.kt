@@ -36,8 +36,8 @@ import kotlinx.coroutines.launch
  *
  * Reuses [com.hellohealth.ui.dashboard.components.LogMoodSheet]'s dismiss-then-act latch so the sheet
  * animates closed before the write fires and a double-tap can't log twice. Save is disabled until the
- * weight parses to a sane positive value — there is no revert (a manual log merges into the day's row
- * and can't be cleanly un-merged), so the guard IS the safety.
+ * weight parses to a sane positive value. A manual log is reversible — the host shows an "Undo"
+ * snackbar that restores the day's prior row (see [com.hellohealth.ui.health.HealthViewModel.undoLastLog]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

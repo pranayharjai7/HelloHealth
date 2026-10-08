@@ -86,7 +86,8 @@ class ActivityRepositoryImplBmrFallbackTest {
     private object NoopBodyMetricsRepository : com.hellohealth.domain.repository.BodyMetricsRepository {
         override fun observeRecentBodyMetrics(days: Int): Flow<List<com.hellohealth.domain.model.BodyMetric>> = flowOf(emptyList())
         override fun observeLatest(): Flow<com.hellohealth.domain.model.BodyMetric?> = flowOf(null)
-        override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?) {}
+        override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?): com.hellohealth.domain.repository.BodyLogUndo? = null
+        override suspend fun undoLog(token: com.hellohealth.domain.repository.BodyLogUndo) {}
         override suspend fun upsertFromHealthConnect(localDate: String, weightKg: Double?, heightCm: Double?, bodyFatPct: Double?, leanMassKg: Double?, fatMassKg: Double?, bodyWaterKg: Double?, boneMassKg: Double?, bmr: Double?, bmi: Double?, vo2max: Double?) {}
     }
 

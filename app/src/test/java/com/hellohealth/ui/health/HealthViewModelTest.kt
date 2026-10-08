@@ -11,6 +11,7 @@ import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.model.vitals.ReadinessStatus
 import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.BodyLogUndo
 import com.hellohealth.domain.repository.BodyMetricsRepository
 import com.hellohealth.domain.repository.GoalsRepository
 import com.hellohealth.domain.repository.ProfileRepository
@@ -74,11 +75,14 @@ class HealthViewModelTest {
 
     private class FakeBody(private val rows: List<BodyMetric>) : BodyMetricsRepository {
         val loggedWeights = mutableListOf<Triple<String, Double, Double?>>()
+        var undoCount = 0
         override fun observeRecentBodyMetrics(days: Int): Flow<List<BodyMetric>> = flowOf(rows)
         override fun observeLatest(): Flow<BodyMetric?> = flowOf(rows.lastOrNull())
-        override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?) {
+        override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?): BodyLogUndo? {
             loggedWeights += Triple(localDate, weightKg, waistCm)
+            return BodyLogUndo(localDate, prior = null)
         }
+        override suspend fun undoLog(token: BodyLogUndo) { undoCount++ }
         override suspend fun upsertFromHealthConnect(localDate: String, weightKg: Double?, heightCm: Double?, bodyFatPct: Double?, leanMassKg: Double?, fatMassKg: Double?, bodyWaterKg: Double?, boneMassKg: Double?, bmr: Double?, bmi: Double?, vo2max: Double?) = Unit
     }
 
@@ -152,5 +156,10 @@ class HealthViewModelTest {
         assertEquals(past.toString(), date)
         assertEquals(81.5, weight, 0.001)
         assertEquals(88.0, waist!!, 0.001)
+
+        // Undo consumes the stashed token exactly once; a second undo is a no-op.
+        vm.undoLastLog()
+        vm.undoLastLog()
+        assertEquals(1, fakeBody.undoCount)
     }
 }
