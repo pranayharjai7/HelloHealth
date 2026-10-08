@@ -69,7 +69,6 @@ fun DashboardScreen(
     onNavigateToGoals: () -> Unit,
     onNavigateToActivitySettings: () -> Unit,
     onNavigateToFoodPreferences: () -> Unit,
-    onNavigateToInsights: () -> Unit,
     onNavigateToHelp: () -> Unit,
     onNavigateToLogEmotion: () -> Unit,
     onNavigateToEmotionCapture: () -> Unit,
