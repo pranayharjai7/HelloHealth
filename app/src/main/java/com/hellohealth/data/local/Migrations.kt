@@ -473,3 +473,66 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `idx_body_metrics_isSynced` ON `body_metrics` (`isSynced`)")
     }
 }
+
+/**
+ * v13 → v14: F1 live workout logging. Purely additive — CREATE `workout_sessions` and `session_sets`
+ * (the logged ACTUALS, distinct from the planning hierarchy); touches no existing table. Column order
+ * and affinities match the Room-generated v14 schema exactly (validated by MigrationTest vs 14.json).
+ */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `workout_sessions` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`planId` TEXT, " +
+                "`dayId` TEXT, " +
+                "`title` TEXT, " +
+                "`activityType` TEXT NOT NULL, " +
+                "`startEpochMs` INTEGER NOT NULL, " +
+                "`endEpochMs` INTEGER, " +
+                "`durationSeconds` INTEGER, " +
+                "`status` TEXT NOT NULL, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`note` TEXT, " +
+                "`totalVolumeKg` REAL, " +
+                "`caloriesEstimate` REAL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_workout_sessions_userId` ON `workout_sessions` (`userId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_workout_sessions_userId_status` ON `workout_sessions` (`userId`, `status`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_workout_sessions_isSynced` ON `workout_sessions` (`isSynced`)")
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `session_sets` (" +
+                "`id` TEXT NOT NULL, " +
+                "`sessionId` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`plannedExerciseId` TEXT, " +
+                "`exerciseId` TEXT NOT NULL, " +
+                "`orderIndex` INTEGER NOT NULL, " +
+                "`setNumber` INTEGER NOT NULL, " +
+                "`reps` INTEGER, " +
+                "`weightKg` REAL, " +
+                "`durationSeconds` INTEGER, " +
+                "`distanceKm` REAL, " +
+                "`rpe` REAL, " +
+                "`isWarmup` INTEGER NOT NULL, " +
+                "`isCompleted` INTEGER NOT NULL, " +
+                "`isSkipped` INTEGER NOT NULL, " +
+                "`loggedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_session_sets_sessionId` ON `session_sets` (`sessionId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_session_sets_userId` ON `session_sets` (`userId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_session_sets_isSynced` ON `session_sets` (`isSynced`)")
+    }
+}

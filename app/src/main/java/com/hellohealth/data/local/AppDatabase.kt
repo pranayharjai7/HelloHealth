@@ -12,12 +12,14 @@ import com.hellohealth.data.local.dao.GoalsDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.dao.PlannedExerciseDao
 import com.hellohealth.data.local.dao.ProfileDao
+import com.hellohealth.data.local.dao.SessionSetDao
 import com.hellohealth.data.local.dao.SnapshotDao
 import com.hellohealth.data.local.dao.SyncLogDao
 import com.hellohealth.data.local.dao.UserDao
 import com.hellohealth.data.local.dao.VitalsSampleDao
 import com.hellohealth.data.local.dao.WorkoutDayDao
 import com.hellohealth.data.local.dao.WorkoutPlanDao
+import com.hellohealth.data.local.dao.WorkoutSessionDao
 import com.hellohealth.data.local.entities.CachedFoodEntity
 import com.hellohealth.data.local.entities.EmotionRecordEntity
 import com.hellohealth.data.local.entities.ExerciseEntity
@@ -27,12 +29,14 @@ import com.hellohealth.data.local.entities.NutritionEntryEntity
 import com.hellohealth.data.local.entities.BodyMetricEntity
 import com.hellohealth.data.local.entities.PlannedExerciseEntity
 import com.hellohealth.data.local.entities.ProfileEntity
+import com.hellohealth.data.local.entities.SessionSetEntity
 import com.hellohealth.data.local.entities.SnapshotEntity
 import com.hellohealth.data.local.entities.SyncLogEntity
 import com.hellohealth.data.local.entities.UserEntity
 import com.hellohealth.data.local.entities.VitalsSampleEntity
 import com.hellohealth.data.local.entities.WorkoutDayEntity
 import com.hellohealth.data.local.entities.WorkoutPlanEntity
+import com.hellohealth.data.local.entities.WorkoutSessionEntity
 
 @Database(
     entities = [
@@ -50,9 +54,11 @@ import com.hellohealth.data.local.entities.WorkoutPlanEntity
         VitalsSampleEntity::class,
         NutritionEntryEntity::class,
         CachedFoodEntity::class,
-        BodyMetricEntity::class
+        BodyMetricEntity::class,
+        WorkoutSessionEntity::class,
+        SessionSetEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -72,4 +78,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun nutritionEntryDao(): NutritionEntryDao
     abstract fun cachedFoodDao(): CachedFoodDao
     abstract fun bodyMetricDao(): BodyMetricDao
+    abstract fun workoutSessionDao(): WorkoutSessionDao
+    abstract fun sessionSetDao(): SessionSetDao
 }
