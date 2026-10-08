@@ -536,3 +536,64 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `idx_session_sets_isSynced` ON `session_sets` (`isSynced`)")
     }
 }
+
+/**
+ * v14 → v15: wellness + gamification (F3). Purely additive — three new user-owned, synced tables.
+ *
+ * `streaks` (one row per user per pillar), `points_ledger` (append-only, idempotent per (day,source)),
+ * `achievements` (one row per earned achievement). CREATE statements must match Room's generated v15
+ * schema exactly (column order = entity field order, Syncable cols LAST); validated against the
+ * exported `15.json` by MigrationTest.
+ */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `streaks` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`pillar` TEXT NOT NULL, " +
+                "`currentCount` INTEGER NOT NULL, " +
+                "`longestCount` INTEGER NOT NULL, " +
+                "`lastHitLocalDate` TEXT, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streaks_userId` ON `streaks` (`userId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streaks_isSynced` ON `streaks` (`isSynced`)")
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `points_ledger` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`source` TEXT NOT NULL, " +
+                "`points` INTEGER NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_points_ledger_userId` ON `points_ledger` (`userId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_points_ledger_userId_localDate` ON `points_ledger` (`userId`, `localDate`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_points_ledger_isSynced` ON `points_ledger` (`isSynced`)")
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `achievements` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`code` TEXT NOT NULL, " +
+                "`unlockedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_achievements_userId` ON `achievements` (`userId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `idx_achievements_isSynced` ON `achievements` (`isSynced`)")
+    }
+}

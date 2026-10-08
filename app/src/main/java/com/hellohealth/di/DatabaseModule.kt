@@ -14,6 +14,7 @@ import com.hellohealth.data.local.MIGRATION_10_11
 import com.hellohealth.data.local.MIGRATION_11_12
 import com.hellohealth.data.local.MIGRATION_12_13
 import com.hellohealth.data.local.MIGRATION_13_14
+import com.hellohealth.data.local.MIGRATION_14_15
 import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.EmotionRecordsDao
 import com.hellohealth.data.local.dao.ExerciseDao
@@ -49,7 +50,7 @@ object DatabaseModule {
         )
             // Real migrations — no destructive fallback. Never silently wipe user data.
             .addMigrations(
-                MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14
+                MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15
             )
             .build()
     }
@@ -107,4 +108,16 @@ object DatabaseModule {
     @Provides
     fun provideSessionSetDao(database: AppDatabase): com.hellohealth.data.local.dao.SessionSetDao =
         database.sessionSetDao()
+
+    @Provides
+    fun provideStreakDao(database: AppDatabase): com.hellohealth.data.local.dao.StreakDao =
+        database.streakDao()
+
+    @Provides
+    fun providePointsLedgerDao(database: AppDatabase): com.hellohealth.data.local.dao.PointsLedgerDao =
+        database.pointsLedgerDao()
+
+    @Provides
+    fun provideAchievementDao(database: AppDatabase): com.hellohealth.data.local.dao.AchievementDao =
+        database.achievementDao()
 }

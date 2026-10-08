@@ -3,6 +3,7 @@ package com.hellohealth.data.local
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.hellohealth.data.local.dao.AchievementDao
 import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.BodyMetricDao
 import com.hellohealth.data.local.dao.EmotionRecordsDao
@@ -11,15 +12,18 @@ import com.hellohealth.data.local.dao.FoodPrefsDao
 import com.hellohealth.data.local.dao.GoalsDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.dao.PlannedExerciseDao
+import com.hellohealth.data.local.dao.PointsLedgerDao
 import com.hellohealth.data.local.dao.ProfileDao
 import com.hellohealth.data.local.dao.SessionSetDao
 import com.hellohealth.data.local.dao.SnapshotDao
+import com.hellohealth.data.local.dao.StreakDao
 import com.hellohealth.data.local.dao.SyncLogDao
 import com.hellohealth.data.local.dao.UserDao
 import com.hellohealth.data.local.dao.VitalsSampleDao
 import com.hellohealth.data.local.dao.WorkoutDayDao
 import com.hellohealth.data.local.dao.WorkoutPlanDao
 import com.hellohealth.data.local.dao.WorkoutSessionDao
+import com.hellohealth.data.local.entities.AchievementEntity
 import com.hellohealth.data.local.entities.CachedFoodEntity
 import com.hellohealth.data.local.entities.EmotionRecordEntity
 import com.hellohealth.data.local.entities.ExerciseEntity
@@ -28,9 +32,11 @@ import com.hellohealth.data.local.entities.GoalsEntity
 import com.hellohealth.data.local.entities.NutritionEntryEntity
 import com.hellohealth.data.local.entities.BodyMetricEntity
 import com.hellohealth.data.local.entities.PlannedExerciseEntity
+import com.hellohealth.data.local.entities.PointsLedgerEntity
 import com.hellohealth.data.local.entities.ProfileEntity
 import com.hellohealth.data.local.entities.SessionSetEntity
 import com.hellohealth.data.local.entities.SnapshotEntity
+import com.hellohealth.data.local.entities.StreakEntity
 import com.hellohealth.data.local.entities.SyncLogEntity
 import com.hellohealth.data.local.entities.UserEntity
 import com.hellohealth.data.local.entities.VitalsSampleEntity
@@ -56,9 +62,12 @@ import com.hellohealth.data.local.entities.WorkoutSessionEntity
         CachedFoodEntity::class,
         BodyMetricEntity::class,
         WorkoutSessionEntity::class,
-        SessionSetEntity::class
+        SessionSetEntity::class,
+        StreakEntity::class,
+        PointsLedgerEntity::class,
+        AchievementEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -80,4 +89,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bodyMetricDao(): BodyMetricDao
     abstract fun workoutSessionDao(): WorkoutSessionDao
     abstract fun sessionSetDao(): SessionSetDao
+    abstract fun streakDao(): StreakDao
+    abstract fun pointsLedgerDao(): PointsLedgerDao
+    abstract fun achievementDao(): AchievementDao
 }
