@@ -32,6 +32,9 @@ interface WorkoutSessionRepository {
 
     suspend fun getSession(id: String): WorkoutSession?
 
+    /** The current user's active session id, or null — a one-shot guard against double-start. */
+    suspend fun activeSessionId(): String?
+
     /**
      * Start a session. Abandons any currently-active session first (single-active invariant), then
      * opens a new ACTIVE session. [planId]/[dayId]/[title] optionally anchor it to a planned day;

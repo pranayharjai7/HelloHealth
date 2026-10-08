@@ -91,6 +91,11 @@ class WorkoutSessionRepositoryImpl @Inject constructor(
 
     override suspend fun getSession(id: String): WorkoutSession? = sessionDao.getById(id)?.toDomain()
 
+    override suspend fun activeSessionId(): String? {
+        val userId = sessionManager.getCurrentUserId() ?: return null
+        return sessionDao.getActiveSession(userId)?.id
+    }
+
     // -------------------------------------------------------------- Sessions
 
     override suspend fun startSession(

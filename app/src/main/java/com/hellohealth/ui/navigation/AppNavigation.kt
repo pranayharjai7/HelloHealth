@@ -54,6 +54,8 @@ import com.hellohealth.ui.workoutplan.RoutineDetailScreen
 import com.hellohealth.ui.workoutplan.RoutineDetailViewModel
 import com.hellohealth.ui.workoutplan.RoutinesScreen
 import com.hellohealth.ui.workoutplan.RoutinesViewModel
+import com.hellohealth.ui.workoutsession.ActiveWorkoutScreen
+import com.hellohealth.ui.workoutsession.ActiveWorkoutViewModel
 
 @Composable
 fun AppNavigation(
@@ -497,6 +499,9 @@ fun AppNavigation(
                 },
                 onOpenExercise = { plannedId ->
                     navController.navigate(Screen.ExerciseDetail.createRoute(plannedId))
+                },
+                onStartWorkout = { dayId ->
+                    navController.navigate(Screen.ActiveWorkout.createRoute(dayId))
                 }
             )
         }
@@ -531,6 +536,25 @@ fun AppNavigation(
             ExerciseDetailScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.ActiveWorkout.route,
+            arguments = listOf(
+                navArgument(Screen.ActiveWorkout.dayIdArg) {
+                    type = NavType.StringType
+                    defaultValue = "none"
+                }
+            ),
+            enterTransition = { fadeIn(tween(300)) + slideInVertically(tween(400)) { it / 2 } },
+            exitTransition = { fadeOut(tween(300)) },
+            popExitTransition = { fadeOut(tween(250)) + slideOutVertically(tween(300)) { it / 2 } }
+        ) {
+            val viewModel: ActiveWorkoutViewModel = hiltViewModel()
+            ActiveWorkoutScreen(
+                viewModel = viewModel,
+                onFinished = { navController.popBackStack() },
             )
         }
     }
@@ -608,5 +632,14 @@ sealed class Screen(val route: String) {
     object ExerciseDetail : Screen("exercise_detail/{plannedId}") {
         const val plannedIdArg = "plannedId"
         fun createRoute(plannedId: String): String = "exercise_detail/$plannedId"
+    }
+
+    /**
+     * The live workout session screen (F1). Optionally carries the planned `dayId` it was started
+     * from (prefills from that day); omit for an ad-hoc workout. "none" is the no-day sentinel.
+     */
+    object ActiveWorkout : Screen("active_workout?dayId={dayId}") {
+        const val dayIdArg = "dayId"
+        fun createRoute(dayId: String? = null): String = "active_workout?dayId=${dayId ?: "none"}"
     }
 }
