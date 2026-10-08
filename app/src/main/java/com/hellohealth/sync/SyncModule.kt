@@ -58,4 +58,12 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindBodyMetricSyncer(impl: BodyMetricSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindWorkoutSessionSyncer(impl: WorkoutSessionSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindSessionSetSyncer(impl: SessionSetSyncer): Syncer
 }

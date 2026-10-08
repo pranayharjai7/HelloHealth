@@ -561,3 +561,97 @@ GRANT SELECT, INSERT, UPDATE ON public.nutrition_entries TO authenticated;
 -- Refresh PostgREST's schema cache so nutrition_entries is visible to the API
 -- before the client's first push. Harmless to run repeatedly.
 NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- F1 — Live workout logging: public.workout_sessions
+-- ----------------------------------------------------------------------------
+-- NEW table — multi-row per user, conflict key `id` (one row per session),
+-- matching WorkoutSessionSyncer.WorkoutSessionDto. The logged ACTUALS of a
+-- workout (distinct from the planning hierarchy). plan_id/day_id optionally
+-- anchor to a planned day (null = ad-hoc). status = 'active' | 'completed' |
+-- 'abandoned'. Natural units (seconds, kg). Same LWW-clock + tombstone +
+-- set_updated_at semantics as vitals_samples. DEPLOY (and reload PostgREST)
+-- BEFORE the client, or every upsert returns PGRST204.
+CREATE TABLE IF NOT EXISTS public.workout_sessions (
+    id                     text PRIMARY KEY,
+    user_id                text NOT NULL,
+    plan_id                text,
+    day_id                 text,
+    title                  text,
+    activity_type          text NOT NULL,
+    start_utc              timestamptz NOT NULL,
+    end_utc                timestamptz,
+    duration_seconds       integer,
+    status                 text NOT NULL,
+    local_date             text NOT NULL,
+    note                   text,
+    total_volume_kg        double precision,
+    calories_estimate      double precision,
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    deleted_at             timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_id ON public.workout_sessions (user_id);
+
+DROP TRIGGER IF EXISTS trg_workout_sessions_set_updated_at ON public.workout_sessions;
+CREATE TRIGGER trg_workout_sessions_set_updated_at
+    BEFORE UPDATE ON public.workout_sessions
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.workout_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS workout_sessions_owner ON public.workout_sessions;
+CREATE POLICY workout_sessions_owner ON public.workout_sessions
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+GRANT SELECT, INSERT, UPDATE ON public.workout_sessions TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- F1 — Live workout logging: public.session_sets
+-- ----------------------------------------------------------------------------
+-- NEW table — multi-row per user, conflict key `id` (one row per logged set),
+-- matching SessionSetSyncer.SessionSetDto. session_id is a logical parent
+-- reference to workout_sessions.id (cascade is a client @Transaction, not a
+-- schema FK — matches planned_exercises). exercise_id references the global
+-- exercises catalog by id. Natural units (kg, seconds, km). Same LWW + tombstone
+-- + set_updated_at semantics. DEPLOY BEFORE the client (PGRST204).
+CREATE TABLE IF NOT EXISTS public.session_sets (
+    id                     text PRIMARY KEY,
+    session_id             text NOT NULL,
+    user_id                text NOT NULL,
+    planned_exercise_id    text,
+    exercise_id            text NOT NULL,
+    order_index            integer NOT NULL,
+    set_number             integer NOT NULL,
+    reps                   integer,
+    weight_kg              double precision,
+    duration_seconds       integer,
+    distance_km            double precision,
+    rpe                    double precision,
+    is_warmup              boolean NOT NULL DEFAULT false,
+    is_completed           boolean NOT NULL DEFAULT true,
+    is_skipped             boolean NOT NULL DEFAULT false,
+    logged_at_utc          timestamptz NOT NULL,
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    deleted_at             timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_session_sets_session_id ON public.session_sets (session_id);
+CREATE INDEX IF NOT EXISTS idx_session_sets_user_id ON public.session_sets (user_id);
+
+DROP TRIGGER IF EXISTS trg_session_sets_set_updated_at ON public.session_sets;
+CREATE TRIGGER trg_session_sets_set_updated_at
+    BEFORE UPDATE ON public.session_sets
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.session_sets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS session_sets_owner ON public.session_sets;
+CREATE POLICY session_sets_owner ON public.session_sets
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+GRANT SELECT, INSERT, UPDATE ON public.session_sets TO authenticated;
+
+NOTIFY pgrst, 'reload schema';

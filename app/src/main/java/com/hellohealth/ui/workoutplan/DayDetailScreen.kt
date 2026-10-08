@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
@@ -62,6 +63,7 @@ fun DayDetailScreen(
     onBack: () -> Unit,
     onAddExercise: (dayId: String) -> Unit,
     onOpenExercise: (plannedId: String) -> Unit,
+    onStartWorkout: (dayId: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -80,6 +82,17 @@ fun DayDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (uiState.exercises.isNotEmpty()) {
+                        IconButton(onClick = { onStartWorkout(viewModel.dayId) }) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Start workout",
+                                tint = primaryColor,
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(

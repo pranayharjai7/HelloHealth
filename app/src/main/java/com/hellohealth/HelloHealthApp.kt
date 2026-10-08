@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.hellohealth.sync.SyncScheduler
+import com.hellohealth.workoutsession.WorkoutSessionService
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -33,5 +34,6 @@ class HelloHealthApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         syncScheduler.ensurePeriodicSync()
+        WorkoutSessionService.ensureChannel(this)
     }
 }

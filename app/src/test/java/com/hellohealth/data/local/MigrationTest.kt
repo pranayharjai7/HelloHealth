@@ -649,4 +649,84 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 13 to 14 adds workout_sessions and session_sets and preserves existing data`() {
+        // A genuine v13 user has a body_metrics row. MIGRATION_13_14 is purely additive: it CREATEs
+        // the two F1 logging tables and touches nothing else, so the body_metrics row must survive.
+        helper.createDatabase(dbName, 13).apply {
+            execSQL(
+                "INSERT INTO body_metrics " +
+                    "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, source, " +
+                    "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                    "VALUES ('u1|body|2026-10-01', 'u1', '2026-10-01', 1000, 0, 'manual', 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_13_14 and validate the resulting schema matches 14.json exactly — the guard
+        // that the hand-written CREATE matches Room's generated v14 entities (order + affinities).
+        val db = helper.runMigrationsAndValidate(dbName, 14, true, MIGRATION_13_14)
+
+        // The pre-existing body_metrics row is untouched by the additive create.
+        db.query("SELECT source FROM body_metrics WHERE id = 'u1|body|2026-10-01'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("manual", c.getString(0))
+        }
+
+        // Both new tables exist and are empty.
+        db.query("SELECT count(*) FROM workout_sessions").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0))
+        }
+        db.query("SELECT count(*) FROM session_sets").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0))
+        }
+
+        // A fully-populated session + set round-trips (proves affinities + nullability).
+        db.execSQL(
+            "INSERT INTO workout_sessions " +
+                "(id, userId, planId, dayId, title, activityType, startEpochMs, endEpochMs, " +
+                "durationSeconds, status, localDate, note, totalVolumeKg, caloriesEstimate, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('s1', 'u1', 'p1', 'd1', 'Push day', 'strength_training', 1000, 4600, " +
+                "3600, 'completed', '2026-10-01', 'felt strong', 4200.0, 320.0, 4600, 0, NULL, 0)"
+        )
+        db.query("SELECT activityType, durationSeconds, totalVolumeKg, status FROM workout_sessions WHERE id = 's1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("strength_training", c.getString(0))
+            assertEquals(3600, c.getInt(1))
+            assertEquals(4200.0, c.getDouble(2), 0.0001)
+            assertEquals("completed", c.getString(3))
+        }
+
+        db.execSQL(
+            "INSERT INTO session_sets " +
+                "(id, sessionId, userId, plannedExerciseId, exerciseId, orderIndex, setNumber, reps, " +
+                "weightKg, durationSeconds, distanceKm, rpe, isWarmup, isCompleted, isSkipped, " +
+                "loggedAtEpochMs, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('set1', 's1', 'u1', 'pe1', 'ex1', 0, 1, 8, 100.0, NULL, NULL, 7.5, 0, 1, 0, " +
+                "1500, 1500, 0, NULL, 0)"
+        )
+        db.query("SELECT reps, weightKg, rpe, isCompleted FROM session_sets WHERE id = 'set1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(8, c.getInt(0))
+            assertEquals(100.0, c.getDouble(1), 0.0001)
+            assertEquals(7.5, c.getDouble(2), 0.0001)
+            assertEquals(1, c.getInt(3))
+        }
+
+        // A set leaving the nullable measurements NULL round-trips.
+        db.execSQL(
+            "INSERT INTO session_sets " +
+                "(id, sessionId, userId, exerciseId, orderIndex, setNumber, isWarmup, isCompleted, " +
+                "isSkipped, loggedAtEpochMs, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('set2', 's1', 'u1', 'ex1', 1, 2, 0, 0, 1, 1600, 1600, 0, NULL, 0)"
+        )
+        db.query("SELECT reps, weightKg FROM session_sets WHERE id = 'set2'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertTrue("reps should be null", c.isNull(0))
+            assertTrue("weightKg should be null", c.isNull(1))
+        }
+        db.close()
+    }
 }
