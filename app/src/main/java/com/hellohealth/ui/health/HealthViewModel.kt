@@ -3,6 +3,8 @@ package com.hellohealth.ui.health
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hellohealth.core.date.SelectedDateHolder
+import com.hellohealth.core.logging.AppLogger
+import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.model.ActivityGoals
 import com.hellohealth.domain.model.BodyAnalytics
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
@@ -125,6 +128,21 @@ class HealthViewModel @Inject constructor(
     /** Pull-to-refresh: force a live Health Connect re-fetch for today. */
     fun refresh() {
         refreshTrigger.value += 1
+    }
+
+    /**
+     * Log a manual weight (kg) — and optional waist (cm) — for the currently-selected day. Writes
+     * through the repository (Room-first, load-then-merge so same-day Health Connect fields survive),
+     * then nudges the body flow to re-read via the refresh trigger. No-op on a blank weight.
+     */
+    fun logWeight(weightKg: Double, waistCm: Double? = null) {
+        if (weightKg <= 0) return
+        val date = selectedDateHolder.selectedDate.value
+        viewModelScope.launch {
+            runCatching { bodyMetricsRepository.logWeight(date.toString(), weightKg, waistCm) }
+                .onFailure { AppLogger.w(FeatureTag.BODY_METRICS, "logWeight failed: ${it.message}") }
+            refreshTrigger.value += 1
+        }
     }
 
     companion object {

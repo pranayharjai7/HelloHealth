@@ -27,11 +27,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +51,7 @@ import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.model.vitals.ReadinessStatus
 import com.hellohealth.ui.dashboard.components.MultiActivityRings
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -71,6 +78,21 @@ fun HealthScreen(
     val backgroundColor = MaterialTheme.colorScheme.background
     val isToday = state.selectedDate == LocalDate.now()
 
+    var showLogSheet by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    if (showLogSheet) {
+        BodyLogSheet(
+            onDismiss = { showLogSheet = false },
+            onSave = { weightKg, waistCm ->
+                showLogSheet = false
+                viewModel.logWeight(weightKg, waistCm)
+                scope.launch { snackbarHostState.showSnackbar("Weight logged") }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -83,6 +105,7 @@ fun HealthScreen(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent,
     ) { padding ->
         Box(
@@ -106,7 +129,7 @@ fun HealthScreen(
 
                 item { ActivitySection(state.summary, state.goals) }
                 item { VitalsSection(state.readiness, state.latestVitals, onOpenVitalsTrends) }
-                item { BodySection(state.body) }
+                item { BodySection(state.body, onLogWeight = { showLogSheet = true }) }
                 item { SleepSection(state.summary) }
 
                 if (state.sessions.isNotEmpty()) {
@@ -134,9 +157,9 @@ private fun ActivitySection(summary: HealthSummary, goals: com.hellohealth.domai
                 modifier = Modifier.size(120.dp),
             )
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Legend("Steps", "${summary.steps}", Color(0xFF4CAF50))
-                Legend("Active burn", "${summary.activeCalories.roundToInt()} Cal", Color(0xFFFF7043))
-                Legend("Active time", "${summary.activeTimeMinutes} min", Color(0xFF42A5F5))
+                Legend("Steps", if (summary.steps > 0) "${summary.steps}" else DASH, Color(0xFF4CAF50))
+                Legend("Active burn", if (summary.activeCalories > 0) "${summary.activeCalories.roundToInt()} Cal" else DASH, Color(0xFFFF7043))
+                Legend("Active time", if (summary.activeTimeMinutes > 0) "${summary.activeTimeMinutes} min" else DASH, Color(0xFF42A5F5))
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -176,10 +199,12 @@ private fun VitalsSection(readiness: ReadinessScore?, latest: LatestVitals?, onO
 }
 
 @Composable
-private fun BodySection(body: com.hellohealth.domain.model.BodyAnalytics) {
+private fun BodySection(body: com.hellohealth.domain.model.BodyAnalytics, onLogWeight: () -> Unit) {
     SectionCard("Body composition") {
         if (!body.hasAnyData) {
             ChartEmpty("Log your weight or sync a smart scale to track body composition.")
+            Spacer(Modifier.height(8.dp))
+            LinkRow("Log weight", onLogWeight)
             return@SectionCard
         }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -207,6 +232,8 @@ private fun BodySection(body: com.hellohealth.domain.model.BodyAnalytics) {
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
         }
+        Spacer(Modifier.height(12.dp))
+        LinkRow("Log weight", onLogWeight)
     }
 }
 

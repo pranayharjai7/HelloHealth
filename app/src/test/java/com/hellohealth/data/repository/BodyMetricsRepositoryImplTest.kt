@@ -102,9 +102,13 @@ class BodyMetricsRepositoryImplTest {
     @Test
     fun `observeRecent returns rows ascending by date`() = runTest {
         val r = repo("u1")
-        r.logWeight("2026-09-28", 82.0)
-        r.logWeight("2026-09-30", 80.0)
+        // Seed relative to today so the rows always fall inside observeRecent's trailing window
+        // (the window is computed from LocalDate.now(); fixed past literals would age out).
+        val older = java.time.LocalDate.now().minusDays(5).toString()
+        val newer = java.time.LocalDate.now().minusDays(2).toString()
+        r.logWeight(older, 82.0)
+        r.logWeight(newer, 80.0)
         val rows = r.observeRecentBodyMetrics(7).first()
-        assertEquals(listOf("2026-09-28", "2026-09-30"), rows.map { it.localDate })
+        assertEquals(listOf(older, newer), rows.map { it.localDate })
     }
 }
