@@ -729,4 +729,81 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 14 to 15 adds streaks points_ledger and achievements and preserves existing data`() {
+        // A genuine v14 user has a workout_sessions row. MIGRATION_14_15 is purely additive: it CREATEs
+        // the three F3 tables and touches nothing else, so the session row must survive.
+        helper.createDatabase(dbName, 14).apply {
+            execSQL(
+                "INSERT INTO workout_sessions " +
+                    "(id, userId, activityType, startEpochMs, status, localDate, " +
+                    "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                    "VALUES ('s1', 'u1', 'running', 1000, 'completed', '2026-10-07', 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_14_15 and validate the resulting schema matches 15.json exactly — the guard
+        // that the hand-written CREATEs match Room's generated v15 entities (order + affinities).
+        val db = helper.runMigrationsAndValidate(dbName, 15, true, MIGRATION_14_15)
+
+        // The pre-existing session row is untouched by the additive create.
+        db.query("SELECT activityType FROM workout_sessions WHERE id = 's1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("running", c.getString(0))
+        }
+
+        // All three new tables exist and are empty.
+        db.query("SELECT count(*) FROM streaks").use { c -> assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0)) }
+        db.query("SELECT count(*) FROM points_ledger").use { c -> assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0)) }
+        db.query("SELECT count(*) FROM achievements").use { c -> assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0)) }
+
+        // Populated rows round-trip (proves affinities + nullability).
+        db.execSQL(
+            "INSERT INTO streaks " +
+                "(id, userId, pillar, currentCount, longestCount, lastHitLocalDate, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|streak|activity', 'u1', 'activity', 5, 9, '2026-10-07', 1000, 0, NULL, 0)"
+        )
+        db.query("SELECT currentCount, longestCount, lastHitLocalDate FROM streaks WHERE id = 'u1|streak|activity'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(5, c.getInt(0))
+            assertEquals(9, c.getInt(1))
+            assertEquals("2026-10-07", c.getString(2))
+        }
+
+        db.execSQL(
+            "INSERT INTO points_ledger " +
+                "(id, userId, localDate, source, points, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|pts|2026-10-07|activity', 'u1', '2026-10-07', 'activity', 30, 1000, 0, NULL, 0)"
+        )
+        db.query("SELECT COALESCE(SUM(points),0) FROM points_ledger WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals(30, c.getInt(0))
+        }
+
+        db.execSQL(
+            "INSERT INTO achievements " +
+                "(id, userId, code, unlockedAtEpochMs, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|ach|first_workout', 'u1', 'first_workout', 1500, 1500, 0, NULL, 0)"
+        )
+        db.query("SELECT code, unlockedAtEpochMs FROM achievements WHERE id = 'u1|ach|first_workout'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("first_workout", c.getString(0))
+            assertEquals(1500L, c.getLong(1))
+        }
+
+        // A streak leaving the nullable lastHitLocalDate NULL round-trips.
+        db.execSQL(
+            "INSERT INTO streaks " +
+                "(id, userId, pillar, currentCount, longestCount, lastHitLocalDate, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|streak|balanced', 'u1', 'balanced', 0, 0, NULL, 1000, 0, NULL, 0)"
+        )
+        db.query("SELECT lastHitLocalDate FROM streaks WHERE id = 'u1|streak|balanced'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertTrue("lastHitLocalDate should be null", c.isNull(0))
+        }
+        db.close()
+    }
 }

@@ -49,6 +49,7 @@ import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.HealthCard
 import com.hellohealth.ui.dashboard.components.LogMoodSheet
 import com.hellohealth.ui.dashboard.components.NutritionCard
+import com.hellohealth.ui.dashboard.components.WellnessCard
 import com.hellohealth.ui.dashboard.components.WorkoutPlanCard
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -75,7 +76,8 @@ fun DashboardScreen(
     onNavigateToEmotionGallery: () -> Unit,
     onNavigateToMoodTimeline: () -> Unit,
     onNavigateToNutrition: () -> Unit,
-    onNavigateToCoaching: () -> Unit
+    onNavigateToCoaching: () -> Unit,
+    onNavigateToWellness: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -88,6 +90,8 @@ fun DashboardScreen(
     val nutritionState by nutritionViewModel.uiState.collectAsState()
     val coachingViewModel: CoachingViewModel = hiltViewModel()
     val coachingState by coachingViewModel.uiState.collectAsState()
+    val wellnessViewModel: com.hellohealth.ui.wellness.WellnessViewModel = hiltViewModel()
+    val wellnessSnapshot by wellnessViewModel.snapshot.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -327,6 +331,14 @@ fun DashboardScreen(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Hero wellness score card (top of the stack) → Wellness screen.
+                WellnessCard(
+                    snapshot = wellnessSnapshot,
+                    onClick = onNavigateToWellness
+                )
 
                 Spacer(modifier = Modifier.height(32.dp))
 

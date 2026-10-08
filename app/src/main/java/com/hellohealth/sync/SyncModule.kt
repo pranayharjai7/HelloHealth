@@ -66,4 +66,16 @@ abstract class SyncModule {
     @Binds
     @IntoSet
     abstract fun bindSessionSetSyncer(impl: SessionSetSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindStreakSyncer(impl: StreakSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindPointsLedgerSyncer(impl: PointsLedgerSyncer): Syncer
+
+    @Binds
+    @IntoSet
+    abstract fun bindAchievementSyncer(impl: AchievementSyncer): Syncer
 }

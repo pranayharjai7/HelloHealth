@@ -56,6 +56,8 @@ import com.hellohealth.ui.workoutplan.RoutinesScreen
 import com.hellohealth.ui.workoutplan.RoutinesViewModel
 import com.hellohealth.ui.workoutsession.ActiveWorkoutScreen
 import com.hellohealth.ui.workoutsession.ActiveWorkoutViewModel
+import com.hellohealth.ui.wellness.WellnessScreen
+import com.hellohealth.ui.wellness.WellnessViewModel
 
 @Composable
 fun AppNavigation(
@@ -145,7 +147,8 @@ fun AppNavigation(
                 },
                 onNavigateToMoodTimeline = { navController.navigate(Screen.MoodTimeline.route) },
                 onNavigateToNutrition = { navController.navigate(Screen.Nutrition.route) },
-                onNavigateToCoaching = { navController.navigate(Screen.Coaching.route) }
+                onNavigateToCoaching = { navController.navigate(Screen.Coaching.route) },
+                onNavigateToWellness = { navController.navigate(Screen.Wellness.route) }
             )
         }
         
@@ -557,6 +560,17 @@ fun AppNavigation(
                 onFinished = { navController.popBackStack() },
             )
         }
+
+        composable(
+            route = Screen.Wellness.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: WellnessViewModel = hiltViewModel()
+            WellnessScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
     }
 }
 
@@ -601,6 +615,9 @@ sealed class Screen(val route: String) {
     object Insights : Screen("insights")
     object Help : Screen("help")
     object Onboarding : Screen("onboarding")
+
+    /** The wellness score + gamification detail screen (F3). */
+    object Wellness : Screen("wellness")
 
     // ---- Workout planning (WorkoutPlan → WorkoutDay → PlannedExercise + read-only catalog) ----
 

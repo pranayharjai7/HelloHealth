@@ -655,3 +655,106 @@ CREATE POLICY session_sets_owner ON public.session_sets
 GRANT SELECT, INSERT, UPDATE ON public.session_sets TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- F3 — Wellness & gamification: public.streaks
+-- ----------------------------------------------------------------------------
+-- NEW table — one row per user per pillar (conflict key `id` =
+-- "$userId|streak|$pillar"), matching StreakSyncer.StreakDto. pillar is a Pillar
+-- name or the literal 'balanced'. Recompute-on-read upserts the same row. Same
+-- LWW-clock + tombstone + set_updated_at semantics. DEPLOY BEFORE the client.
+CREATE TABLE IF NOT EXISTS public.streaks (
+    id                     text PRIMARY KEY,
+    user_id                text NOT NULL,
+    pillar                 text NOT NULL,
+    current_count          integer NOT NULL,
+    longest_count          integer NOT NULL,
+    last_hit_local_date    text,
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    deleted_at             timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_streaks_user_id ON public.streaks (user_id);
+
+DROP TRIGGER IF EXISTS trg_streaks_set_updated_at ON public.streaks;
+CREATE TRIGGER trg_streaks_set_updated_at
+    BEFORE UPDATE ON public.streaks
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.streaks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS streaks_owner ON public.streaks;
+CREATE POLICY streaks_owner ON public.streaks
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+GRANT SELECT, INSERT, UPDATE ON public.streaks TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- F3 — Wellness & gamification: public.points_ledger
+-- ----------------------------------------------------------------------------
+-- NEW table — APPEND-ONLY points ledger (conflict key `id` =
+-- "$userId|pts|$localDate|$source"), matching PointsLedgerSyncer.PointsLedgerDto.
+-- The deterministic (day, source) id makes each award idempotent so recompute
+-- never double-awards. Same LWW + tombstone + set_updated_at. DEPLOY FIRST.
+CREATE TABLE IF NOT EXISTS public.points_ledger (
+    id                     text PRIMARY KEY,
+    user_id                text NOT NULL,
+    local_date             text NOT NULL,
+    source                 text NOT NULL,
+    points                 integer NOT NULL,
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    deleted_at             timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_points_ledger_user_id ON public.points_ledger (user_id);
+CREATE INDEX IF NOT EXISTS idx_points_ledger_user_id_local_date ON public.points_ledger (user_id, local_date);
+
+DROP TRIGGER IF EXISTS trg_points_ledger_set_updated_at ON public.points_ledger;
+CREATE TRIGGER trg_points_ledger_set_updated_at
+    BEFORE UPDATE ON public.points_ledger
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.points_ledger ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS points_ledger_owner ON public.points_ledger;
+CREATE POLICY points_ledger_owner ON public.points_ledger
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+GRANT SELECT, INSERT, UPDATE ON public.points_ledger TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- F3 — Wellness & gamification: public.achievements
+-- ----------------------------------------------------------------------------
+-- NEW table — one row per user per earned achievement (conflict key `id` =
+-- "$userId|ach|$code"), matching AchievementSyncer.AchievementDto. unlocked_at is
+-- set once and never overwritten (one-time unlock). Same LWW + tombstone +
+-- set_updated_at. DEPLOY BEFORE the client.
+CREATE TABLE IF NOT EXISTS public.achievements (
+    id                     text PRIMARY KEY,
+    user_id                text NOT NULL,
+    code                   text NOT NULL,
+    unlocked_at            timestamptz NOT NULL,
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    deleted_at             timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON public.achievements (user_id);
+
+DROP TRIGGER IF EXISTS trg_achievements_set_updated_at ON public.achievements;
+CREATE TRIGGER trg_achievements_set_updated_at
+    BEFORE UPDATE ON public.achievements
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.achievements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS achievements_owner ON public.achievements;
+CREATE POLICY achievements_owner ON public.achievements
+    FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text)
+    WITH CHECK (user_id::text = auth.uid()::text);
+
+GRANT SELECT, INSERT, UPDATE ON public.achievements TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
