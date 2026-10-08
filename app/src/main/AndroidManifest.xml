@@ -6,6 +6,14 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- F1 live workout logging: an ongoing notification while a session is active, kept alive by a
+         foreground service so the rest timer / session survives the app going to the background.
+         FOREGROUND_SERVICE_HEALTH is the Android 14+ typed permission matching foregroundServiceType
+         "health"; POST_NOTIFICATIONS is the Android 13+ runtime permission for the notification. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Camera (P2): front-camera face scan. Feature is not required — devices without a
          camera can still install and use the gallery-pick + manual-logging paths. -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -85,6 +93,13 @@
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
         </activity>
+
+        <!-- F1: foreground service that keeps an active workout session alive in the background with
+             an ongoing notification. Typed "health" for Android 14+ FGS-type compliance. -->
+        <service
+            android:name=".workoutsession.WorkoutSessionService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
     </application>
 
 </manifest>

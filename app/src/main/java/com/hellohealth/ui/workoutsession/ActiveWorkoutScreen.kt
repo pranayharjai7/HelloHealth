@@ -44,17 +44,23 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.os.Build
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellohealth.domain.model.PlannedExerciseWithDetails
 import com.hellohealth.domain.model.SessionSet
 import com.hellohealth.workoutsession.RestState
+import com.hellohealth.workoutsession.WorkoutSessionService
 import kotlinx.coroutines.delay
 
 /**
@@ -73,17 +79,40 @@ fun ActiveWorkoutScreen(
     val uiState by viewModel.uiState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
+    val context = LocalContext.current
 
     var showAbandonDialog by remember { mutableStateOf(false) }
+
+    // Ask for POST_NOTIFICATIONS once (Android 13+) so the foreground-service notification can show.
+    val notifPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* best-effort; the service runs regardless */ }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // Start the session once, when the screen is first shown.
     LaunchedEffect(Unit) {
         if (viewModel.dayId != null) viewModel.startFromPlannedDay() else viewModel.startAdHoc()
     }
 
+    // Keep the foreground service in lockstep with the active session: start it when a session is
+    // active, stop it when the session ends. The service also self-stops when it observes no active
+    // session, so this is belt-and-suspenders.
+    LaunchedEffect(uiState.session?.id, uiState.isActive) {
+        if (uiState.isActive) {
+            WorkoutSessionService.start(context, uiState.session?.title)
+        }
+    }
+
     // Navigate away once the session is finished / abandoned.
     LaunchedEffect(uiState.finished) {
-        if (uiState.finished) onFinished()
+        if (uiState.finished) {
+            WorkoutSessionService.stop(context)
+            onFinished()
+        }
     }
 
     Scaffold(
