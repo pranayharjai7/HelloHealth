@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.hellohealth.sync.SyncScheduler
+import com.hellohealth.wellness.WellnessReminderScheduler
 import com.hellohealth.workoutsession.WorkoutSessionService
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -25,6 +26,7 @@ class HelloHealthApp : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var syncScheduler: SyncScheduler
+    @Inject lateinit var wellnessReminderScheduler: WellnessReminderScheduler
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -35,5 +37,6 @@ class HelloHealthApp : Application(), Configuration.Provider {
         super.onCreate()
         syncScheduler.ensurePeriodicSync()
         WorkoutSessionService.ensureChannel(this)
+        wellnessReminderScheduler.ensureDailyReminder()
     }
 }
