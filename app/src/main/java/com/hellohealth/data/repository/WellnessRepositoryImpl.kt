@@ -28,6 +28,7 @@ import com.hellohealth.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.emitAll
@@ -74,9 +75,27 @@ class WellnessRepositoryImpl @Inject constructor(
             return@flow
         }
         val iso = date.toString()
-        val isToday = date == LocalDate.now()
 
-        // Compose the four pillar signals + the stored gamification rows into a live snapshot.
+        // Persist gamification state ONCE, up front, for TODAY only — decoupled from the reactive
+        // read below. Doing the write inside the observed combine created a write→observe→write loop
+        // (persisting mutates the streak/ledger tables the combine observes). Past days are read-only.
+        if (date == LocalDate.now()) {
+            computeAndPersistToday(userId, date)
+        }
+
+        // Pure READ path: observe the pillar signals (for a live score) + the gamification tables (for
+        // streaks/points/achievements). No writes happen here, so there is nothing to re-trigger it.
+        val goals = goalsRepository.getCurrentActivityGoals()
+        val dayStat = activityRepository.fetchWeeklyStats().dailyStats.firstOrNull { it.date == date }
+        val activityScore = dayStat?.let { s ->
+            val met = listOf(
+                s.steps >= goals.steps,
+                s.calories >= goals.activeCalories,
+                s.activeMinutes >= goals.activeMinutes,
+            ).count { it }
+            (met * 100) / 3
+        }
+
         emitAll(
             combine(
                 nutritionRepository.observeDaySummary(iso),
@@ -85,18 +104,6 @@ class WellnessRepositoryImpl @Inject constructor(
                 streakDao.observeForUser(userId),
                 pointsLedgerDao.observeTotalForUser(userId),
             ) { nutrition, readiness, moodLogs, streaks, totalPoints ->
-                // Pillar sub-scores (one-shot reads for activity goals + the day's stats).
-                val goals = goalsRepository.getCurrentActivityGoals()
-                val dayStat = activityRepository.fetchWeeklyStats().dailyStats.firstOrNull { it.date == date }
-
-                val activity = dayStat?.let { s ->
-                    val met = listOf(
-                        s.steps >= goals.steps,
-                        s.calories >= goals.activeCalories,
-                        s.activeMinutes >= goals.activeMinutes,
-                    ).count { it }
-                    (met * 100) / 3
-                }
                 val nutritionScore = if (nutrition.caloriesConsumed > 0) {
                     calorieAdherence(nutrition.caloriesConsumed, goals.activeCalories)
                 } else {
@@ -106,25 +113,44 @@ class WellnessRepositoryImpl @Inject constructor(
                 val mood = moodLogs.takeIf { it.isNotEmpty() }?.let { logs ->
                     (logs.count { it.emotion.valence == Valence.POSITIVE } * 100) / logs.size
                 }
-
                 val wellness = scoreUseCase(
-                    activity = activity,
+                    activity = activityScore,
                     nutrition = nutritionScore,
                     recovery = recovery,
                     mood = mood,
                 )
-
-                // Persist gamification state for TODAY only (idempotent); past days are read-only.
-                if (isToday) {
-                    persistToday(userId, iso, wellness.score, activity, nutritionScore, recovery, mood)
-                }
-
                 buildSnapshot(iso, wellness, streaks, totalPoints, achievementDao.snapshotForUser(userId))
             }
         )
     }.flowOn(Dispatchers.IO)
 
     // ---------------------------------------------------------------- Persistence (today only)
+
+    /** Compute today's pillars and persist streak/ledger/achievement rows (change-detected). */
+    private suspend fun computeAndPersistToday(userId: String, date: LocalDate) {
+        val iso = date.toString()
+        val goals = goalsRepository.getCurrentActivityGoals()
+        val dayStat = activityRepository.fetchWeeklyStats().dailyStats.firstOrNull { it.date == date }
+        val nutrition = nutritionRepository.observeDaySummary(iso).first()
+        val readiness = vitalsRepository.observeReadinessAsOf(date).first()
+        val moodLogs = emotionsRepository.observeWindow(date.toEpochDay(), date.toEpochDay()).first()
+
+        val activity = dayStat?.let { s ->
+            val met = listOf(
+                s.steps >= goals.steps,
+                s.calories >= goals.activeCalories,
+                s.activeMinutes >= goals.activeMinutes,
+            ).count { it }
+            (met * 100) / 3
+        }
+        val nutritionScore = if (nutrition.caloriesConsumed > 0) calorieAdherence(nutrition.caloriesConsumed, goals.activeCalories) else null
+        val recovery = readiness?.score?.takeIf { it > 0 }
+        val mood = moodLogs.takeIf { it.isNotEmpty() }?.let { logs ->
+            (logs.count { it.emotion.valence == Valence.POSITIVE } * 100) / logs.size
+        }
+        val score = scoreUseCase(activity = activity, nutrition = nutritionScore, recovery = recovery, mood = mood).score
+        persistToday(userId, iso, score, activity, nutritionScore, recovery, mood)
+    }
 
     private suspend fun persistToday(
         userId: String,
@@ -154,6 +180,8 @@ class WellnessRepositoryImpl @Inject constructor(
 
         // Per-pillar streaks: bump currentCount if hit today, reset to 0 if tracked-but-missed, leave
         // alone if untracked (yesterday's run neither grows nor breaks without a signal today).
+        // CRITICAL: only upsert when the row's VALUE actually changes. An unconditional re-write (with
+        // a fresh updatedAt) would re-emit the observed streak flow and loop recompute→persist forever.
         for (pillar in trackedPillars) {
             val hit = pillar in hitPillars
             val id = "$userId|streak|${pillar.name.lowercase()}"
@@ -167,6 +195,15 @@ class WellnessRepositoryImpl @Inject constructor(
                 else -> 1
             }
             val newLongest = maxOf(existing?.longestCount ?: 0, newCurrent)
+            val newLastHit = if (hit) iso else existing?.lastHitLocalDate
+            // No-op if the stored row already matches — this is what stops the loop.
+            if (existing != null &&
+                existing.currentCount == newCurrent &&
+                existing.longestCount == newLongest &&
+                existing.lastHitLocalDate == newLastHit
+            ) {
+                continue
+            }
             streakDao.upsert(
                 StreakEntity(
                     id = id,
@@ -174,7 +211,7 @@ class WellnessRepositoryImpl @Inject constructor(
                     pillar = pillar.name.lowercase(),
                     currentCount = newCurrent,
                     longestCount = newLongest,
-                    lastHitLocalDate = if (hit) iso else existing?.lastHitLocalDate,
+                    lastHitLocalDate = newLastHit,
                     updatedAtEpochMs = now,
                     updatedAtTzOffsetMinutes = tz,
                     deletedAtEpochMs = null,
@@ -184,22 +221,27 @@ class WellnessRepositoryImpl @Inject constructor(
             wroteAny = true
         }
 
-        // Points: award today's score as a single idempotent (day, "wellness") ledger row.
+        // Points: award today's score as a single idempotent (day, "wellness") ledger row — but only
+        // re-write when the points value actually changes (same loop-prevention reason).
         if (score != null) {
-            pointsLedgerDao.upsert(
-                PointsLedgerEntity(
-                    id = "$userId|pts|$iso|wellness",
-                    userId = userId,
-                    localDate = iso,
-                    source = "wellness",
-                    points = score,
-                    updatedAtEpochMs = now,
-                    updatedAtTzOffsetMinutes = tz,
-                    deletedAtEpochMs = null,
-                    isSynced = false,
+            val id = "$userId|pts|$iso|wellness"
+            val existing = pointsLedgerDao.getById(id)
+            if (existing?.points != score) {
+                pointsLedgerDao.upsert(
+                    PointsLedgerEntity(
+                        id = id,
+                        userId = userId,
+                        localDate = iso,
+                        source = "wellness",
+                        points = score,
+                        updatedAtEpochMs = now,
+                        updatedAtTzOffsetMinutes = tz,
+                        deletedAtEpochMs = null,
+                        isSynced = false,
+                    )
                 )
-            )
-            wroteAny = true
+                wroteAny = true
+            }
         }
 
         // Achievements: evaluate against progress; unlock any newly-earned one ONCE.
