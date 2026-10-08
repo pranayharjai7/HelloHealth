@@ -12,6 +12,7 @@ import com.hellohealth.data.repository.ProfileRepositoryImpl
 import com.hellohealth.data.repository.UserRepositoryImpl
 import com.hellohealth.data.repository.VitalsRepositoryImpl
 import com.hellohealth.data.repository.WorkoutPlanRepositoryImpl
+import com.hellohealth.data.repository.WorkoutSessionRepositoryImpl
 import com.hellohealth.domain.repository.AuthRepository
 import com.hellohealth.domain.repository.BodyMetricsRepository
 import com.hellohealth.domain.repository.CoachingRepository
@@ -24,6 +25,7 @@ import com.hellohealth.domain.repository.ProfileRepository
 import com.hellohealth.domain.repository.UserRepository
 import com.hellohealth.domain.repository.VitalsRepository
 import com.hellohealth.domain.repository.WorkoutPlanRepository
+import com.hellohealth.domain.repository.WorkoutSessionRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -105,4 +107,10 @@ abstract class RepositoryModule {
     abstract fun bindBodyMetricsRepository(
         bodyMetricsRepositoryImpl: BodyMetricsRepositoryImpl
     ): BodyMetricsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindWorkoutSessionRepository(
+        workoutSessionRepositoryImpl: WorkoutSessionRepositoryImpl
+    ): WorkoutSessionRepository
 }
