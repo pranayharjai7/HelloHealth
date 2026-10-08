@@ -102,9 +102,42 @@ class BodyMetricsRepositoryImplTest {
     @Test
     fun `observeRecent returns rows ascending by date`() = runTest {
         val r = repo("u1")
-        r.logWeight("2026-09-28", 82.0)
-        r.logWeight("2026-09-30", 80.0)
+        // Seed relative to today so the rows always fall inside observeRecent's trailing window
+        // (the window is computed from LocalDate.now(); fixed past literals would age out).
+        val older = java.time.LocalDate.now().minusDays(5).toString()
+        val newer = java.time.LocalDate.now().minusDays(2).toString()
+        r.logWeight(older, 82.0)
+        r.logWeight(newer, 80.0)
         val rows = r.observeRecentBodyMetrics(7).first()
-        assertEquals(listOf("2026-09-28", "2026-09-30"), rows.map { it.localDate })
+        assertEquals(listOf(older, newer), rows.map { it.localDate })
+    }
+
+    @Test
+    fun `undoLog tombstones the row when the day had none before`() = runTest {
+        val r = repo("u1")
+        val token = r.logWeight("2026-09-30", 80.0)!!
+        assertEquals(80.0, dao.getForDate("u1", "2026-09-30")!!.weightKg!!, 0.001)
+        r.undoLog(token)
+        // Soft-deleted → no live row for the day.
+        assertNull(dao.getForDate("u1", "2026-09-30"))
+    }
+
+    @Test
+    fun `undoLog restores the exact prior row`() = runTest {
+        val r = repo("u1")
+        // A Health-Connect capture establishes the day's row first.
+        r.upsertFromHealthConnect(
+            localDate = "2026-09-30", weightKg = 79.0, heightCm = 180.0, bodyFatPct = 21.0,
+            leanMassKg = null, fatMassKg = null, bodyWaterKg = null, boneMassKg = null,
+            bmr = null, bmi = null, vo2max = null,
+        )
+        // A manual log overwrites weight; undo must put the HC values back verbatim.
+        val token = r.logWeight("2026-09-30", 85.0)!!
+        assertEquals(85.0, dao.getForDate("u1", "2026-09-30")!!.weightKg!!, 0.001)
+        r.undoLog(token)
+        val restored = dao.getForDate("u1", "2026-09-30")!!
+        assertEquals(79.0, restored.weightKg!!, 0.001)
+        assertEquals("health_connect", restored.source)
+        assertEquals(21.0, restored.bodyFatPct!!, 0.001)
     }
 }

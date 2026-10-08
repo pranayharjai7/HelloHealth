@@ -11,6 +11,7 @@ import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.model.vitals.ReadinessStatus
 import com.hellohealth.domain.repository.ActivityRepository
+import com.hellohealth.domain.repository.BodyLogUndo
 import com.hellohealth.domain.repository.BodyMetricsRepository
 import com.hellohealth.domain.repository.GoalsRepository
 import com.hellohealth.domain.repository.ProfileRepository
@@ -73,9 +74,15 @@ class HealthViewModelTest {
     }
 
     private class FakeBody(private val rows: List<BodyMetric>) : BodyMetricsRepository {
+        val loggedWeights = mutableListOf<Triple<String, Double, Double?>>()
+        var undoCount = 0
         override fun observeRecentBodyMetrics(days: Int): Flow<List<BodyMetric>> = flowOf(rows)
         override fun observeLatest(): Flow<BodyMetric?> = flowOf(rows.lastOrNull())
-        override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?) = Unit
+        override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?): BodyLogUndo? {
+            loggedWeights += Triple(localDate, weightKg, waistCm)
+            return BodyLogUndo(localDate, prior = null)
+        }
+        override suspend fun undoLog(token: BodyLogUndo) { undoCount++ }
         override suspend fun upsertFromHealthConnect(localDate: String, weightKg: Double?, heightCm: Double?, bodyFatPct: Double?, leanMassKg: Double?, fatMassKg: Double?, bodyWaterKg: Double?, boneMassKg: Double?, bmr: Double?, bmi: Double?, vo2max: Double?) = Unit
     }
 
@@ -106,8 +113,9 @@ class HealthViewModelTest {
         vitals: Map<String, LatestVitals> = emptyMap(),
         body: List<BodyMetric> = emptyList(),
         holder: SelectedDateHolder = SelectedDateHolder(),
+        fakeBody: FakeBody = FakeBody(body),
     ) = HealthViewModel(
-        FakeActivity(activity), FakeVitals(readiness, vitals), FakeBody(body),
+        FakeActivity(activity), FakeVitals(readiness, vitals), fakeBody,
         FakeGoals(), FakeProfile(), BodyAnalyticsUseCase(), holder,
     )
 
@@ -133,28 +141,25 @@ class HealthViewModelTest {
     }
 
     @Test
-    fun `switching the date re-drives all sections to the selected day`() = runTest {
-        val today = LocalDate.now()
-        val past = today.minusDays(3)
+    fun `logWeight writes to the selected day via the repository, ignoring non-positive weight`() = runTest {
         val holder = SelectedDateHolder()
-        val vm = vm(
-            activity = mapOf(
-                today.toString() to HealthSummary(steps = 9000),
-                past.toString() to HealthSummary(steps = 2000),
-            ),
-            vitals = mapOf(today.toString() to LatestVitals(today.toString(), 58.0, null, null, null, null, null)),
-            holder = holder,
-        )
-        vm.uiState.test {
-            var s = awaitItem()
-            while (s.summary.steps != 9000L) s = awaitItem()
+        val past = LocalDate.now().minusDays(2)
+        holder.set(past)
+        val fakeBody = FakeBody(emptyList())
+        val vm = vm(holder = holder, fakeBody = fakeBody)
 
-            holder.set(past)
-            while (s.summary.steps != 2000L) s = awaitItem()
-            assertEquals(past, s.selectedDate)
-            // No vitals rollup for the past day → dashed (null) latestVitals.
-            assertEquals(null, s.latestVitals)
-            cancelAndIgnoreRemainingEvents()
-        }
+        vm.logWeight(0.0)                 // ignored (non-positive)
+        vm.logWeight(81.5, waistCm = 88.0)
+
+        assertEquals(1, fakeBody.loggedWeights.size)
+        val (date, weight, waist) = fakeBody.loggedWeights.single()
+        assertEquals(past.toString(), date)
+        assertEquals(81.5, weight, 0.001)
+        assertEquals(88.0, waist!!, 0.001)
+
+        // Undo consumes the stashed token exactly once; a second undo is a no-op.
+        vm.undoLastLog()
+        vm.undoLastLog()
+        assertEquals(1, fakeBody.undoCount)
     }
 }

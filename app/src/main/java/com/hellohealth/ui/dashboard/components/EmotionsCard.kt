@@ -50,7 +50,7 @@ import com.hellohealth.ui.theme.moodAccentFor
 private const val DOT_TINT_FRACTION = 0.35f
 
 /**
- * Dashboard mood card. Stateless (plain data + lambdas), mirroring [WorkoutCard]. The whole card is
+ * Dashboard mood card. Stateless (plain data + lambdas), mirroring the other dashboard cards. The whole card is
  * one tap target that opens the log sheet — no separate button or scattered face-icon. It springs
  * down on press to confirm the tap is registered. Below the summary, a "shape of my day" strip of
  * mood-dots previews today's logs (newest on the left); "View timeline ›" opens the full history.

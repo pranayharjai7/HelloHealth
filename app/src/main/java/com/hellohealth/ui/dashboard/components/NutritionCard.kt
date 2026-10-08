@@ -39,8 +39,8 @@ import com.hellohealth.ui.theme.LocalMoodAccent
 private const val ACCENT_TINT_FRACTION = 0.55f
 
 /**
- * Dashboard Nutrition card. Stateless (plain [NutritionUiState] + [onClick]), mirroring
- * [VitalsCard]/[WorkoutCard]. Shows a calorie ring (consumed vs budget, reusing [ActivityRing]) with
+ * Dashboard Nutrition card. Stateless (plain [NutritionUiState] + [onClick]), mirroring the other
+ * dashboard cards. Shows a calorie ring (consumed vs budget, reusing [ActivityRing]) with
  * the flagship energy-balance net beneath it, plus macro (P/C/F) progress bars and a water chip.
  * The accent is lerped from `primary` toward the current mood accent so the card re-tints with mood.
  *

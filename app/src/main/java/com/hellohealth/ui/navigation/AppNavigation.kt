@@ -135,7 +135,6 @@ fun AppNavigation(
                 onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
                 onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },
                 onNavigateToFoodPreferences = { navController.navigate(Screen.Preferences.route) },
-                onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToHelp = { navController.navigate(Screen.Help.route) },
                 onNavigateToLogEmotion = { navController.navigate(Screen.LogEmotion.route) },
                 onNavigateToEmotionCapture = { navController.navigate(Screen.EmotionCapture.route) },

@@ -6,6 +6,7 @@ import com.hellohealth.core.time.Timestamps
 import com.hellohealth.data.local.dao.BodyMetricDao
 import com.hellohealth.data.local.entities.BodyMetricEntity
 import com.hellohealth.domain.model.BodyMetric
+import com.hellohealth.domain.repository.BodyLogUndo
 import com.hellohealth.domain.repository.BodyMetricsRepository
 import com.hellohealth.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
@@ -58,14 +59,16 @@ class BodyMetricsRepositoryImpl @Inject constructor(
         emitAll(bodyMetricDao.observeLatest(userId).map { it?.toDomain() })
     }.flowOn(Dispatchers.IO)
 
-    override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?) {
+    override suspend fun logWeight(localDate: String, weightKg: Double, waistCm: Double?): BodyLogUndo? {
         val userId = sessionManager.getCurrentUserId()
         if (userId == null) {
             AppLogger.w(FeatureTag.BODY_METRICS, "logWeight with no signed-in user; dropping write")
-            return
+            return null
         }
-        // Load-then-merge: keep any other metrics already recorded for the day, update weight/waist.
+        // Snapshot the day's prior state BEFORE writing, so undo can restore it exactly.
         val existing = bodyMetricDao.getForDate(userId, localDate)
+        val token = BodyLogUndo(localDate = localDate, prior = existing?.toDomain())
+        // Load-then-merge: keep any other metrics already recorded for the day, update weight/waist.
         upsert(
             userId = userId,
             localDate = localDate,
@@ -82,6 +85,45 @@ class BodyMetricsRepositoryImpl @Inject constructor(
             vo2max = existing?.vo2max,
             source = "manual",
         )
+        return token
+    }
+
+    override suspend fun undoLog(token: BodyLogUndo) {
+        val userId = sessionManager.getCurrentUserId() ?: return
+        val prior = token.prior
+        if (prior == null) {
+            // No row existed before the log → tombstone the one we created (soft-delete, syncs).
+            val now = Timestamps.nowEpochMs()
+            val zone = ZoneId.systemDefault()
+            val current = bodyMetricDao.getForDate(userId, token.localDate) ?: return
+            bodyMetricDao.upsert(
+                current.copy(
+                    updatedAtEpochMs = now,
+                    updatedAtTzOffsetMinutes = Timestamps.currentTzOffsetMinutes(zone),
+                    deletedAtEpochMs = now,
+                    isSynced = false,
+                )
+            )
+        } else {
+            // Restore the exact prior values as a fresh LWW write (newer updatedAt wins).
+            upsert(
+                userId = userId,
+                localDate = prior.localDate,
+                weightKg = prior.weightKg,
+                heightCm = prior.heightCm,
+                bodyFatPct = prior.bodyFatPct,
+                leanMassKg = prior.leanMassKg,
+                fatMassKg = prior.fatMassKg,
+                bodyWaterKg = prior.bodyWaterKg,
+                boneMassKg = prior.boneMassKg,
+                bmr = prior.bmr,
+                bmi = prior.bmi,
+                waistCm = prior.waistCm,
+                vo2max = prior.vo2max,
+                source = prior.source,
+            )
+        }
+        syncScheduler.requestSync()
     }
 
     override suspend fun upsertFromHealthConnect(
