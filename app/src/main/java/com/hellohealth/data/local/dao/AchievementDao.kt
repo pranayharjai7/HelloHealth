@@ -17,6 +17,10 @@ interface AchievementDao {
     @Query("SELECT * FROM achievements WHERE userId = :userId AND deletedAtEpochMs IS NULL ORDER BY unlockedAtEpochMs DESC")
     fun observeForUser(userId: String): Flow<List<AchievementEntity>>
 
+    /** One-shot live achievements for a user (recompute reads that must see just-written rows). */
+    @Query("SELECT * FROM achievements WHERE userId = :userId AND deletedAtEpochMs IS NULL ORDER BY unlockedAtEpochMs DESC")
+    suspend fun snapshotForUser(userId: String): List<AchievementEntity>
+
     @Query("SELECT * FROM achievements WHERE id = :id AND deletedAtEpochMs IS NULL LIMIT 1")
     suspend fun getById(id: String): AchievementEntity?
 

@@ -16,6 +16,10 @@ interface StreakDao {
     @Query("SELECT * FROM streaks WHERE userId = :userId AND deletedAtEpochMs IS NULL")
     fun observeForUser(userId: String): Flow<List<StreakEntity>>
 
+    /** One-shot live streaks for a user (for recompute reads that must see just-written rows). */
+    @Query("SELECT * FROM streaks WHERE userId = :userId AND deletedAtEpochMs IS NULL")
+    suspend fun snapshotForUser(userId: String): List<StreakEntity>
+
     @Query("SELECT * FROM streaks WHERE id = :id AND deletedAtEpochMs IS NULL LIMIT 1")
     suspend fun getById(id: String): StreakEntity?
 

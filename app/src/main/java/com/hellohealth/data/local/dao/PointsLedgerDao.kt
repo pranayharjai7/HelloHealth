@@ -26,6 +26,14 @@ interface PointsLedgerDao {
     )
     suspend fun totalForDay(userId: String, localDate: String): Int
 
+    /** Count of live ledger rows for a given source (e.g. awarded workouts). */
+    @Query("SELECT COUNT(*) FROM points_ledger WHERE userId = :userId AND source = :source AND deletedAtEpochMs IS NULL")
+    suspend fun countForSource(userId: String, source: String): Int
+
+    /** The highest single-row points value for a source (e.g. best daily wellness score). */
+    @Query("SELECT COALESCE(MAX(points), 0) FROM points_ledger WHERE userId = :userId AND source = :source AND deletedAtEpochMs IS NULL")
+    suspend fun maxPointsForSource(userId: String, source: String): Int
+
     @Query("SELECT * FROM points_ledger WHERE id = :id AND deletedAtEpochMs IS NULL LIMIT 1")
     suspend fun getById(id: String): PointsLedgerEntity?
 
