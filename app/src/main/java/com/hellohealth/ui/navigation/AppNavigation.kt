@@ -181,6 +181,7 @@ fun AppNavigation(
                     }
                 },
                 onOpenVitalsTrends = { navController.navigate(Screen.VitalsTrends.route) },
+                onOpenBodyTrends = { navController.navigate(Screen.BodyTrends.route) },
                 onOpenInsights = { navController.navigate(Screen.Insights.route) },
             )
         }
@@ -333,6 +334,20 @@ fun AppNavigation(
         ) {
             val viewModel: com.hellohealth.ui.vitals.VitalsTrendsViewModel = hiltViewModel()
             com.hellohealth.ui.vitals.VitalsTrendsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.BodyTrends.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val viewModel: com.hellohealth.ui.body.BodyTrendsViewModel = hiltViewModel()
+            com.hellohealth.ui.body.BodyTrendsScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )
@@ -611,6 +626,7 @@ sealed class Screen(val route: String) {
     object EmotionInsights : Screen("emotion_insights")
     object MoodTimeline : Screen("mood_timeline")
     object VitalsTrends : Screen("vitals_trends")
+    object BodyTrends : Screen("body_trends")
     object Health : Screen("health")
     object Nutrition : Screen("nutrition")
     object BarcodeScan : Screen("barcode_scan")
