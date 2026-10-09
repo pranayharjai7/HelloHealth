@@ -17,13 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
@@ -34,10 +32,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -54,7 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellohealth.domain.model.PlanType
 import com.hellohealth.domain.model.WorkoutPlan
-import com.hellohealth.ui.common.SingleSelectChips
+import com.hellohealth.ui.workoutplan.components.CreateRoutineSheet
+import com.hellohealth.ui.workoutplan.components.RenameSheet
 
 /**
  * The routines list — top of the workout-planning flow, opened from the dashboard's workout hero
@@ -76,11 +73,26 @@ fun RoutinesScreen(
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
+    // Rename uses a local target (mirrors RoutineDetailScreen's dayToRename idiom); the create sheet's
+    // visibility stays in the VM UiState as before.
+    var planToRename by remember { mutableStateOf<WorkoutPlan?>(null) }
+
     if (uiState.showCreateDialog) {
-        CreatePlanDialog(
-            primaryColor = primaryColor,
+        CreateRoutineSheet(
             onCreate = { name, planType -> viewModel.createPlan(name, planType) },
             onDismiss = { viewModel.dismissCreateDialog() },
+        )
+    }
+
+    planToRename?.let { plan ->
+        RenameSheet(
+            title = "Rename routine",
+            initialName = plan.name,
+            onRename = { newName ->
+                viewModel.renamePlan(plan.id, newName)
+                planToRename = null
+            },
+            onDismiss = { planToRename = null },
         )
     }
 
@@ -133,6 +145,7 @@ fun RoutinesScreen(
                             primaryColor = primaryColor,
                             onClick = { onOpenRoutine(plan.id) },
                             onMakeActive = { viewModel.setActive(plan.id) },
+                            onRename = { planToRename = plan },
                             onDelete = { viewModel.deletePlan(plan.id) },
                         )
                     }
@@ -149,6 +162,7 @@ private fun RoutineRow(
     primaryColor: Color,
     onClick: () -> Unit,
     onMakeActive: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -222,6 +236,13 @@ private fun RoutineRow(
                         )
                     }
                     DropdownMenuItem(
+                        text = { Text("Rename") },
+                        onClick = {
+                            menuOpen = false
+                            onRename()
+                        }
+                    )
+                    DropdownMenuItem(
                         text = { Text("Delete") },
                         onClick = {
                             menuOpen = false
@@ -232,59 +253,6 @@ private fun RoutineRow(
             }
         }
     }
-}
-
-@Composable
-private fun CreatePlanDialog(
-    primaryColor: Color,
-    onCreate: (name: String, planType: PlanType) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    var planType by remember { mutableStateOf(PlanType.WEEKLY) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New routine", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    text = "Schedule",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                SingleSelectChips(
-                    options = PlanType.entries,
-                    selected = planType,
-                    labelOf = { it.displayName },
-                    onSelect = { planType = it },
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onCreate(name, planType) },
-                enabled = name.isNotBlank(),
-            ) {
-                Text(
-                    "Create",
-                    fontWeight = FontWeight.Bold,
-                    color = if (name.isNotBlank()) primaryColor else primaryColor.copy(alpha = 0.4f)
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
 }
 
 @Composable

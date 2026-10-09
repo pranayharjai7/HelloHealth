@@ -73,6 +73,13 @@ class RoutinesViewModel @Inject constructor(
         viewModelScope.launch { repository.setActivePlan(planId) }
     }
 
+    /** Rename an existing routine. Trims and ignores a blank name (mirrors renameDay). */
+    fun renamePlan(planId: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch { repository.renamePlan(planId, trimmed) }
+    }
+
     fun deletePlan(planId: String) {
         viewModelScope.launch { repository.deletePlan(planId) }
     }
