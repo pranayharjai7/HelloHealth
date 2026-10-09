@@ -3,6 +3,7 @@ package com.hellohealth.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hellohealth.domain.repository.WorkoutPlanRepository
+import com.hellohealth.domain.repository.WorkoutSessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -37,7 +39,22 @@ data class WorkoutPlanSummary(
 @HiltViewModel
 class WorkoutPlanViewModel @Inject constructor(
     private val repository: WorkoutPlanRepository,
+    sessionRepository: WorkoutSessionRepository,
 ) : ViewModel() {
+
+    /**
+     * True when a workout session is currently active — gates the dashboard card's "Resume workout"
+     * affordance so a session left running (e.g. across a process restart) is reachable again.
+     * Signed-out → null → false. Left separate from [summary] to keep that chain untouched.
+     */
+    val hasActiveSession: StateFlow<Boolean> =
+        sessionRepository.observeActiveSession()
+            .map { it != null }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = false,
+            )
 
     val summary: StateFlow<WorkoutPlanSummary> =
         repository.observeActivePlan()
