@@ -193,7 +193,6 @@ class HealthConnectManager @Inject constructor(
         }
 
         val zoneId = ZoneId.systemDefault()
-        val today = LocalDate.now(zoneId)
         val startOfDay = date.atStartOfDay(zoneId).toInstant()
         val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
         val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfDay)
@@ -208,20 +207,13 @@ class HealthConnectManager @Inject constructor(
             // Prefer the HC BasalMetabolicRateRecord; only when it's missing/non-positive do we
             // invoke the (possibly DB-backed) fallback supplier — profile-derived BMR → 1800.0.
             val bmr = selectBmr(safeFetch { fetchLatestBasalMetabolicRate(endOfDay) }, bmrFallback)
-            
-            val minutesCovered = if (date == today) {
-                val nowCalendar = java.util.Calendar.getInstance()
-                nowCalendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + nowCalendar.get(java.util.Calendar.MINUTE)
-            } else {
-                24 * 60
-            }
-            val bmrSoFar = (bmr / 1440.0) * minutesCovered
-            
-            val refinedActiveCalories = if (totalCalories > bmrSoFar) {
-                maxOf(activeCalories, totalCalories - bmrSoFar)
-            } else {
-                activeCalories
-            }
+
+            // Active burn is Health Connect's own ActiveCaloriesBurned aggregate — the honest value,
+            // which is 0 when there's no activity. We deliberately do NOT derive it as
+            // `totalCalories − BMR`: that subtraction uses our (fallback) BMR estimate against a total
+            // that already bakes in the source's own BMR, so a mismatch inflated active burn to
+            // hundreds of kcal on days with zero steps and zero active minutes. `totalCalories` and
+            // `bmr` below are still surfaced on their own for the energy-balance / TDEE calcs.
 
             val weight = safeFetch { fetchLatestWeight(endOfDay) }
             val height = safeFetch { fetchLatestHeight(endOfDay) }
@@ -250,7 +242,7 @@ class HealthConnectManager @Inject constructor(
             HealthSummary(
                 steps = steps,
                 stepsGoal = goals.steps.toLong(),
-                activeCalories = refinedActiveCalories,
+                activeCalories = activeCalories,
                 caloriesGoal = goals.activeCalories.toDouble(),
                 activeTimeMinutes = activeTime,
                 activeTimeGoal = goals.activeMinutes.toLong(),
