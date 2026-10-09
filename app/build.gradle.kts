@@ -138,6 +138,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    // Drag-to-reorder for LazyColumn (Stage 9: exercise reordering). Compose 1.7-compatible.
+    implementation("sh.calvin.reorderable:reorderable:2.4.3")
 
     // Hilt
     implementation("com.google.dagger:hilt-android:2.51.1")

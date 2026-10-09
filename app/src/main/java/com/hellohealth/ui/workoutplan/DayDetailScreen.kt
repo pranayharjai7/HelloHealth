@@ -16,13 +16,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -36,8 +36,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.hellohealth.domain.model.PlannedExerciseWithDetails
+import sh.calvin.reorderable.ReorderableCollectionItemScope
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
  * One day's planned exercises, in order. Each row shows a Coil-loaded gif thumbnail, the exercise
@@ -123,21 +130,32 @@ fun DayDetailScreen(
             if (uiState.exercises.isEmpty()) {
                 EmptyExercises(primaryColor)
             } else {
+                // Local, reorderable copy of the list — updated live during a drag for a smooth lift,
+                // then persisted on drop. Re-synced whenever the backing data changes (add/delete/sync).
+                var orderedItems by remember { mutableStateOf(uiState.exercises) }
+                LaunchedEffect(uiState.exercises) { orderedItems = uiState.exercises }
+
+                val lazyListState = rememberLazyListState()
+                val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+                    orderedItems = orderedItems.toMutableList().apply {
+                        add(to.index, removeAt(from.index))
+                    }
+                    viewModel.reorder(orderedItems.map { it.planned.id })
+                }
+
                 LazyColumn(
+                    state = lazyListState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    val items = uiState.exercises
-                    items.forEachIndexed { index, item ->
-                        item(key = item.planned.id) {
+                    items(orderedItems, key = { it.planned.id }) { item ->
+                        ReorderableItem(reorderableState, key = item.planned.id) { isDragging ->
                             PlannedExerciseRow(
                                 item = item,
-                                isFirst = index == 0,
-                                isLast = index == items.lastIndex,
+                                isDragging = isDragging,
+                                dragHandle = this, // ReorderableItemScope — provides .draggableHandle()
                                 onClick = { onOpenExercise(item.planned.id) },
-                                onMoveUp = { viewModel.moveUp(item.planned.id) },
-                                onMoveDown = { viewModel.moveDown(item.planned.id) },
                                 onDelete = { viewModel.deleteExercise(item.planned.id) },
                             )
                         }
@@ -151,11 +169,9 @@ fun DayDetailScreen(
 @Composable
 private fun PlannedExerciseRow(
     item: PlannedExerciseWithDetails,
-    isFirst: Boolean,
-    isLast: Boolean,
+    isDragging: Boolean,
+    dragHandle: ReorderableCollectionItemScope,
     onClick: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
     onDelete: () -> Unit,
 ) {
     ElevatedCard(
@@ -163,7 +179,10 @@ private fun PlannedExerciseRow(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = if (isDragging) 8.dp else 1.dp,
+        ),
     ) {
         Row(
             modifier = Modifier
@@ -212,35 +231,23 @@ private fun PlannedExerciseRow(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
-            Column {
-                IconButton(onClick = onMoveUp, enabled = !isFirst) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Move up",
-                        tint = if (isFirst) {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        }
-                    )
-                }
-                IconButton(onClick = onMoveDown, enabled = !isLast) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Move down",
-                        tint = if (isLast) {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        }
-                    )
-                }
-            }
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Remove",
                     tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                )
+            }
+            // Long-press and drag this handle to reorder. draggableHandle() comes from the
+            // ReorderableItemScope; a long-press lift + autoscroll is handled by the library.
+            with(dragHandle) {
+                Icon(
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = "Drag to reorder",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .draggableHandle()
+                        .padding(8.dp),
                 )
             }
         }
