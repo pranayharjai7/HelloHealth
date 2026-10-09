@@ -354,7 +354,9 @@ fun DashboardScreen(
                     steps = uiState.healthSummary.steps,
                     goalSteps = uiState.healthSummary.stepsGoal,
                     activeCalories = uiState.healthSummary.activeCalories,
+                    goalActiveCalories = uiState.healthSummary.caloriesGoal.toInt(),
                     activeMinutes = uiState.healthSummary.activeTimeMinutes,
+                    goalActiveMinutes = uiState.healthSummary.activeTimeGoal.toInt(),
                     vitals = vitalsState,
                     isConnected = uiState.hasHealthPermissions || uiState.lastSyncTime != null,
                     onClick = onNavigateToHealth

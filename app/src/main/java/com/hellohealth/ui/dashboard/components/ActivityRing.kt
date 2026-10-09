@@ -15,6 +15,17 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/**
+ * The three activity-ring hues (steps = green, active-burn = orange, active-time = blue), shared by
+ * [MultiActivityRings] and the legends so the ring and its label always agree. Kept as a distinct
+ * identity palette (NOT the dataviz ChartPalette) because these three colors ARE the activity rings.
+ */
+object ActivityRingColors {
+    val steps = Color(0xFF4CAF50)
+    val calories = Color(0xFFFF7043)
+    val minutes = Color(0xFF42A5F5)
+}
+
 @Composable
 fun ActivityRing(
     progress: Float,
@@ -72,25 +83,25 @@ fun MultiActivityRings(
         // Steps Ring (Outer)
         ActivityRing(
             progress = stepsProgress,
-            color = Color(0xFF4CAF50),
+            color = ActivityRingColors.steps,
             modifier = Modifier.matchParentSize(),
             strokeWidth = strokeWidth
         )
-        
+
         // Calories Ring (Middle)
         ActivityRing(
             progress = caloriesProgress,
-            color = Color(0xFFFF7043),
+            color = ActivityRingColors.calories,
             modifier = Modifier
                 .fillMaxSize(0.75f)
                 .padding(ringSpacing),
             strokeWidth = strokeWidth
         )
-        
+
         // Active Minutes Ring (Inner)
         ActivityRing(
             progress = minutesProgress,
-            color = Color(0xFF42A5F5),
+            color = ActivityRingColors.minutes,
             modifier = Modifier
                 .fillMaxSize(0.5f)
                 .padding(ringSpacing * 2),

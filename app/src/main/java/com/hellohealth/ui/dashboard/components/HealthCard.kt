@@ -3,7 +3,6 @@ package com.hellohealth.ui.dashboard.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,10 +30,10 @@ import com.hellohealth.ui.dashboard.VitalsUiState
 import java.time.LocalDate
 
 /**
- * Merged dashboard card replacing the separate Activity + Vitals cards — a compact snapshot (steps
- * ring + readiness mini-ring + a couple of chips) that opens the unified Health screen. Stateless:
- * fed the already-collected [steps]/[goalSteps]/[activeCalories]/[activeMinutes] plus the dashboard
- * [VitalsUiState]. Values dash when absent, never a fake 0.
+ * Merged dashboard card — a compact Activity snapshot (3 rings + legend via the shared [ActivityCard])
+ * plus a readiness line, opening the unified Health screen. Stateless: fed the already-collected
+ * steps/goals/activeCalories/activeMinutes plus the dashboard [VitalsUiState]. Values dash when
+ * absent, never a fake 0.
  */
 @Composable
 fun HealthCard(
@@ -42,7 +41,9 @@ fun HealthCard(
     steps: Long,
     goalSteps: Long,
     activeCalories: Double,
+    goalActiveCalories: Int,
     activeMinutes: Long,
+    goalActiveMinutes: Int,
     vitals: VitalsUiState,
     isConnected: Boolean,
     onClick: () -> Unit,
@@ -77,26 +78,18 @@ fun HealthCard(
 
             Spacer(Modifier.height(20.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                // Steps ring.
-                Box(modifier = Modifier.size(96.dp), contentAlignment = Alignment.Center) {
-                    ActivityRing(
-                        progress = if (goalSteps > 0) (steps.toFloat() / goalSteps).coerceIn(0.01f, 1f) else 0.01f,
-                        color = primary,
-                        modifier = Modifier.fillMaxWidth(),
-                        strokeWidth = 10.dp,
-                    )
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("$steps", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = onSurface)
-                        Text("steps", style = MaterialTheme.typography.labelSmall, color = onSurface.copy(alpha = 0.6f))
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Chip("Active burn", "${activeCalories.toInt()} Cal")
-                    Chip("Active time", "$activeMinutes min")
-                    Chip("Readiness", if (vitals.hasReadiness && vitals.readinessScore > 0) "${vitals.readinessScore}/100" else "—")
-                }
-            }
+            ActivityCard(
+                steps = steps,
+                goalSteps = goalSteps,
+                activeCalories = activeCalories,
+                goalActiveCalories = goalActiveCalories,
+                activeMinutes = activeMinutes,
+                goalActiveMinutes = goalActiveMinutes,
+                ringSize = 104.dp,
+            )
+
+            Spacer(Modifier.height(16.dp))
+            Chip("Readiness", if (vitals.hasReadiness && vitals.readinessScore > 0) "${vitals.readinessScore}/100" else "—")
         }
     }
 }
