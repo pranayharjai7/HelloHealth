@@ -9,6 +9,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -42,11 +45,20 @@ class CoachingScreenViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CoachingScreenUiState())
     val uiState: StateFlow<CoachingScreenUiState> = _uiState.asStateFlow()
 
-    init { load() }
+    init {
+        // OBSERVE the opt-in flag continuously rather than sampling it once. On a fresh launch the
+        // opted-in profile row may not yet be in local Room when the screen opens; a one-shot read
+        // then saw `false` and served rule-based text, with the LLM result only appearing after the
+        // user toggled the switch (which forced a write + reload). By reacting to every flag value we
+        // re-run dailyInsight() when it resolves true, so the online result wins without any toggle.
+        profileRepository.observeAiCoachingEnabled()
+            .distinctUntilChanged()
+            .onEach { enabled -> loadInsight(enabled) }
+            .launchIn(viewModelScope)
+    }
 
-    private fun load() {
+    private fun loadInsight(enabled: Boolean) {
         viewModelScope.launch {
-            val enabled = coachingRepository.isEnabled()
             _uiState.value = _uiState.value.copy(enabled = enabled, insightLoading = true)
             val insight = coachingRepository.dailyInsight()
             _uiState.value = _uiState.value.copy(
@@ -57,12 +69,10 @@ class CoachingScreenViewModel @Inject constructor(
         }
     }
 
-    /** Toggle AI Coaching consent, then reload the insight (LLM becomes available once enabled). */
+    /** Toggle AI Coaching consent. The flag stream reacts and reloads the insight (LLM once enabled). */
     fun setEnabled(enabled: Boolean) {
         viewModelScope.launch {
             profileRepository.setAiCoachingEnabled(enabled)
-            _uiState.value = _uiState.value.copy(enabled = enabled)
-            load()
         }
     }
 

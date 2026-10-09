@@ -3,6 +3,7 @@ package com.hellohealth.ui.navigation
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -60,15 +61,21 @@ import com.hellohealth.ui.workoutsession.ActiveWorkoutViewModel
 import com.hellohealth.ui.wellness.WellnessScreen
 import com.hellohealth.ui.wellness.WellnessViewModel
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    NavHost(
-        navController = navController,
-        startDestination = Screen.Splash.route
-    ) {
+    // Wrap the whole NavHost so the dashboard Activity card and the Health screen's Activity section
+    // can morph into one another (Stage 6 shared element). The scope is published via a
+    // CompositionLocal; each destination publishes its own AnimatedVisibilityScope below.
+    SharedTransitionLayout {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Splash.route
+            ) {
         composable(
             route = Screen.Splash.route,
             exitTransition = { fadeOut(tween(500)) }
@@ -121,6 +128,7 @@ fun AppNavigation(
         ) {
             val dashboardViewModel: DashboardViewModel = hiltViewModel()
             val emotionsViewModel: EmotionsViewModel = hiltViewModel()
+            CompositionLocalProvider(LocalActivityAnimatedVisibilityScope provides this@composable) {
             DashboardScreen(
                 authViewModel = authViewModel,
                 dashboardViewModel = dashboardViewModel,
@@ -139,6 +147,9 @@ fun AppNavigation(
                 onResumeWorkout = {
                     navController.navigate(Screen.ActiveWorkout.createRoute())
                 },
+                onStartWorkoutDay = { dayId ->
+                    navController.navigate(Screen.ActiveWorkout.createRoute(dayId))
+                },
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                 onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
                 onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },
@@ -154,6 +165,7 @@ fun AppNavigation(
                 onNavigateToCoaching = { navController.navigate(Screen.Coaching.route) },
                 onNavigateToWellness = { navController.navigate(Screen.Wellness.route) }
             )
+            }
         }
         
         composable(
@@ -166,6 +178,7 @@ fun AppNavigation(
             }
         ) {
             val healthViewModel: com.hellohealth.ui.health.HealthViewModel = hiltViewModel()
+            CompositionLocalProvider(LocalActivityAnimatedVisibilityScope provides this@composable) {
             com.hellohealth.ui.health.HealthScreen(
                 viewModel = healthViewModel,
                 onBack = { navController.popBackStack() },
@@ -184,6 +197,7 @@ fun AppNavigation(
                 onOpenBodyTrends = { navController.navigate(Screen.BodyTrends.route) },
                 onOpenInsights = { navController.navigate(Screen.Insights.route) },
             )
+            }
         }
 
         composable(
@@ -590,6 +604,8 @@ fun AppNavigation(
         ) {
             val viewModel: WellnessViewModel = hiltViewModel()
             WellnessScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+            }
         }
     }
 }

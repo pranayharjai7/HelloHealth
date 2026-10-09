@@ -63,19 +63,14 @@ class DayDetailViewModel @Inject constructor(
         }
     }
 
-    /** Move a planned exercise one position earlier, if not already first. */
-    fun moveUp(plannedId: String) = move(plannedId, -1)
-
-    /** Move a planned exercise one position later, if not already last. */
-    fun moveDown(plannedId: String) = move(plannedId, +1)
-
-    private fun move(plannedId: String, delta: Int) {
-        val ids = uiState.value.exercises.map { it.planned.id }.toMutableList()
-        val from = ids.indexOf(plannedId)
-        val to = from + delta
-        if (from < 0 || to < 0 || to >= ids.size) return
-        ids.add(to, ids.removeAt(from))
-        viewModelScope.launch { repository.reorderExercises(dayId, ids) }
+    /**
+     * Persist a new full ordering of the day's planned exercises (index = position). Driven by the
+     * drag-to-reorder list; the repository skips rows already at the right index so a no-op drag
+     * doesn't churn sync state.
+     */
+    fun reorder(orderedIds: List<String>) {
+        if (orderedIds.isEmpty()) return
+        viewModelScope.launch { repository.reorderExercises(dayId, orderedIds) }
     }
 
     fun deleteExercise(plannedId: String) {

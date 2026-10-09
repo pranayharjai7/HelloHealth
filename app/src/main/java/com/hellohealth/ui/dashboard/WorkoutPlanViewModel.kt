@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hellohealth.domain.repository.WorkoutPlanRepository
 import com.hellohealth.domain.repository.WorkoutSessionRepository
+import com.hellohealth.domain.usecase.ResolveSmartStartDayUseCase
+import com.hellohealth.ui.workoutplan.RoutineDetailViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,16 +15,24 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.time.LocalDate
 import javax.inject.Inject
 
 /**
  * At-a-glance summary of the user's active routine for the dashboard hero card. Null [activePlanName]
  * means "no active plan yet" (fresh user, or signed out) and the card renders its empty prompt.
+ *
+ * [suggestedDayId]/[suggestedDayLabel] carry the "Smart Start" target (resolved by
+ * [ResolveSmartStartDayUseCase]) — the planned day the card offers to start today ("Start Tuesday" /
+ * "Start Day 12" / "Start Custom 3"). Both null when nothing is scheduled for today (WEEKLY/MONTHLY)
+ * or the plan has no days — the card then falls back to its plain "view routines" affordance.
  */
 data class WorkoutPlanSummary(
     val activePlanName: String? = null,
     val dayCount: Int = 0,
     val plannedCount: Int = 0,
+    val suggestedDayId: String? = null,
+    val suggestedDayLabel: String? = null,
 )
 
 /**
@@ -39,7 +49,8 @@ data class WorkoutPlanSummary(
 @HiltViewModel
 class WorkoutPlanViewModel @Inject constructor(
     private val repository: WorkoutPlanRepository,
-    sessionRepository: WorkoutSessionRepository,
+    private val sessionRepository: WorkoutSessionRepository,
+    private val resolveSmartStartDay: ResolveSmartStartDayUseCase,
 ) : ViewModel() {
 
     /**
@@ -72,12 +83,32 @@ class WorkoutPlanViewModel @Inject constructor(
                                 )
                             )
                         } else {
-                            // One planned-exercise flow per day; combine sums the counts reactively.
-                            combine(days.map { repository.observePlannedExercises(it.id) }) { perDay ->
+                            // Count the planned exercises across the days reactively, and separately
+                            // watch recent sessions (for CUSTOM next-in-sequence); combine both to
+                            // produce the summary with its resolved Smart-Start target.
+                            val today = LocalDate.now()
+                            val plannedCountFlow = combine(
+                                days.map { repository.observePlannedExercises(it.id) }
+                            ) { perDay -> perDay.sumOf { it.size } }
+                            val recentSessionsFlow = sessionRepository.observeRecentSessions(
+                                startDate = today.minusDays(RECENT_WINDOW_DAYS).toString(),
+                                endDate = today.toString(),
+                            )
+                            combine(plannedCountFlow, recentSessionsFlow) { plannedCount, recentSessions ->
+                                val suggested = resolveSmartStartDay(
+                                    planType = plan.planType,
+                                    days = days,
+                                    recentSessionDayIds = recentSessions.mapNotNull { it.dayId },
+                                    today = today,
+                                )
                                 WorkoutPlanSummary(
                                     activePlanName = plan.name,
                                     dayCount = days.size,
-                                    plannedCount = perDay.sumOf { it.size },
+                                    plannedCount = plannedCount,
+                                    suggestedDayId = suggested?.id,
+                                    suggestedDayLabel = suggested?.let {
+                                        RoutineDetailViewModel.slotLabel(plan.planType, it.slotKey)
+                                    },
                                 )
                             }
                         }
@@ -89,4 +120,9 @@ class WorkoutPlanViewModel @Inject constructor(
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = WorkoutPlanSummary(),
             )
+
+    companion object {
+        /** How far back to read sessions for CUSTOM next-in-sequence resolution. */
+        private const val RECENT_WINDOW_DAYS = 60L
+    }
 }

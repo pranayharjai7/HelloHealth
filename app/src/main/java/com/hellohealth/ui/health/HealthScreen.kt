@@ -19,9 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,7 +54,6 @@ import com.hellohealth.domain.model.HealthSummary
 import com.hellohealth.domain.model.vitals.LatestVitals
 import com.hellohealth.domain.model.vitals.ReadinessScore
 import com.hellohealth.domain.model.vitals.ReadinessStatus
-import com.hellohealth.ui.dashboard.components.MultiActivityRings
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -159,19 +160,15 @@ fun HealthScreen(
 @Composable
 private fun ActivitySection(summary: HealthSummary, goals: com.hellohealth.domain.model.ActivityGoals) {
     SectionCard("Activity") {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            MultiActivityRings(
-                stepsProgress = ratio(summary.steps.toDouble(), goals.steps.toDouble()),
-                caloriesProgress = ratio(summary.activeCalories, goals.activeCalories.toDouble()),
-                minutesProgress = ratio(summary.activeTimeMinutes.toDouble(), goals.activeMinutes.toDouble()),
-                modifier = Modifier.size(120.dp),
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Legend("Steps", if (summary.steps > 0) "${summary.steps}" else DASH, Color(0xFF4CAF50))
-                Legend("Active burn", if (summary.activeCalories > 0) "${summary.activeCalories.roundToInt()} Cal" else DASH, Color(0xFFFF7043))
-                Legend("Active time", if (summary.activeTimeMinutes > 0) "${summary.activeTimeMinutes} min" else DASH, Color(0xFF42A5F5))
-            }
-        }
+        com.hellohealth.ui.dashboard.components.ActivityCard(
+            steps = summary.steps,
+            goalSteps = goals.steps.toLong(),
+            activeCalories = summary.activeCalories,
+            goalActiveCalories = goals.activeCalories,
+            activeMinutes = summary.activeTimeMinutes,
+            goalActiveMinutes = goals.activeMinutes,
+            ringSize = 120.dp,
+        )
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             MiniStat("Distance", if (summary.distanceKm > 0) String.format("%.2f km", summary.distanceKm) else DASH)
@@ -217,8 +214,10 @@ private fun BodySection(
     SectionCard("Body composition") {
         if (!body.hasAnyData) {
             ChartEmpty("Log your weight or sync a smart scale to track body composition.")
-            Spacer(Modifier.height(8.dp))
-            LinkRow("Log weight", onLogWeight)
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onLogWeight, modifier = Modifier.fillMaxWidth()) {
+                Text("Log weight")
+            }
             return@SectionCard
         }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -246,10 +245,20 @@ private fun BodySection(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
         }
-        Spacer(Modifier.height(12.dp))
-        LinkRow("View full trends", onOpenTrends)
-        Spacer(Modifier.height(4.dp))
-        LinkRow("Log weight", onLogWeight)
+        Spacer(Modifier.height(16.dp))
+        // Two clearly-differentiated affordances (was two cramped text LinkRows 4dp apart): a primary
+        // "Log weight" action + a secondary outlined "View full trends".
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Button(onClick = onLogWeight, modifier = Modifier.weight(1f)) {
+                Text("Log weight")
+            }
+            OutlinedButton(onClick = onOpenTrends, modifier = Modifier.weight(1f)) {
+                Text("View full trends")
+            }
+        }
     }
 }
 
@@ -264,9 +273,6 @@ private fun SleepSection(summary: HealthSummary) {
 // --- shared bits ---------------------------------------------------------------------------------
 
 private const val DASH = "—"
-
-private fun ratio(value: Double, goal: Double): Float =
-    if (goal > 0) (value / goal).toFloat().coerceIn(0f, 1f) else 0f
 
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
@@ -299,18 +305,6 @@ private fun MiniStat(label: String, value: String) {
     Column {
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-    }
-}
-
-@Composable
-private fun Legend(label: String, value: String, dot: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(dot))
-        Spacer(Modifier.width(8.dp))
-        Column {
-            Text(value, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-        }
     }
 }
 

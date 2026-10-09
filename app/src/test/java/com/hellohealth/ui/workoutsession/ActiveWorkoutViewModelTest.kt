@@ -119,7 +119,7 @@ class ActiveWorkoutViewModelTest {
     }
 
     /** No-op plan repo — the active-workout VM only reads planned exercises for prefill. */
-    private class StubPlanRepo : WorkoutPlanRepository {
+    private open class StubPlanRepo : WorkoutPlanRepository {
         override fun observePlans() = MutableStateFlow(emptyList<com.hellohealth.domain.model.WorkoutPlan>())
         override fun observeActivePlan() = MutableStateFlow<com.hellohealth.domain.model.WorkoutPlan?>(null)
         override suspend fun getPlan(id: String) = null
@@ -141,6 +141,23 @@ class ActiveWorkoutViewModelTest {
         override suspend fun deleteExercise(id: String) {}
     }
 
+    /**
+     * Plan repo that returns a [WorkoutDay] for [dayId] and records [setActivePlan] — used to assert
+     * starting a planned day makes its routine active (Stage 10).
+     */
+    private class RecordingPlanRepo(
+        private val dayId: String,
+        private val planId: String?,
+    ) : StubPlanRepo() {
+        var setActiveCalls = 0
+        var setActiveId: String? = null
+        override suspend fun getDay(id: String): com.hellohealth.domain.model.WorkoutDay? =
+            if (id == dayId) com.hellohealth.domain.model.WorkoutDay(
+                id = dayId, planId = planId ?: "", userId = "u", slotKey = "C01", name = "Custom 1", updatedAt = 0L,
+            ) else null
+        override suspend fun setActivePlan(id: String) { setActiveCalls++; setActiveId = id }
+    }
+
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
@@ -156,11 +173,12 @@ class ActiveWorkoutViewModelTest {
     private fun viewModel(
         sessionRepo: FakeSessionRepo,
         dayId: String? = null,
+        planRepo: WorkoutPlanRepository = StubPlanRepo(),
     ): ActiveWorkoutViewModel {
         val handle = SavedStateHandle(mapOf(Screen.ActiveWorkout.dayIdArg to (dayId ?: "none")))
         return ActiveWorkoutViewModel(
             sessionRepository = sessionRepo,
-            planRepository = StubPlanRepo(),
+            planRepository = planRepo,
             controller = WorkoutSessionController(context),
             savedStateHandle = handle,
         )
@@ -263,6 +281,58 @@ class ActiveWorkoutViewModelTest {
 
         assertEquals("no second session started", 1, repo.sessions.value.count { it.status == SessionStatus.ACTIVE })
         assertEquals("re-attached to the existing session", "existing", vm.uiState.value.session?.id)
+        job.cancel()
+    }
+
+    @Test
+    fun `startFromPlannedDay makes the day's routine active then starts the session`() = runTest(dispatcher) {
+        val repo = FakeSessionRepo()
+        val planRepo = RecordingPlanRepo(dayId = "day1", planId = "plan7")
+        val vm = viewModel(repo, dayId = "day1", planRepo = planRepo)
+        val job = launch { vm.uiState.collect {} }
+
+        vm.startFromPlannedDay()
+        advanceUntilIdle()
+
+        assertEquals("setActivePlan called once", 1, planRepo.setActiveCalls)
+        assertEquals("activated the day's plan", "plan7", planRepo.setActiveId)
+        assertEquals("one active session started", 1, repo.sessions.value.count { it.status == SessionStatus.ACTIVE })
+        job.cancel()
+    }
+
+    @Test
+    fun `startFromPlannedDay with an already-active session does not re-activate a plan`() = runTest(dispatcher) {
+        val repo = FakeSessionRepo()
+        repo.sessions.value = listOf(
+            WorkoutSession(
+                id = "existing", userId = "u1", planId = null, dayId = null, title = "In progress",
+                activityType = "strength_training", startEpochMs = 1_000L, endEpochMs = null,
+                durationSeconds = null, status = SessionStatus.ACTIVE, localDate = "2026-10-08",
+                note = null, totalVolumeKg = null, caloriesEstimate = null, updatedAt = 1_000L,
+            )
+        )
+        val planRepo = RecordingPlanRepo(dayId = "day1", planId = "plan7")
+        val vm = viewModel(repo, dayId = "day1", planRepo = planRepo)
+        val job = launch { vm.uiState.collect {} }
+
+        vm.startFromPlannedDay() // guard returns early — a session is already active
+        advanceUntilIdle()
+
+        assertEquals("no plan re-activated", 0, planRepo.setActiveCalls)
+        job.cancel()
+    }
+
+    @Test
+    fun `startAdHoc never activates a plan`() = runTest(dispatcher) {
+        val repo = FakeSessionRepo()
+        val planRepo = RecordingPlanRepo(dayId = "day1", planId = "plan7")
+        val vm = viewModel(repo, planRepo = planRepo) // ad-hoc: dayId = none
+        val job = launch { vm.uiState.collect {} }
+
+        vm.startAdHoc()
+        advanceUntilIdle()
+
+        assertEquals("ad-hoc start touches no plan", 0, planRepo.setActiveCalls)
         job.cancel()
     }
 }

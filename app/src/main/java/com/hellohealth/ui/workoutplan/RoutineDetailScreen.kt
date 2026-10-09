@@ -11,19 +11,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
@@ -34,10 +30,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -54,7 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellohealth.domain.model.PlanType
 import com.hellohealth.domain.model.WorkoutDay
-import com.hellohealth.ui.common.SingleSelectChips
+import com.hellohealth.ui.workoutplan.components.AddDaySheet
+import com.hellohealth.ui.workoutplan.components.RenameSheet
 
 /**
  * A single routine's days. Each day card drills into its planned exercises; an overflow menu offers
@@ -76,18 +71,17 @@ fun RoutineDetailScreen(
     var dayToRename by remember { mutableStateOf<WorkoutDay?>(null) }
 
     if (uiState.showAddDayDialog) {
-        AddDayDialog(
+        AddDaySheet(
             slots = uiState.availableSlots,
-            primaryColor = primaryColor,
             onAdd = { slotKey, name -> viewModel.addDay(slotKey, name) },
             onDismiss = { viewModel.dismissAddDayDialog() },
         )
     }
 
     dayToRename?.let { day ->
-        RenameDayDialog(
+        RenameSheet(
+            title = "Rename day",
             initialName = day.name,
-            primaryColor = primaryColor,
             onRename = { newName ->
                 viewModel.renameDay(day.id, newName)
                 dayToRename = null
@@ -230,100 +224,6 @@ private fun DayRow(
             )
         }
     }
-}
-
-@Composable
-private fun AddDayDialog(
-    slots: List<SlotOption>,
-    primaryColor: Color,
-    onAdd: (slotKey: String, name: String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var selectedSlot by remember(slots) { mutableStateOf(slots.firstOrNull()) }
-    var name by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add day", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = "Slot",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                // Slot list can be up to 99 chips (CUSTOM) / 31 (MONTHLY). Bound its height and
-                // let it scroll so the Name field and dialog buttons stay reachable on screen.
-                // SingleSelectChips is unchanged; only its call-site wrapper is constrained.
-                Box(
-                    modifier = Modifier
-                        .heightIn(max = 200.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    SingleSelectChips(
-                        options = slots,
-                        selected = selectedSlot,
-                        labelOf = { it.label },
-                        onSelect = { selectedSlot = it },
-                    )
-                }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { selectedSlot?.let { onAdd(it.key, name) } },
-                enabled = selectedSlot != null,
-            ) {
-                Text("Add", fontWeight = FontWeight.Bold, color = primaryColor)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-@Composable
-private fun RenameDayDialog(
-    initialName: String,
-    primaryColor: Color,
-    onRename: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var name by remember { mutableStateOf(initialName) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Rename day", fontWeight = FontWeight.Bold) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onRename(name) }, enabled = name.isNotBlank()) {
-                Text(
-                    "Save",
-                    fontWeight = FontWeight.Bold,
-                    color = if (name.isNotBlank()) primaryColor else primaryColor.copy(alpha = 0.4f)
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
 }
 
 @Composable
