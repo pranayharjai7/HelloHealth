@@ -443,7 +443,11 @@ fun DashboardScreen(
                         val loggedId = emotionsViewModel.quickLog(emotion)
                         val result = snackbarHostState.showSnackbar(
                             message = "Logged ${emotion.displayLabel()}",
-                            actionLabel = "Undo"
+                            actionLabel = "Undo",
+                            // A snackbar WITH an action defaults to Indefinite in Material3, which left
+                            // the "Logged …" popup stuck on screen until tapped. Short auto-dismisses it
+                            // while still giving a moment to hit Undo.
+                            duration = SnackbarDuration.Short,
                         )
                         if (result == SnackbarResult.ActionPerformed && loggedId != null) {
                             emotionsViewModel.delete(loggedId)
