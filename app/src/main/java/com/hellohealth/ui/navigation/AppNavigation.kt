@@ -10,6 +10,7 @@ import androidx.navigation.NavType
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -134,6 +135,9 @@ fun AppNavigation(
                 },
                 onNavigateToWorkoutPlan = {
                     navController.navigate(Screen.Routines.route)
+                },
+                onResumeWorkout = {
+                    navController.navigate(Screen.ActiveWorkout.createRoute())
                 },
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                 onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
@@ -550,6 +554,7 @@ fun AppNavigation(
                     defaultValue = "none"
                 }
             ),
+            deepLinks = listOf(navDeepLink { uriPattern = Screen.ActiveWorkout.DEEP_LINK }),
             enterTransition = { fadeIn(tween(300)) + slideInVertically(tween(400)) { it / 2 } },
             exitTransition = { fadeOut(tween(300)) },
             popExitTransition = { fadeOut(tween(250)) + slideOutVertically(tween(300)) { it / 2 } }
@@ -658,5 +663,13 @@ sealed class Screen(val route: String) {
     object ActiveWorkout : Screen("active_workout?dayId={dayId}") {
         const val dayIdArg = "dayId"
         fun createRoute(dayId: String? = null): String = "active_workout?dayId=${dayId ?: "none"}"
+
+        /**
+         * Deep link the ongoing-workout notification uses to re-open this screen. Shares the same
+         * `dayId` arg so the existing SavedStateHandle plumbing resolves it; `none` means "re-attach
+         * to the live session" (the VM re-attaches via observeActiveSession and never double-starts).
+         */
+        const val DEEP_LINK = "hellohealth://active_workout?dayId={dayId}"
+        fun deepLinkUri(dayId: String? = null): String = "hellohealth://active_workout?dayId=${dayId ?: "none"}"
     }
 }

@@ -66,6 +66,7 @@ fun DashboardScreen(
     onLogout: () -> Unit,
     onNavigateToHealth: () -> Unit,
     onNavigateToWorkoutPlan: () -> Unit,
+    onResumeWorkout: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToGoals: () -> Unit,
     onNavigateToActivitySettings: () -> Unit,
@@ -84,6 +85,7 @@ fun DashboardScreen(
     val emotionsState by emotionsViewModel.uiState.collectAsState()
     val workoutPlanViewModel: WorkoutPlanViewModel = hiltViewModel()
     val workoutPlanSummary by workoutPlanViewModel.summary.collectAsState()
+    val hasActiveWorkout by workoutPlanViewModel.hasActiveSession.collectAsState()
     val vitalsViewModel: VitalsViewModel = hiltViewModel()
     val vitalsState by vitalsViewModel.uiState.collectAsState()
     val nutritionViewModel: NutritionViewModel = hiltViewModel()
@@ -360,7 +362,9 @@ fun DashboardScreen(
                     activePlanName = workoutPlanSummary.activePlanName,
                     dayCount = workoutPlanSummary.dayCount,
                     plannedCount = workoutPlanSummary.plannedCount,
-                    onClick = onNavigateToWorkoutPlan
+                    onClick = onNavigateToWorkoutPlan,
+                    hasActiveSession = hasActiveWorkout,
+                    onResumeWorkout = onResumeWorkout,
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))

@@ -23,8 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,6 +54,8 @@ fun WorkoutPlanCard(
     dayCount: Int,
     plannedCount: Int,
     onClick: () -> Unit,
+    hasActiveSession: Boolean = false,
+    onResumeWorkout: () -> Unit = {},
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
@@ -135,6 +139,24 @@ fun WorkoutPlanCard(
             }
 
             Spacer(modifier = Modifier.height(4.dp))
+
+            if (hasActiveSession) {
+                // A workout is in progress — surface a direct way back into it (the only in-app
+                // route to a running session besides the ongoing notification).
+                FilledTonalButton(
+                    onClick = onResumeWorkout,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Resume workout")
+                }
+            }
+
             TextButton(
                 onClick = onClick,
                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp)

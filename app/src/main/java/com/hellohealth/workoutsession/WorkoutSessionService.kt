@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -16,6 +17,7 @@ import com.hellohealth.R
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.domain.repository.WorkoutSessionRepository
+import com.hellohealth.ui.navigation.Screen
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -80,10 +82,17 @@ class WorkoutSessionService : Service() {
     }
 
     private fun buildNotification(title: String?): Notification {
+        // Deep-link straight back into the ActiveWorkout screen (explicit component → stays private,
+        // no manifest <data> filter needed). dayId=none → the screen re-attaches to the live session.
         val contentIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(Screen.ActiveWorkout.deepLinkUri()),
+                this,
+                MainActivity::class.java,
+            ).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)

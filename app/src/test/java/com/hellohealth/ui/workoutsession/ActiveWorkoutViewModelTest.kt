@@ -240,4 +240,29 @@ class ActiveWorkoutViewModelTest {
         assertTrue(vm.uiState.value.sets.first { it.id == skipId }.isSkipped)
         job.cancel()
     }
+
+    @Test
+    fun `resuming (dayId none) re-attaches to a live session without starting a new one`() = runTest(dispatcher) {
+        // Simulate an already-running session (e.g. opened via the resume affordance / notification
+        // deep link while a workout is in progress). The deep link carries dayId=none.
+        val repo = FakeSessionRepo()
+        repo.sessions.value = listOf(
+            WorkoutSession(
+                id = "existing", userId = "u1", planId = null, dayId = null, title = "Push day",
+                activityType = "strength_training", startEpochMs = 1_000L, endEpochMs = null,
+                durationSeconds = null, status = SessionStatus.ACTIVE, localDate = "2026-10-08",
+                note = null, totalVolumeKg = null, caloriesEstimate = null, updatedAt = 1_000L,
+            )
+        )
+        val vm = viewModel(repo, dayId = null) // null → "none" sentinel in SavedStateHandle
+        val job = launch { vm.uiState.collect {} }
+
+        // The screen calls startAdHoc() on entry; it must NO-OP because a session is already active.
+        vm.startAdHoc()
+        advanceUntilIdle()
+
+        assertEquals("no second session started", 1, repo.sessions.value.count { it.status == SessionStatus.ACTIVE })
+        assertEquals("re-attached to the existing session", "existing", vm.uiState.value.session?.id)
+        job.cancel()
+    }
 }
