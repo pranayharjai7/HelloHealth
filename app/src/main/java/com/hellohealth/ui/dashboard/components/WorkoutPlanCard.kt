@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,10 +44,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * Dashboard workout hero card. Stateless (plain data + one lambda), mirroring [EmotionsCard]: the
- * whole card is a single tap target that opens the Routines flow, and it springs down on press to
- * confirm the tap. When [activePlanName] is null the card shows an invitation to create the first
- * routine; otherwise it summarizes the active routine's day and exercise counts.
+ * Dashboard workout hero card. Stateless (plain data + lambdas), mirroring [EmotionsCard]: the whole
+ * card is a single tap target that opens the Routines flow, and it springs down on press to confirm
+ * the tap. When [activePlanName] is null the card shows an invitation to create the first routine;
+ * otherwise it summarizes the active routine's day and exercise counts.
+ *
+ * When [suggestedDayLabel]/[suggestedDayId] are present (Smart Start — the day scheduled for today, or
+ * the next CUSTOM day), the card surfaces a prominent "Start {label}" button that launches straight
+ * into that planned day. A live session takes precedence (Resume), then Smart Start, then the plain
+ * "View routines" link.
  */
 @Composable
 fun WorkoutPlanCard(
@@ -56,6 +62,9 @@ fun WorkoutPlanCard(
     onClick: () -> Unit,
     hasActiveSession: Boolean = false,
     onResumeWorkout: () -> Unit = {},
+    suggestedDayId: String? = null,
+    suggestedDayLabel: String? = null,
+    onStartDay: (String) -> Unit = {},
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
@@ -154,6 +163,20 @@ fun WorkoutPlanCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Resume workout")
+                }
+            } else if (suggestedDayId != null && suggestedDayLabel != null) {
+                // Smart Start — jump straight into today's (or the next) planned day.
+                Button(
+                    onClick = { onStartDay(suggestedDayId) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Start $suggestedDayLabel")
                 }
             }
 

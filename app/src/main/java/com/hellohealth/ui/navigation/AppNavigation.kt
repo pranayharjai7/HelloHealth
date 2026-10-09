@@ -147,6 +147,9 @@ fun AppNavigation(
                 onResumeWorkout = {
                     navController.navigate(Screen.ActiveWorkout.createRoute())
                 },
+                onStartWorkoutDay = { dayId ->
+                    navController.navigate(Screen.ActiveWorkout.createRoute(dayId))
+                },
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                 onNavigateToGoals = { navController.navigate(Screen.Goals.route) },
                 onNavigateToActivitySettings = { navController.navigate(Screen.ActivitySettings.route) },

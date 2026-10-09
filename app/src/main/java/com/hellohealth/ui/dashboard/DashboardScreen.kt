@@ -66,6 +66,7 @@ fun DashboardScreen(
     onNavigateToHealth: () -> Unit,
     onNavigateToWorkoutPlan: () -> Unit,
     onResumeWorkout: () -> Unit,
+    onStartWorkoutDay: (String) -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToGoals: () -> Unit,
     onNavigateToActivitySettings: () -> Unit,
@@ -371,6 +372,9 @@ fun DashboardScreen(
                     onClick = onNavigateToWorkoutPlan,
                     hasActiveSession = hasActiveWorkout,
                     onResumeWorkout = onResumeWorkout,
+                    suggestedDayId = workoutPlanSummary.suggestedDayId,
+                    suggestedDayLabel = workoutPlanSummary.suggestedDayLabel,
+                    onStartDay = onStartWorkoutDay,
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
