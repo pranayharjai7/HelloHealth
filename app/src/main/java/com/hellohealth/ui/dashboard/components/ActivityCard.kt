@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+
 package com.hellohealth.ui.dashboard.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.hellohealth.ui.navigation.LocalActivityAnimatedVisibilityScope
+import com.hellohealth.ui.navigation.LocalSharedTransitionScope
+import com.hellohealth.ui.navigation.activitySharedBounds
 
 private const val DASH = "—"
 
@@ -43,8 +48,12 @@ fun ActivityCard(
     modifier: Modifier = Modifier,
     ringSize: androidx.compose.ui.unit.Dp = 120.dp,
 ) {
+    // When rendered inside the shared-transition host (dashboard + Health screen), morph between the
+    // two call sites; otherwise this is a no-op and the card renders normally.
+    val sharedScope = LocalSharedTransitionScope.current
+    val visibilityScope = LocalActivityAnimatedVisibilityScope.current
     Row(
-        modifier = modifier,
+        modifier = modifier.activitySharedBounds(sharedScope, visibilityScope),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
