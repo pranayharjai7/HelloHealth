@@ -19,9 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -212,8 +214,10 @@ private fun BodySection(
     SectionCard("Body composition") {
         if (!body.hasAnyData) {
             ChartEmpty("Log your weight or sync a smart scale to track body composition.")
-            Spacer(Modifier.height(8.dp))
-            LinkRow("Log weight", onLogWeight)
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onLogWeight, modifier = Modifier.fillMaxWidth()) {
+                Text("Log weight")
+            }
             return@SectionCard
         }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -241,10 +245,20 @@ private fun BodySection(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
         }
-        Spacer(Modifier.height(12.dp))
-        LinkRow("View full trends", onOpenTrends)
-        Spacer(Modifier.height(4.dp))
-        LinkRow("Log weight", onLogWeight)
+        Spacer(Modifier.height(16.dp))
+        // Two clearly-differentiated affordances (was two cramped text LinkRows 4dp apart): a primary
+        // "Log weight" action + a secondary outlined "View full trends".
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Button(onClick = onLogWeight, modifier = Modifier.weight(1f)) {
+                Text("Log weight")
+            }
+            OutlinedButton(onClick = onOpenTrends, modifier = Modifier.weight(1f)) {
+                Text("View full trends")
+            }
+        }
     }
 }
 
