@@ -3,7 +3,6 @@ package com.hellohealth.ui.insights
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,23 +43,17 @@ import kotlin.math.abs
  * Cross-dimension charts for the Insights screen. All descriptive, never diagnostic — the copy says
  * "these moved together," never "X caused Y," and carries no medical judgement.
  *
- * Colors come from [ChartPalette], the dataviz-validated categorical set (blue/orange/aqua/yellow;
- * passes the colorblind-safety + lightness + contrast checks in both light and dark), rather than the
- * app's older ad-hoc chart hues which fail CVD separation. Identity is never color-alone: every
- * multi-series chart carries a legend AND direct min/max value labels. One axis only — a second
- * series with a different scale is indexed to its own normalised band, not a second y-axis.
+ * Colors come from [com.hellohealth.ui.charts.ChartPalette], the dataviz-validated categorical set
+ * (blue/orange/aqua; passes the colorblind-safety + lightness + contrast checks in both light and
+ * dark), rather than the app's older ad-hoc chart hues which fail CVD separation. Identity is never
+ * color-alone: every multi-series chart carries a legend AND direct min/max value labels. One axis
+ * only — a second series with a different scale is indexed to its own normalised band, not a second
+ * y-axis.
  */
 
-/** dataviz-validated categorical palette (light | dark steps), assigned in fixed order. */
-private object ChartPalette {
-    val series1Light = Color(0xFF2a78d6); val series1Dark = Color(0xFF3987e5) // blue
-    val series2Light = Color(0xFFeb6834); val series2Dark = Color(0xFFd95926) // orange
-    val series3Light = Color(0xFF1baf7a); val series3Dark = Color(0xFF199e70) // aqua
-}
-
-@Composable private fun series1() = if (isSystemInDarkTheme()) ChartPalette.series1Dark else ChartPalette.series1Light
-@Composable private fun series2() = if (isSystemInDarkTheme()) ChartPalette.series2Dark else ChartPalette.series2Light
-@Composable private fun series3() = if (isSystemInDarkTheme()) ChartPalette.series3Dark else ChartPalette.series3Light
+@Composable private fun series1() = com.hellohealth.ui.charts.chartSeries1()
+@Composable private fun series2() = com.hellohealth.ui.charts.chartSeries2()
+@Composable private fun series3() = com.hellohealth.ui.charts.chartSeries3()
 
 /**
  * The "Across your day" section: the four cross-dimension views. Each renders its own empty state, so

@@ -73,6 +73,7 @@ fun HealthScreen(
     onBack: () -> Unit,
     onOpenActivityDetail: (ExerciseSession) -> Unit,
     onOpenVitalsTrends: () -> Unit,
+    onOpenBodyTrends: () -> Unit,
     onOpenInsights: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -138,7 +139,7 @@ fun HealthScreen(
 
                 item { ActivitySection(state.summary, state.goals) }
                 item { VitalsSection(state.readiness, state.latestVitals, onOpenVitalsTrends) }
-                item { BodySection(state.body, onLogWeight = { showLogSheet = true }) }
+                item { BodySection(state.body, onLogWeight = { showLogSheet = true }, onOpenTrends = onOpenBodyTrends) }
                 item { SleepSection(state.summary) }
 
                 if (state.sessions.isNotEmpty()) {
@@ -208,7 +209,11 @@ private fun VitalsSection(readiness: ReadinessScore?, latest: LatestVitals?, onO
 }
 
 @Composable
-private fun BodySection(body: com.hellohealth.domain.model.BodyAnalytics, onLogWeight: () -> Unit) {
+private fun BodySection(
+    body: com.hellohealth.domain.model.BodyAnalytics,
+    onLogWeight: () -> Unit,
+    onOpenTrends: () -> Unit,
+) {
     SectionCard("Body composition") {
         if (!body.hasAnyData) {
             ChartEmpty("Log your weight or sync a smart scale to track body composition.")
@@ -242,6 +247,8 @@ private fun BodySection(body: com.hellohealth.domain.model.BodyAnalytics, onLogW
             )
         }
         Spacer(Modifier.height(12.dp))
+        LinkRow("View full trends", onOpenTrends)
+        Spacer(Modifier.height(4.dp))
         LinkRow("Log weight", onLogWeight)
     }
 }
