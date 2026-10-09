@@ -19,7 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -58,16 +58,12 @@ fun InsightsScreen(
     val backgroundColor = MaterialTheme.colorScheme.background
 
     val pullRefreshState = rememberPullToRefreshState()
-    
-    if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(true) {
-            viewModel.loadWeeklyStats()
-        }
-    }
-    
+    // Material3 1.3 pull-to-refresh: the screen owns the isRefreshing flag.
+    var isRefreshing by remember { mutableStateOf(false) }
+
     LaunchedEffect(uiState.isLoading) {
-        if (!uiState.isLoading && pullRefreshState.isRefreshing) {
-            pullRefreshState.endRefresh()
+        if (!uiState.isLoading && isRefreshing) {
+            isRefreshing = false
         }
     }
 
@@ -99,9 +95,16 @@ fun InsightsScreen(
                     )
                 )
                 .padding(padding)
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
+                .pullToRefresh(
+                    isRefreshing = isRefreshing,
+                    state = pullRefreshState,
+                    onRefresh = {
+                        isRefreshing = true
+                        viewModel.loadWeeklyStats()
+                    },
+                )
         ) {
-            if (uiState.isLoading && !pullRefreshState.isRefreshing) {
+            if (uiState.isLoading && !isRefreshing) {
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -158,14 +161,13 @@ fun InsightsScreen(
                     InsightCardsSection(uiState.weeklyInsights)
                 }
             
-            if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) {
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = primaryColor
-                )
-            }
+            PullToRefreshDefaults.Indicator(
+                state = pullRefreshState,
+                isRefreshing = isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = MaterialTheme.colorScheme.surface,
+                color = primaryColor,
+            )
         }
     }
 }

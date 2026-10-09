@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -103,6 +102,9 @@ fun DashboardScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullToRefreshState()
+    // Material3 1.3 pull-to-refresh: the screen owns the isRefreshing flag; the state object no
+    // longer carries isRefreshing/endRefresh/nestedScrollConnection/progress.
+    var isRefreshing by remember { mutableStateOf(false) }
 
     // Health Connect Permission Launcher.
     // The result contract can return an empty set when every requested permission was ALREADY
@@ -139,15 +141,10 @@ fun DashboardScreen(
         }
     }
     
-    if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(true) {
-            dashboardViewModel.refreshSelectedDate()
-        }
-    }
-    
+    // End the refresh indicator once the VM finishes loading the (re)selected date.
     LaunchedEffect(uiState.isLoading) {
-        if (!uiState.isLoading && pullRefreshState.isRefreshing) {
-            pullRefreshState.endRefresh()
+        if (!uiState.isLoading && isRefreshing) {
+            isRefreshing = false
         }
     }
     
@@ -253,9 +250,16 @@ fun DashboardScreen(
                     )
                 )
                 .padding(padding)
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
+                .pullToRefresh(
+                    isRefreshing = isRefreshing,
+                    state = pullRefreshState,
+                    onRefresh = {
+                        isRefreshing = true
+                        dashboardViewModel.refreshSelectedDate()
+                    },
+                )
         ) {
-            if (uiState.isLoading && !pullRefreshState.isRefreshing) {
+            if (uiState.isLoading && !isRefreshing) {
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -389,14 +393,13 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
             
-            if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) {
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = primaryColor
-                )
-            }
+            PullToRefreshDefaults.Indicator(
+                state = pullRefreshState,
+                isRefreshing = isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = MaterialTheme.colorScheme.surface,
+                color = primaryColor,
+            )
         }
 
         if (showProfileMenu) {
