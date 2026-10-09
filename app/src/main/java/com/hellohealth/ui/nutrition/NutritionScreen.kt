@@ -2,6 +2,8 @@ package com.hellohealth.ui.nutrition
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -392,7 +395,12 @@ private fun AddFoodSheet(
     val unit = if (perServing) "serving" else "g"
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(
+            modifier = Modifier
+                .imePadding()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             Text(food.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
             MealChips(selected = meal, onSelect = { meal = it })
             OutlinedTextField(
@@ -432,7 +440,13 @@ private fun QuickAddSheet(
     fun num(s: String) = s.toDoubleOrNull()
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            modifier = Modifier
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Text("Quick add", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
             MealChips(selected = meal, onSelect = { meal = it })
             OutlinedTextField(
