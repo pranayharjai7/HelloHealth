@@ -116,6 +116,10 @@ class ActiveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             if (sessionRepository.activeSessionId() != null) return@launch
             val dayRow = planRepository.getDay(day)
+            // Starting a day from an inactive routine makes that routine the active one (so the
+            // dashboard + smart-start reflect what the user is actually training). setActivePlan
+            // clears the previous plan's flag; a no-op if it's already active.
+            dayRow?.planId?.let { planRepository.setActivePlan(it) }
             sessionRepository.startSession(
                 activityType = "strength_training",
                 planId = dayRow?.planId,
