@@ -12,6 +12,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.domain.health.ActiveEnergyEstimator
+import com.hellohealth.domain.health.ActiveMinutesEstimator
 import com.hellohealth.domain.model.ActivityChartPoint
 import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
@@ -210,11 +211,25 @@ class HealthConnectManager @Inject constructor(
             // invoke the (possibly DB-backed) fallback supplier — profile-derived BMR → 1800.0.
             val bmr = selectBmr(safeFetch { fetchLatestBasalMetabolicRate(endOfDay) }, bmrFallback)
             val weight = safeFetch { fetchLatestWeight(endOfDay) }
+            val restingHeartRate = safeFetch { fetchLatestRestingHeartRate(endOfDay) }
 
-            // Active minutes — still the pre-Stage-5 heuristic here; the real derivation lands in Stage 5.
-            val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
-                if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
+            // Active minutes — HR-elevated minutes (from the intraday HR series) unioned with logged
+            // exercise sessions, replacing the old (steps/100 capped at 60) fabrication. Degrades to
+            // sessions-only, then an uncapped step proxy, when no intraday HR exists. See
+            // ActiveMinutesEstimator. The intraday HR read is cheap and best-effort.
+            val hrBucketsForActive = runCatching {
+                fetchIntradaySeries(date).heartRate.map {
+                    ActiveMinutesEstimator.HrBucket(it.startEpochMs, it.bucketMinutes, it.value)
+                }
+            }.getOrDefault(emptyList())
+            val activeMinutesResult = ActiveMinutesEstimator.estimate(
+                exerciseMinutes = sessions.sumOf { it.durationMinutes },
+                sessionWindows = sessions.map { it.startTime.toEpochMilli() to it.endTime.toEpochMilli() },
+                hrBuckets = hrBucketsForActive,
+                restingHr = restingHeartRate,
+                steps = steps,
             )
+            val activeTime = activeMinutesResult.activeMinutes
 
             // Active calories. Many writers (Samsung Health) publish only TotalCaloriesBurned, so the HC
             // active record is usually ABSENT. When present we trust it; otherwise we estimate active
@@ -248,7 +263,7 @@ class HealthConnectManager @Inject constructor(
             val sleep = try { fetchSleepSummary(startOfDay, endOfDay) } catch (e: Exception) { null }
 
             // P3 vitals — each degrades to null independently (granted-but-empty or read error).
-            val restingHeartRate = safeFetch { fetchLatestRestingHeartRate(endOfDay) }
+            // (restingHeartRate is read earlier, for the active-minutes threshold, and reused here.)
             val hrvRmssd = safeFetch { fetchLatestHrvRmssd(endOfDay) }
             val respiratoryRate = safeFetch { fetchLatestRespiratoryRate(endOfDay) }
             val bodyTemperature = safeFetch { fetchLatestBodyTemperature(endOfDay) }
