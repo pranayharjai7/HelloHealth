@@ -27,6 +27,11 @@ interface IntradaySeriesDao {
     @Upsert
     suspend fun upsertAll(entities: List<IntradaySeriesEntity>)
 
+    /** Hard-delete all rows for a day+metric — used when a re-read finds the metric no longer has a
+     *  real intraday series (e.g. a degenerate uniform spread was dropped), so no orphans linger. */
+    @Query("DELETE FROM intraday_series WHERE userId = :userId AND localDate = :localDate AND metric = :metric")
+    suspend fun deleteDayMetric(userId: String, localDate: String, metric: String)
+
     @Query("SELECT * FROM intraday_series WHERE isSynced = 0")
     suspend fun getUnsynced(): List<IntradaySeriesEntity>
 

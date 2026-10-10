@@ -257,16 +257,21 @@ class ActivityRepositoryImpl @Inject constructor(
         val userId = sessionManager.getCurrentUserId() ?: return
         runCatching {
             val intraday = healthConnectManager.fetchIntradaySeries(date)
-            if (intraday.isEmpty) return
             val localDate = date.toString()
             val now = Timestamps.nowEpochMs()
             val tz = Timestamps.currentTzOffsetMinutes()
-            val rows = buildList {
-                addAll(intraday.steps.toRows(userId, localDate, com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_STEPS, now, tz))
-                addAll(intraday.activeCalories.toRows(userId, localDate, com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_ACTIVE_CAL, now, tz))
-                addAll(intraday.heartRate.toRows(userId, localDate, com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_HR, now, tz))
+            // Per metric: upsert fresh buckets, or DELETE the day's rows when the metric came back empty
+            // (e.g. a degenerate uniform spread was dropped) so stale/fake rows never linger.
+            suspend fun reconcile(metric: String, buckets: List<com.hellohealth.domain.model.IntradayBucket>) {
+                if (buckets.isEmpty()) {
+                    intradaySeriesDao.deleteDayMetric(userId, localDate, metric)
+                } else {
+                    intradaySeriesDao.upsertAll(buckets.toRows(userId, localDate, metric, now, tz))
+                }
             }
-            if (rows.isNotEmpty()) intradaySeriesDao.upsertAll(rows)
+            reconcile(com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_STEPS, intraday.steps)
+            reconcile(com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_ACTIVE_CAL, intraday.activeCalories)
+            reconcile(com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_HR, intraday.heartRate)
         }.onFailure { e ->
             AppLogger.e(FeatureTag.ACTIVITY, "persistIntradaySeries failed for $date", e)
         }

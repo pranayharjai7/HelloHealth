@@ -332,8 +332,14 @@ class HealthConnectManager @Inject constructor(
         val range = TimeRangeFilter.between(startOfDay, endOfDay)
 
         return try {
+            // Steps/active-cal are HOURLY buckets — but some providers (e.g. Samsung) write only a
+            // single aggregated DAILY record, which aggregateGroupByDuration then spreads uniformly
+            // across all 24 hours (every bucket identical). That's a fake hourly shape, so we drop a
+            // degenerate (all-equal) series rather than draw a flat, misleading bar chart.
             val steps = safeHourlyBuckets(client, StepsRecord.COUNT_TOTAL, range) { it.toDouble() }
+                .takeUnless { isDegenerate(it) } ?: emptyList()
             val activeCal = safeHourlyBuckets(client, ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, range) { it.inKilocalories }
+                .takeUnless { isDegenerate(it) } ?: emptyList()
             val hr = try {
                 val samples = client.readRecords(
                     ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = range)
@@ -1137,6 +1143,19 @@ class HealthConnectManager @Inject constructor(
                     (elapsed / full).coerceIn(0.0, 1.0)
                 }
             }
+        }
+
+        /**
+         * True when an hourly bucket series is a DEGENERATE uniform spread — ≥3 buckets all sharing the
+         * same positive value — the fingerprint of a provider that wrote one aggregated daily record
+         * which `aggregateGroupByDuration` smeared evenly across the hours. Such a series carries no
+         * real intraday shape, so callers drop it (empty state) rather than draw a flat chart.
+         */
+        internal fun isDegenerate(buckets: List<com.hellohealth.domain.model.IntradayBucket>): Boolean {
+            if (buckets.size < 3) return false
+            val values = buckets.map { it.value }
+            val first = values.first()
+            return first > 0.0 && values.all { kotlin.math.abs(it - first) < 0.0001 }
         }
 
         /**

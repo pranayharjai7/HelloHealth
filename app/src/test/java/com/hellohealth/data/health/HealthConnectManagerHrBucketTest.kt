@@ -1,6 +1,7 @@
 package com.hellohealth.data.health
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,5 +62,27 @@ class HealthConnectManagerHrBucketTest {
         )
         val buckets = HealthConnectManager.bucketHeartRate(samples, dayStart, 5)
         assertEquals(2, buckets.size) // only the two populated buckets, no filler
+    }
+
+    private fun ib(start: Long, value: Double) =
+        com.hellohealth.domain.model.IntradayBucket(start, 60, value)
+
+    @Test
+    fun `isDegenerate flags a uniform spread of a daily total`() {
+        // Samsung shape: one daily StepsRecord smeared to 24 identical hourly buckets.
+        val uniform = (0 until 24).map { ib(it * 3_600_000L, 379.0) }
+        assertTrue(HealthConnectManager.isDegenerate(uniform))
+    }
+
+    @Test
+    fun `isDegenerate is false for a real varying series`() {
+        val varying = listOf(ib(0, 120.0), ib(1, 450.0), ib(2, 0.0), ib(3, 900.0))
+        assertFalse(HealthConnectManager.isDegenerate(varying))
+    }
+
+    @Test
+    fun `isDegenerate is false for too-few or all-zero buckets`() {
+        assertFalse(HealthConnectManager.isDegenerate(listOf(ib(0, 379.0), ib(1, 379.0)))) // <3
+        assertFalse(HealthConnectManager.isDegenerate((0 until 5).map { ib(it.toLong(), 0.0) })) // all zero
     }
 }
