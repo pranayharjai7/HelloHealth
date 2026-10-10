@@ -97,6 +97,12 @@ Honest, clearly-labelled estimates. Never medical claims.
 | 6 | Unified daily/weekly/MONTHLY insights + goal-aware projections | all prior | Insights screen with day/week/month toggle + projection cards | Planned |
 | 7 | Polish, performance, release | all | Fast, battery-respectful, accessible release | Planned |
 
+> **Phase 8 — Wearable companion (Wear OS), FUTURE / not scheduled.** A first-party watch app/service
+> (Health Services + Wearable Data Layer) that reads sensors directly and removes the "what Samsung
+> exports" ceiling — turning every degraded estimate (active calories, strain, recovery, stress, sleep
+> staging) into measured data. We design Phases 1–7 to leave seams for it (see
+> [phase-8-wearable-future.md](phase-8-wearable-future.md)); we plan its own features later.
+
 Phase detail files:
 - [phase-1-activity-intraday.md](phase-1-activity-intraday.md) — **fully detailed**
 - [phase-2-sleep.md](phase-2-sleep.md)
@@ -105,7 +111,7 @@ Phase detail files:
 - [phase-5-body-composition.md](phase-5-body-composition.md)
 - [phase-6-insights-projections.md](phase-6-insights-projections.md)
 - [phase-7-polish-release.md](phase-7-polish-release.md)
-
+- [phase-8-wearable-future.md](phase-8-wearable-future.md) — **future / not scheduled**
 ## Confirmed codebase facts (reuse; do not reinvent)
 
 - **Activity read path** `HealthConnectManager.fetchHealthSummary(goals, date, bmrFallback)` aggregates

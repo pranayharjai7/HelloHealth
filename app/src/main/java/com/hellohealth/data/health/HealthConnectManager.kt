@@ -10,6 +10,7 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.domain.health.ActiveEnergyEstimator
 import com.hellohealth.domain.model.ActivityChartPoint
 import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
@@ -199,31 +200,40 @@ class HealthConnectManager @Inject constructor(
 
         return try {
             val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
-            val activeCalories = safeAggregate { aggregateActiveCalories(timeRangeFilter) } ?: 0.0
+            val hcActiveCalories = safeAggregate { aggregateActiveCalories(timeRangeFilter) }
+            val hcTotalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) }
             val distance = safeAggregate { aggregateDistance(timeRangeFilter) } ?: 0.0
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
 
             // Prefer the HC BasalMetabolicRateRecord; only when it's missing/non-positive do we
             // invoke the (possibly DB-backed) fallback supplier — profile-derived BMR → 1800.0.
             val bmr = selectBmr(safeFetch { fetchLatestBasalMetabolicRate(endOfDay) }, bmrFallback)
-            // Total burn = Health Connect's TotalCaloriesBurned when present; otherwise the honest
-            // reconstruction active + BMR (NOT a bare fall-back to active-only, which dropped resting
-            // burn and made "Total burn" collapse to "Active burn" whenever the provider wrote no
-            // total-calories record — e.g. ~374 instead of ~1476).
-            val totalCalories = resolveTotalCalories(
-                hcTotal = safeAggregate { aggregateTotalCalories(timeRangeFilter) },
-                active = activeCalories,
-                bmr = bmr,
+            val weight = safeFetch { fetchLatestWeight(endOfDay) }
+
+            // Active minutes — still the pre-Stage-5 heuristic here; the real derivation lands in Stage 5.
+            val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
+                if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
             )
 
-            // Active burn is Health Connect's own ActiveCaloriesBurned aggregate — the honest value,
-            // which is 0 when there's no activity. We deliberately do NOT derive it as
-            // `totalCalories − BMR`: that subtraction uses our (fallback) BMR estimate against a total
-            // that already bakes in the source's own BMR, so a mismatch inflated active burn to
-            // hundreds of kcal on days with zero steps and zero active minutes. `totalCalories` and
-            // `bmr` below are still surfaced on their own for the energy-balance / TDEE calcs.
+            // Active calories. Many writers (Samsung Health) publish only TotalCaloriesBurned, so the HC
+            // active record is usually ABSENT. When present we trust it; otherwise we estimate active
+            // burn from movement physiology (ACSM MET from distance/steps), reconciled against the
+            // device total so it never exceeds (total − basal-so-far). See ActiveEnergyEstimator.
+            val activeCalories = if (hcActiveCalories != null) {
+                hcActiveCalories
+            } else {
+                ActiveEnergyEstimator.estimate(
+                    steps = steps,
+                    distanceMeters = distance,
+                    activeMinutes = activeTime,
+                    bodyMassKg = weight ?: ActiveEnergyEstimator.DEFAULT_BODY_MASS_KG,
+                    hcTotalKcal = hcTotalCalories,
+                    bmrKcalPerDay = bmr,
+                    elapsedFractionOfDay = elapsedFractionOfDay(date, zoneId),
+                ).activeKcal
+            }
+            val totalCalories = resolveTotalCalories(hcTotal = hcTotalCalories, active = activeCalories, bmr = bmr)
 
-            val weight = safeFetch { fetchLatestWeight(endOfDay) }
             val height = safeFetch { fetchLatestHeight(endOfDay) }
             val bodyFat = safeFetch { fetchLatestBodyFat(endOfDay) }
             val leanBodyMass = safeFetch { fetchLatestLeanBodyMass(endOfDay) }
@@ -242,10 +252,6 @@ class HealthConnectManager @Inject constructor(
             val respiratoryRate = safeFetch { fetchLatestRespiratoryRate(endOfDay) }
             val bodyTemperature = safeFetch { fetchLatestBodyTemperature(endOfDay) }
             val hydrationMl = safeFetch { fetchHydrationMl(startOfDay, endOfDay) }
-
-            val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
-                if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
-            )
 
             HealthSummary(
                 steps = steps,
@@ -523,18 +529,20 @@ class HealthConnectManager @Inject constructor(
         return response?.get(StepsRecord.COUNT_TOTAL) ?: 0L
     }
 
-    private suspend fun aggregateActiveCalories(timeRangeFilter: TimeRangeFilter): Double {
+    private suspend fun aggregateActiveCalories(timeRangeFilter: TimeRangeFilter): Double? {
         val response = healthConnectClient?.aggregate(
             AggregateRequest(metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), timeRangeFilter = timeRangeFilter)
         )
-        return response?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories ?: 0.0
+        // Nullable: null = the provider wrote NO active-calories record (reconstruct from total), which
+        // is distinct from a present-and-genuine 0 kcal.
+        return response?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories
     }
 
-    private suspend fun aggregateTotalCalories(timeRangeFilter: TimeRangeFilter): Double {
+    private suspend fun aggregateTotalCalories(timeRangeFilter: TimeRangeFilter): Double? {
         val response = healthConnectClient?.aggregate(
             AggregateRequest(metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL), timeRangeFilter = timeRangeFilter)
         )
-        return response?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
+        return response?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories
     }
 
     private suspend fun aggregateDistance(timeRangeFilter: TimeRangeFilter): Double {
@@ -1015,5 +1023,34 @@ class HealthConnectManager @Inject constructor(
          */
         internal fun resolveTotalCalories(hcTotal: Double?, active: Double, bmr: Double): Double =
             hcTotal ?: (active + bmr)
+
+        /**
+         * Active-calories resolution for [fetchHealthSummary]. Use the Health Connect
+         * `ActiveCaloriesBurnedRecord` aggregate ([hcActive]) when the provider wrote one (including a
+         * genuine 0). When it is ABSENT, the caller reconstructs active via [ActiveEnergyEstimator]
+         * instead (movement-physiology MET estimate reconciled against the device total). Kept for the
+         * provider-writes-active path. Pure/`internal`.
+         */
+        internal fun resolveActiveCalories(hcActive: Double?, hcTotal: Double?, bmr: Double): Double =
+            hcActive ?: hcTotal?.let { (it - bmr).coerceAtLeast(0.0) } ?: 0.0
+
+        /**
+         * Fraction (0..1) of the local day [date] that has elapsed, for scaling a full-day BMR to a
+         * partial-day total in [ActiveEnergyEstimator]. A past day is fully elapsed (1.0); today is the
+         * elapsed seconds since local midnight ÷ 86400.
+         */
+        internal fun elapsedFractionOfDay(date: java.time.LocalDate, zoneId: java.time.ZoneId, now: java.time.Instant = java.time.Instant.now()): Double {
+            val startOfDay = date.atStartOfDay(zoneId).toInstant()
+            val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
+            return when {
+                now >= endOfDay -> 1.0
+                now <= startOfDay -> 1.0 // future/edge: treat as full day so the ceiling isn't ~0
+                else -> {
+                    val elapsed = java.time.Duration.between(startOfDay, now).seconds.toDouble()
+                    val full = java.time.Duration.between(startOfDay, endOfDay).seconds.toDouble()
+                    (elapsed / full).coerceIn(0.0, 1.0)
+                }
+            }
+        }
     }
 }
