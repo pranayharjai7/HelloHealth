@@ -202,11 +202,19 @@ class HealthConnectManager @Inject constructor(
             val activeCalories = safeAggregate { aggregateActiveCalories(timeRangeFilter) } ?: 0.0
             val distance = safeAggregate { aggregateDistance(timeRangeFilter) } ?: 0.0
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
-            
-            val totalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) } ?: activeCalories
+
             // Prefer the HC BasalMetabolicRateRecord; only when it's missing/non-positive do we
             // invoke the (possibly DB-backed) fallback supplier — profile-derived BMR → 1800.0.
             val bmr = selectBmr(safeFetch { fetchLatestBasalMetabolicRate(endOfDay) }, bmrFallback)
+            // Total burn = Health Connect's TotalCaloriesBurned when present; otherwise the honest
+            // reconstruction active + BMR (NOT a bare fall-back to active-only, which dropped resting
+            // burn and made "Total burn" collapse to "Active burn" whenever the provider wrote no
+            // total-calories record — e.g. ~374 instead of ~1476).
+            val totalCalories = resolveTotalCalories(
+                hcTotal = safeAggregate { aggregateTotalCalories(timeRangeFilter) },
+                active = activeCalories,
+                bmr = bmr,
+            )
 
             // Active burn is Health Connect's own ActiveCaloriesBurned aggregate — the honest value,
             // which is 0 when there's no activity. We deliberately do NOT derive it as
@@ -996,5 +1004,16 @@ class HealthConnectManager @Inject constructor(
          */
         internal suspend fun selectBmr(hcBmr: Double?, fallback: suspend () -> Double): Double =
             if (hcBmr != null && hcBmr > 0.0) hcBmr else fallback()
+
+        /**
+         * Total-calories resolution for [fetchHealthSummary]: use the Health Connect
+         * `TotalCaloriesBurnedRecord` aggregate ([hcTotal]) when present; otherwise reconstruct it as
+         * [active] + [bmr] (active burn plus resting/basal burn) rather than falling back to active
+         * calories alone. The bare `?: active` fallback dropped the entire resting-burn component on
+         * days the provider wrote no total-calories record, so "Total burn" wrongly equalled "Active
+         * burn". Pure/`internal` so the precedence is unit-testable.
+         */
+        internal fun resolveTotalCalories(hcTotal: Double?, active: Double, bmr: Double): Double =
+            hcTotal ?: (active + bmr)
     }
 }
