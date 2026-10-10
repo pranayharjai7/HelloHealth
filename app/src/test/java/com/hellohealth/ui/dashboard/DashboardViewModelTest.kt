@@ -66,6 +66,8 @@ class DashboardViewModelTest {
             kotlinx.coroutines.flow.flowOf(0.0)
         override fun observeCaloriesOutForDay(localDate: String): kotlinx.coroutines.flow.Flow<Double?> =
             kotlinx.coroutines.flow.flowOf(null)
+        override fun observeIntradaySeries(localDate: String): kotlinx.coroutines.flow.Flow<com.hellohealth.domain.model.IntradayDay> =
+            kotlinx.coroutines.flow.flowOf(com.hellohealth.domain.model.IntradayDay())
         override fun getRequiredPermissions(): Set<String> = setOf("perm")
         override fun getAvailability(): Int = available
         override fun getSettingsIntent(context: Context): Intent = Intent()

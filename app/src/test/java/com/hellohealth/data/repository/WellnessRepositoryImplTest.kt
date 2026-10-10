@@ -87,6 +87,7 @@ class WellnessRepositoryImplTest {
         override suspend fun fetchLatestBodyMetrics() = com.hellohealth.domain.model.BodyMetrics()
         override fun observeTodayCaloriesOut(): Flow<Double> = flowOf(0.0)
         override fun observeCaloriesOutForDay(localDate: String): Flow<Double?> = flowOf(null)
+        override fun observeIntradaySeries(localDate: String): Flow<com.hellohealth.domain.model.IntradayDay> = flowOf(com.hellohealth.domain.model.IntradayDay())
         override fun getRequiredPermissions(): Set<String> = emptySet()
         override fun getAvailability(): Int = 0
         override fun getSettingsIntent(context: Context): Intent = Intent()

@@ -191,6 +191,25 @@ class ActivityRepositoryImpl @Inject constructor(
         )
     }.flowOn(Dispatchers.IO)
 
+    override fun observeIntradaySeries(localDate: String): Flow<com.hellohealth.domain.model.IntradayDay> = flow {
+        val userId = sessionManager.getCurrentUserId()
+        if (userId == null) {
+            emit(com.hellohealth.domain.model.IntradayDay())
+            return@flow
+        }
+        fun bucketsFor(metric: String) = intradaySeriesDao.observeSeriesForDay(userId, localDate, metric)
+            .map { rows -> rows.map { com.hellohealth.domain.model.IntradayBucket(it.bucketStartUtcEpochMs, it.bucketMinutes, it.value) } }
+        emitAll(
+            kotlinx.coroutines.flow.combine(
+                bucketsFor(com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_STEPS),
+                bucketsFor(com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_ACTIVE_CAL),
+                bucketsFor(com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_HR),
+            ) { steps, cal, hr ->
+                com.hellohealth.domain.model.IntradayDay(steps = steps, activeCalories = cal, heartRate = hr)
+            }
+        )
+    }.flowOn(Dispatchers.IO)
+
     private suspend fun loadSnapshot(date: LocalDate): DailyHealthSnapshot? {
         val userId = sessionManager.getCurrentUserId() ?: return null
         return runCatching {

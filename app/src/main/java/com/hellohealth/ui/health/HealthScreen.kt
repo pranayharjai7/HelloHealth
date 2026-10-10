@@ -139,6 +139,7 @@ fun HealthScreen(
                 }
 
                 item { ActivitySection(state.summary, state.goals) }
+                item { IntradaySection(state.intraday) }
                 item { VitalsSection(state.readiness, state.latestVitals, onOpenVitalsTrends) }
                 item { BodySection(state.body, onLogWeight = { showLogSheet = true }, onOpenTrends = onOpenBodyTrends) }
                 item { SleepSection(state.summary) }
@@ -153,6 +154,46 @@ fun HealthScreen(
                 item { WeeklyInsightsRow(onClick = onOpenInsights) }
                 item { Spacer(Modifier.height(24.dp)) }
             }
+        }
+    }
+}
+
+@Composable
+private fun IntradaySection(intraday: com.hellohealth.domain.model.IntradayDay) {
+    val stepColor = com.hellohealth.ui.charts.chartSeries1()
+    val calColor = com.hellohealth.ui.charts.chartSeries2()
+    val hrColor = com.hellohealth.ui.charts.chartSeries3()
+
+    SectionCard("Steps through the day") {
+        if (intraday.steps.isEmpty()) {
+            ChartEmpty("No step timeline for this day yet.")
+        } else {
+            com.hellohealth.ui.charts.BarChart(
+                bars = intraday.steps.map { com.hellohealth.ui.charts.BarDatum(it.value.toFloat()) },
+                barColor = stepColor,
+            )
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+    SectionCard("Calories through the day") {
+        if (intraday.activeCalories.isEmpty()) {
+            ChartEmpty("Your source doesn't share hourly active calories.")
+        } else {
+            com.hellohealth.ui.charts.BarChart(
+                bars = intraday.activeCalories.map { com.hellohealth.ui.charts.BarDatum(it.value.toFloat()) },
+                barColor = calColor,
+            )
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+    SectionCard("Heart rate through the day") {
+        if (intraday.heartRate.size < 2) {
+            ChartEmpty("No heart-rate timeline for this day — a wearable captures this best.")
+        } else {
+            com.hellohealth.ui.charts.TimeOfDayChart(
+                points = intraday.heartRate.map { com.hellohealth.ui.charts.TimePoint(it.startEpochMs, it.value.toFloat()) },
+                lineColor = hrColor,
+            )
         }
     }
 }

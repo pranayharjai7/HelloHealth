@@ -44,6 +44,14 @@ interface ActivityRepository {
      * missing day rather than imply a real 0-kcal burn. Never throws.
      */
     fun observeCaloriesOutForDay(localDate: String): Flow<Double?>
+
+    /**
+     * Reactive device-local intraday series (steps/active-cal hourly, HR 5-min) for a local day
+     * (ISO `yyyy-MM-dd`), for the "through the day" graphs. Emits an empty [IntradayDay] when there is
+     * no signed-in user or no stored buckets for that day. Never throws.
+     */
+    fun observeIntradaySeries(localDate: String): Flow<com.hellohealth.domain.model.IntradayDay>
+
     fun getRequiredPermissions(): Set<String>
     fun getAvailability(): Int
     fun getSettingsIntent(context: Context): Intent
