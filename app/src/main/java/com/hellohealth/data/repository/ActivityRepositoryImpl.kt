@@ -46,6 +46,7 @@ import javax.inject.Singleton
 class ActivityRepositoryImpl @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
     private val snapshotDao: SnapshotDao,
+    private val intradaySeriesDao: com.hellohealth.data.local.dao.IntradaySeriesDao,
     private val sessionManager: SupabaseSessionManager,
     private val syncScheduler: SyncScheduler,
     private val profileRepository: ProfileRepository,
@@ -84,6 +85,7 @@ class ActivityRepositoryImpl @Inject constructor(
                 // is signed in — so a rollup problem can never disturb the summary that just succeeded.
                 persistVitalsRollup(date, freshSummary)
                 persistBodyMetrics(date, freshSummary)
+                persistIntradaySeries(date)
                 return freshSummary
             } else if (cachedSnapshot != null) {
                 // Health Connect has no data (e.g. past-30-days read restriction) — use the cache.
@@ -223,6 +225,55 @@ class ActivityRepositoryImpl @Inject constructor(
         }.onFailure { e ->
             AppLogger.e(FeatureTag.VITALS, "persistVitalsRollup failed for $date", e)
         }
+    }
+
+    /**
+     * Persist the day's intraday buckets (device-local). Idempotent + reconciling: every refresh
+     * re-reads the FULL intraday window from Health Connect and upserts by the deterministic bucket id
+     * ([IntradaySeriesEntity.idFor]), so a morning partial-day fetch and an evening fetch converge to
+     * the correct full day with no double-counting. Off the critical path (runCatching), a no-op when
+     * signed out. Not synced to Supabase.
+     */
+    private suspend fun persistIntradaySeries(date: LocalDate) {
+        val userId = sessionManager.getCurrentUserId() ?: return
+        runCatching {
+            val intraday = healthConnectManager.fetchIntradaySeries(date)
+            if (intraday.isEmpty) return
+            val localDate = date.toString()
+            val now = Timestamps.nowEpochMs()
+            val tz = Timestamps.currentTzOffsetMinutes()
+            val rows = buildList {
+                addAll(intraday.steps.toRows(userId, localDate, com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_STEPS, now, tz))
+                addAll(intraday.activeCalories.toRows(userId, localDate, com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_ACTIVE_CAL, now, tz))
+                addAll(intraday.heartRate.toRows(userId, localDate, com.hellohealth.data.local.entities.IntradaySeriesEntity.METRIC_HR, now, tz))
+            }
+            if (rows.isNotEmpty()) intradaySeriesDao.upsertAll(rows)
+        }.onFailure { e ->
+            AppLogger.e(FeatureTag.ACTIVITY, "persistIntradaySeries failed for $date", e)
+        }
+    }
+
+    private fun List<com.hellohealth.domain.model.IntradayBucket>.toRows(
+        userId: String,
+        localDate: String,
+        metric: String,
+        now: Long,
+        tz: Int,
+    ): List<com.hellohealth.data.local.entities.IntradaySeriesEntity> = map { bucket ->
+        com.hellohealth.data.local.entities.IntradaySeriesEntity(
+            id = com.hellohealth.data.local.entities.IntradaySeriesEntity.idFor(userId, metric, localDate, bucket.startEpochMs),
+            userId = userId,
+            localDate = localDate,
+            metric = metric,
+            bucketStartUtcEpochMs = bucket.startEpochMs,
+            bucketMinutes = bucket.bucketMinutes,
+            tzOffsetMinutes = tz,
+            value = bucket.value,
+            updatedAtEpochMs = now,
+            updatedAtTzOffsetMinutes = tz,
+            deletedAtEpochMs = null,
+            isSynced = true, // device-local: no syncer pushes this; mark synced so no scan ever picks it
+        )
     }
 
     /**

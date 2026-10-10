@@ -70,6 +70,7 @@ class ActivityRepositoryImplBmrFallbackTest {
         return ActivityRepositoryImpl(
             healthConnectManager = HealthConnectManager(null, ctx),
             snapshotDao = db.snapshotDao(),
+            intradaySeriesDao = db.intradaySeriesDao(),
             sessionManager = object : SupabaseSessionManager(null) {
                 override suspend fun getCurrentUserId(): String? = "u1"
             },
