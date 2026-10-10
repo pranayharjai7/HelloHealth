@@ -6,6 +6,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.*
 import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.hellohealth.core.logging.AppLogger
@@ -295,6 +296,73 @@ class HealthConnectManager @Inject constructor(
                 lastUpdated = 0L
             )
         }
+    }
+
+    /**
+     * Reads a day's INTRADAY time-of-day series (Phase 1) — hourly steps + active-calories buckets and
+     * a 5-minute averaged heart-rate series — over the correct local-day window. Deliberately SEPARATE
+     * from [fetchHealthSummary] so a failure here (or an absent signal) never regresses the daily
+     * summary. Each metric degrades independently to an empty list; the whole call returns an empty
+     * [IntradayDay] on any top-level failure. Device-local (not synced).
+     *
+     * HR is read as raw [HeartRateRecord] samples (the same shape as the per-workout read) then
+     * downsampled via [bucketHeartRate] to bound storage (~288 buckets/day worst case). Many phones
+     * expose no sub-daily HR without a worn wearable — then the HR series is simply empty.
+     */
+    suspend fun fetchIntradaySeries(date: LocalDate = LocalDate.now()): com.hellohealth.domain.model.IntradayDay {
+        val client = healthConnectClient ?: return com.hellohealth.domain.model.IntradayDay()
+        val zoneId = ZoneId.systemDefault()
+        val startOfDay = date.atStartOfDay(zoneId).toInstant()
+        val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
+        val range = TimeRangeFilter.between(startOfDay, endOfDay)
+
+        return try {
+            val steps = safeHourlyBuckets(client, StepsRecord.COUNT_TOTAL, range) { it.toDouble() }
+            val activeCal = safeHourlyBuckets(client, ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, range) { it.inKilocalories }
+            val hr = try {
+                val samples = client.readRecords(
+                    ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = range)
+                ).records
+                    .flatMap { it.samples }
+                    .filter { it.time >= startOfDay && it.time < endOfDay }
+                    .map { it.time.toEpochMilli() to it.beatsPerMinute.toDouble() }
+                bucketHeartRate(samples, startOfDay.toEpochMilli(), HR_BUCKET_MINUTES)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            com.hellohealth.domain.model.IntradayDay(steps = steps, activeCalories = activeCal, heartRate = hr)
+        } catch (e: Exception) {
+            AppLogger.w(FeatureTag.ACTIVITY, "fetchIntradaySeries failed for $date: ${e.message}")
+            com.hellohealth.domain.model.IntradayDay()
+        }
+    }
+
+    /**
+     * Aggregates [metric] into 1-hour buckets over [range] via `aggregateGroupByDuration`, mapping each
+     * bucket's aggregate through [extract]. Empty/failed → empty list (metric degrades independently).
+     */
+    private suspend fun <T : Any> safeHourlyBuckets(
+        client: HealthConnectClient,
+        metric: androidx.health.connect.client.aggregate.AggregateMetric<T>,
+        range: TimeRangeFilter,
+        extract: (T) -> Double,
+    ): List<com.hellohealth.domain.model.IntradayBucket> = try {
+        client.aggregateGroupByDuration(
+            AggregateGroupByDurationRequest(
+                metrics = setOf(metric),
+                timeRangeFilter = range,
+                timeRangeSlicer = Duration.ofHours(1),
+            )
+        ).mapNotNull { slice ->
+            val value = slice.result[metric]?.let(extract) ?: return@mapNotNull null
+            com.hellohealth.domain.model.IntradayBucket(
+                startEpochMs = slice.startTime.toEpochMilli(),
+                bucketMinutes = 60,
+                value = value,
+            )
+        }
+    } catch (e: Exception) {
+        emptyList()
     }
 
     suspend fun fetchWeeklyStats(): com.hellohealth.domain.model.WeeklyStats {
@@ -1004,6 +1072,9 @@ class HealthConnectManager @Inject constructor(
         Duration.between(startTime, endTime).seconds
 
     companion object {
+        /** Width of an intraday heart-rate bucket (minutes) — bounds stored rows to ~288/day. */
+        internal const val HR_BUCKET_MINUTES = 5
+
         /**
          * BMR-source selection for [fetchHealthSummary]: prefer the Health Connect basal-rate record
          * ([hcBmr]) when present and positive, otherwise invoke [fallback] (profile-derived → 1800.0).
@@ -1050,6 +1121,39 @@ class HealthConnectManager @Inject constructor(
                     val full = java.time.Duration.between(startOfDay, endOfDay).seconds.toDouble()
                     (elapsed / full).coerceIn(0.0, 1.0)
                 }
+            }
+        }
+
+        /**
+         * Downsamples raw heart-rate samples into fixed [bucketMinutes]-wide, start-of-day-aligned
+         * buckets, each the AVERAGE bpm of the samples falling in it (empty buckets are omitted, so gaps
+         * render as gaps). Pure so the bucketing is unit-testable without a Health Connect client.
+         *
+         * @param samples (sampleEpochMs, bpm) pairs, any order.
+         * @param dayStartEpochMs local-midnight epoch ms — bucket boundaries align to it.
+         * @param bucketMinutes bucket width (5 for the intraday HR series).
+         */
+        internal fun bucketHeartRate(
+            samples: List<Pair<Long, Double>>,
+            dayStartEpochMs: Long,
+            bucketMinutes: Int,
+        ): List<com.hellohealth.domain.model.IntradayBucket> {
+            if (samples.isEmpty() || bucketMinutes <= 0) return emptyList()
+            val widthMs = bucketMinutes * 60_000L
+            // bucketIndex -> (sum, count)
+            val acc = sortedMapOf<Long, Pair<Double, Int>>()
+            for ((t, bpm) in samples) {
+                val idx = Math.floorDiv(t - dayStartEpochMs, widthMs)
+                val start = dayStartEpochMs + idx * widthMs
+                val (sum, count) = acc[start] ?: (0.0 to 0)
+                acc[start] = (sum + bpm) to (count + 1)
+            }
+            return acc.map { (start, sc) ->
+                com.hellohealth.domain.model.IntradayBucket(
+                    startEpochMs = start,
+                    bucketMinutes = bucketMinutes,
+                    value = sc.first / sc.second,
+                )
             }
         }
     }
