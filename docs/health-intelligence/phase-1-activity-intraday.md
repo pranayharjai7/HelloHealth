@@ -1,5 +1,15 @@
 # Phase 1 — Activity truth + intraday foundation + time-of-day charts
 
+> **STATUS: COMPLETE** (on `feature/health-intelligence`, on-device verified on 74ed1bb5, not yet
+> merged/pushed). Key on-device findings baked back into later phases:
+> - This device **does** feed continuous intraday HR to Health Connect (154 five-min buckets/day) →
+>   Phases 3/4 (cardio-load, strain, recovery, stress) can be **measured**, not just estimated.
+> - Samsung writes **no** `ActiveCaloriesBurnedRecord` and only a **daily** `StepsRecord` (no real
+>   hourly shape) → active calories is reconstructed (ACSM MET), active minutes come from HR-elevated
+>   time, and the hourly steps/calories graphs honestly show empty states on this source.
+> - Active-minutes HR threshold calibrated on-device: 90 bpm floor / resting+25 (reproduced ~95 min vs
+>   Samsung's ~100). Active burn ~365 vs Samsung 374; active time 95 vs 100; total burn ~1,746.
+
 **Goal:** make today's activity numbers correct and lay the intraday time-series substrate everything
 later depends on. Fix the three activity bugs; add Health Connect intraday reads (steps/hour,
 active-cal/hour, 5-min HR buckets); persist them in a new **device-local** `intraday_series` Room table

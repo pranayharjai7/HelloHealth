@@ -89,7 +89,7 @@ Honest, clearly-labelled estimates. Never medical claims.
 
 | Phase | Name | Depends on | Outcome | Status |
 |------:|------|-----------|---------|--------|
-| 1 | Activity truth + intraday foundation + time-of-day charts | — | Correct active minutes / total burn; steps/calories/HR "through the day" graphs | **In progress** |
+| 1 | Activity truth + intraday foundation + time-of-day charts | — | Correct active minutes / total burn; steps/calories/HR "through the day" graphs | **DONE** (on-device verified; not merged) |
 | 2 | Sleep staging + score + hypnogram | P1 | Full sleep card (score, stages, hypnogram) | Planned |
 | 3 | Cardiovascular + HR zones + cardio load + strain + ACWR | P1, profile | Strain card: zone-time bars, daily strain, ACWR gauge | Planned |
 | 4 | Recovery + stress (extend ReadinessScoreCalculator) | P2, P3, P1 | Recovery ring + driver breakdown; daily stress curve | Planned |
