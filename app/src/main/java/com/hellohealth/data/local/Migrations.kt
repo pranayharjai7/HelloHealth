@@ -597,3 +597,42 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `idx_achievements_isSynced` ON `achievements` (`isSynced`)")
     }
 }
+
+/**
+ * v15 → v16: adds `intraday_series` — DEVICE-LOCAL intraday time-of-day buckets (health-intelligence
+ * Phase 1). Additive-only; no existing table is touched. A NEW table rather than reusing the dormant
+ * `vitals_samples kind='sample'` path, because intraday rows are typed metric buckets (a `metric`
+ * discriminator + a single `value`), not vitals-shaped — keeping the readiness `kind='rollup'` read
+ * untouched. Feature columns first, the four Syncable sync-meta columns LAST (matches
+ * [com.hellohealth.data.local.entities.IntradaySeriesEntity] and the MIGRATION_9_10 convention):
+ * `Long`/`Int`/`Boolean` → INTEGER, `Double` → REAL NOT NULL, nullable where the field is `?`.
+ * Affinities match Room's generated v16 schema (validated against 16.json by MigrationTest). Each
+ * `CREATE INDEX` matches an `@Index` on the entity. Not synced to Supabase (no syncer reads it).
+ */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `intraday_series` (" +
+                "`id` TEXT NOT NULL, " +
+                "`userId` TEXT NOT NULL, " +
+                "`localDate` TEXT NOT NULL, " +
+                "`metric` TEXT NOT NULL, " +
+                "`bucketStartUtcEpochMs` INTEGER NOT NULL, " +
+                "`bucketMinutes` INTEGER NOT NULL, " +
+                "`tzOffsetMinutes` INTEGER NOT NULL, " +
+                "`value` REAL NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_intraday_series_user_date_metric` " +
+                "ON `intraday_series` (`userId`, `localDate`, `metric`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `idx_intraday_series_isSynced` ON `intraday_series` (`isSynced`)"
+        )
+    }
+}

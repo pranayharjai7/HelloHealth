@@ -10,6 +10,7 @@ import com.hellohealth.data.local.dao.EmotionRecordsDao
 import com.hellohealth.data.local.dao.ExerciseDao
 import com.hellohealth.data.local.dao.FoodPrefsDao
 import com.hellohealth.data.local.dao.GoalsDao
+import com.hellohealth.data.local.dao.IntradaySeriesDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.dao.PlannedExerciseDao
 import com.hellohealth.data.local.dao.PointsLedgerDao
@@ -31,6 +32,7 @@ import com.hellohealth.data.local.entities.FoodPrefsEntity
 import com.hellohealth.data.local.entities.GoalsEntity
 import com.hellohealth.data.local.entities.NutritionEntryEntity
 import com.hellohealth.data.local.entities.BodyMetricEntity
+import com.hellohealth.data.local.entities.IntradaySeriesEntity
 import com.hellohealth.data.local.entities.PlannedExerciseEntity
 import com.hellohealth.data.local.entities.PointsLedgerEntity
 import com.hellohealth.data.local.entities.ProfileEntity
@@ -65,9 +67,10 @@ import com.hellohealth.data.local.entities.WorkoutSessionEntity
         SessionSetEntity::class,
         StreakEntity::class,
         PointsLedgerEntity::class,
-        AchievementEntity::class
+        AchievementEntity::class,
+        IntradaySeriesEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -92,4 +95,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun streakDao(): StreakDao
     abstract fun pointsLedgerDao(): PointsLedgerDao
     abstract fun achievementDao(): AchievementDao
+    abstract fun intradaySeriesDao(): IntradaySeriesDao
 }

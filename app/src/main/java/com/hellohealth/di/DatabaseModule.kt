@@ -15,6 +15,7 @@ import com.hellohealth.data.local.MIGRATION_11_12
 import com.hellohealth.data.local.MIGRATION_12_13
 import com.hellohealth.data.local.MIGRATION_13_14
 import com.hellohealth.data.local.MIGRATION_14_15
+import com.hellohealth.data.local.MIGRATION_15_16
 import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.EmotionRecordsDao
 import com.hellohealth.data.local.dao.ExerciseDao
@@ -27,6 +28,7 @@ import com.hellohealth.data.local.dao.SnapshotDao
 import com.hellohealth.data.local.dao.SyncLogDao
 import com.hellohealth.data.local.dao.UserDao
 import com.hellohealth.data.local.dao.VitalsSampleDao
+import com.hellohealth.data.local.dao.IntradaySeriesDao
 import com.hellohealth.data.local.dao.WorkoutDayDao
 import com.hellohealth.data.local.dao.WorkoutPlanDao
 import dagger.Module
@@ -50,7 +52,7 @@ object DatabaseModule {
         )
             // Real migrations — no destructive fallback. Never silently wipe user data.
             .addMigrations(
-                MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15
+                MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16
             )
             .build()
     }
@@ -90,6 +92,9 @@ object DatabaseModule {
 
     @Provides
     fun provideVitalsSampleDao(database: AppDatabase): VitalsSampleDao = database.vitalsSampleDao()
+
+    @Provides
+    fun provideIntradaySeriesDao(database: AppDatabase): IntradaySeriesDao = database.intradaySeriesDao()
 
     @Provides
     fun provideNutritionEntryDao(database: AppDatabase): NutritionEntryDao = database.nutritionEntryDao()
