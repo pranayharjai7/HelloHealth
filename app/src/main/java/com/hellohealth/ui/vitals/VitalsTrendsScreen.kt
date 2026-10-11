@@ -128,8 +128,14 @@ private fun vitalsMetric(
         points = points,
         latestFormatted = last?.let { formatValue(it.second, unit) },
         lastRecorded = last?.third?.let { relativeLastRecorded(it) },
+        pointLabels = indexed.map { shortDate(it.third) },
     )
 }
+
+/** ISO date → "MMM d" for the x-axis + tooltip; passes through anything unparseable. */
+private fun shortDate(iso: String?): String = runCatching {
+    java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+}.getOrDefault(iso ?: "")
 
 private fun formatValue(value: Double, unit: String): String = when (unit) {
     "°C" -> String.format("%.1f°C", value)
