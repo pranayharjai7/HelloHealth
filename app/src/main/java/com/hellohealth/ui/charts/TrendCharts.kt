@@ -85,3 +85,99 @@ fun Sparkline(points: List<Pair<Float, Float>>, lineColor: Color, modifier: Modi
         drawTrend(points, lineColor, strokeWidth = 4f, dotRadius = 0f)
     }
 }
+
+/**
+ * The full, readable, interactive trend chart used by the Vitals & Body trends screens — a value
+ * y-axis (clean ticks + unit), sparse date x-ticks (from [TrendMetric.pointLabels]), hairline
+ * gridlines, scrub-and-pin crosshair + tooltip ("Oct 6 · 74.1 kg"), and a Show-values table. Wraps the
+ * shared [ChartScaffold] inside [InteractiveChart]; the per-point draw reuses the same gradient-fill
+ * style as [TrendLine]. Falls back to point index when no date labels are supplied.
+ */
+@Composable
+fun InteractiveTrendLine(
+    metric: TrendMetric,
+    gridColor: Color,
+    labelColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val pts = metric.points
+    if (pts.size < 2) return
+    val yAxis = niceAxis(pts.minOf { it.second }, pts.maxOf { it.second }, metric.unit)
+    val maxIndex = pts.maxOf { it.first }.coerceAtLeast(1f)
+    val labels = metric.pointLabels
+    // Sparse x-ticks: first, middle, last date label (if available).
+    val xAxis = if (labels.size == pts.size && labels.isNotEmpty()) {
+        val idxs = listOf(0, pts.size / 2, pts.size - 1).distinct()
+        Axis(
+            min = 0f, max = 1f,
+            ticks = idxs.map { pts[it].first / maxIndex },
+            format = { frac -> labels[(frac * maxIndex).toInt().coerceIn(0, labels.lastIndex)] },
+        )
+    } else null
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    androidx.compose.foundation.layout.Column(modifier) {
+        com.hellohealth.ui.charts.interaction.InteractiveChart(
+            heightDp = 180.dp,
+            accent = metric.color,
+            project = { size ->
+                val plot = ChartGutters.plotRect(size, hasX = xAxis != null, hasY = true, density = density)
+                com.hellohealth.ui.charts.interaction.ChartProjection(
+                    size = size,
+                    count = pts.size,
+                    anchorOf = { i ->
+                        val x = plot.left + (pts[i].first / maxIndex) * plot.width
+                        val y = plot.bottom - ((pts[i].second - yAxis.min) / yAxis.span) * plot.height
+                        Offset(x, y)
+                    },
+                )
+            },
+            tooltipFor = { i ->
+                val title = labels.getOrNull(i) ?: "Point ${i + 1}"
+                com.hellohealth.ui.charts.interaction.TooltipSpec(
+                    title = title,
+                    rows = listOf(com.hellohealth.ui.charts.interaction.TooltipRow("", formatValue(pts[i].second, metric.unit), metric.color)),
+                )
+            },
+        ) { m ->
+            ChartScaffold(heightDp = 180.dp, xAxis = xAxis, yAxis = yAxis, gridColor = gridColor, labelColor = labelColor, modifier = m) { mapping ->
+                drawTrendInRect(pts, metric.color, mapping, maxIndex, yAxis)
+            }
+        }
+        com.hellohealth.ui.charts.interaction.ChartValueTable(
+            rowCount = pts.size,
+            header = listOf("When", metric.unit),
+            cell = { r, c -> if (c == 0) (labels.getOrNull(r) ?: "${r + 1}") else formatValue(pts[r].second, metric.unit) },
+        )
+    }
+}
+
+private fun formatValue(v: Float, unit: String): String {
+    val s = if (v % 1f == 0f) v.toInt().toString() else "%.1f".format(v)
+    return if (unit.isBlank()) s else "$s $unit"
+}
+
+/** Draws the gradient-fill trend line into the scaffold's plot rect using its mapping. */
+private fun DrawScope.drawTrendInRect(
+    points: List<Pair<Float, Float>>,
+    lineColor: Color,
+    mapping: ChartMapping,
+    maxIndex: Float,
+    yAxis: Axis,
+) {
+    val plot = mapping.plot
+    fun px(i: Int) = Offset(
+        plot.left + (points[i].first / maxIndex) * plot.width,
+        plot.bottom - ((points[i].second - yAxis.min) / yAxis.span) * plot.height,
+    )
+    val line = Path(); val fill = Path()
+    points.indices.forEach { i ->
+        val o = px(i)
+        if (i == 0) { line.moveTo(o.x, o.y); fill.moveTo(o.x, plot.bottom); fill.lineTo(o.x, o.y) }
+        else { line.lineTo(o.x, o.y); fill.lineTo(o.x, o.y) }
+    }
+    fill.lineTo(px(points.lastIndex).x, plot.bottom); fill.close()
+    drawPath(fill, brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.38f), lineColor.copy(alpha = 0.03f))))
+    drawPath(line, color = lineColor, style = Stroke(width = 5f, cap = StrokeCap.Round))
+    points.lastOrNull()?.let { drawCircle(lineColor, radius = 7f, center = px(points.lastIndex)) }
+}

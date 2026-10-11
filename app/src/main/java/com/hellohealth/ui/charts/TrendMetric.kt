@@ -6,7 +6,9 @@ import androidx.compose.ui.graphics.Color
  * One metric's trend series, ready for the hybrid chart layout. [points] are (x,y) where x is the
  * chronological index (0-based) and y the value; empty/size-1 series render an empty/placeholder
  * state. [latestFormatted] is the pre-formatted latest value (e.g. "75.0 kg"); [lastRecorded] is the
- * relative label (e.g. "2 days ago") or null.
+ * relative label (e.g. "2 days ago") or null. [pointLabels] are optional per-point x labels (e.g.
+ * "Oct 3") used for the x-axis ticks + the scrub tooltip; when empty the chart falls back to the
+ * point index.
  */
 data class TrendMetric(
     val title: String,
@@ -15,4 +17,5 @@ data class TrendMetric(
     val points: List<Pair<Float, Float>>,
     val latestFormatted: String?,
     val lastRecorded: String?,
+    val pointLabels: List<String> = emptyList(),
 )

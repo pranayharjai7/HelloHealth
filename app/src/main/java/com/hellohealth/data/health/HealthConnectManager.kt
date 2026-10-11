@@ -6,10 +6,13 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.*
 import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.domain.health.ActiveEnergyEstimator
+import com.hellohealth.domain.health.ActiveMinutesEstimator
 import com.hellohealth.domain.model.ActivityChartPoint
 import com.hellohealth.domain.model.ActivityDetail
 import com.hellohealth.domain.model.ActivityGoals
@@ -199,23 +202,54 @@ class HealthConnectManager @Inject constructor(
 
         return try {
             val steps = safeAggregate { aggregateSteps(timeRangeFilter) } ?: 0L
-            val activeCalories = safeAggregate { aggregateActiveCalories(timeRangeFilter) } ?: 0.0
+            val hcActiveCalories = safeAggregate { aggregateActiveCalories(timeRangeFilter) }
+            val hcTotalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) }
             val distance = safeAggregate { aggregateDistance(timeRangeFilter) } ?: 0.0
             val sessions = try { fetchExerciseSessions(timeRangeFilter) } catch (e: Exception) { emptyList() }
-            
-            val totalCalories = safeAggregate { aggregateTotalCalories(timeRangeFilter) } ?: activeCalories
+
             // Prefer the HC BasalMetabolicRateRecord; only when it's missing/non-positive do we
             // invoke the (possibly DB-backed) fallback supplier — profile-derived BMR → 1800.0.
             val bmr = selectBmr(safeFetch { fetchLatestBasalMetabolicRate(endOfDay) }, bmrFallback)
-
-            // Active burn is Health Connect's own ActiveCaloriesBurned aggregate — the honest value,
-            // which is 0 when there's no activity. We deliberately do NOT derive it as
-            // `totalCalories − BMR`: that subtraction uses our (fallback) BMR estimate against a total
-            // that already bakes in the source's own BMR, so a mismatch inflated active burn to
-            // hundreds of kcal on days with zero steps and zero active minutes. `totalCalories` and
-            // `bmr` below are still surfaced on their own for the energy-balance / TDEE calcs.
-
             val weight = safeFetch { fetchLatestWeight(endOfDay) }
+            val restingHeartRate = safeFetch { fetchLatestRestingHeartRate(endOfDay) }
+
+            // Active minutes — HR-elevated minutes (from the intraday HR series) unioned with logged
+            // exercise sessions, replacing the old (steps/100 capped at 60) fabrication. Degrades to
+            // sessions-only, then an uncapped step proxy, when no intraday HR exists. See
+            // ActiveMinutesEstimator. The intraday HR read is cheap and best-effort.
+            val hrBucketsForActive = runCatching {
+                fetchIntradaySeries(date).heartRate.map {
+                    ActiveMinutesEstimator.HrBucket(it.startEpochMs, it.bucketMinutes, it.value)
+                }
+            }.getOrDefault(emptyList())
+            val activeMinutesResult = ActiveMinutesEstimator.estimate(
+                exerciseMinutes = sessions.sumOf { it.durationMinutes },
+                sessionWindows = sessions.map { it.startTime.toEpochMilli() to it.endTime.toEpochMilli() },
+                hrBuckets = hrBucketsForActive,
+                restingHr = restingHeartRate,
+                steps = steps,
+            )
+            val activeTime = activeMinutesResult.activeMinutes
+
+            // Active calories. Many writers (Samsung Health) publish only TotalCaloriesBurned, so the HC
+            // active record is usually ABSENT. When present we trust it; otherwise we estimate active
+            // burn from movement physiology (ACSM MET from distance/steps), reconciled against the
+            // device total so it never exceeds (total − basal-so-far). See ActiveEnergyEstimator.
+            val activeCalories = if (hcActiveCalories != null) {
+                hcActiveCalories
+            } else {
+                ActiveEnergyEstimator.estimate(
+                    steps = steps,
+                    distanceMeters = distance,
+                    activeMinutes = activeTime,
+                    bodyMassKg = weight ?: ActiveEnergyEstimator.DEFAULT_BODY_MASS_KG,
+                    hcTotalKcal = hcTotalCalories,
+                    bmrKcalPerDay = bmr,
+                    elapsedFractionOfDay = elapsedFractionOfDay(date, zoneId),
+                ).activeKcal
+            }
+            val totalCalories = resolveTotalCalories(hcTotal = hcTotalCalories, active = activeCalories, bmr = bmr)
+
             val height = safeFetch { fetchLatestHeight(endOfDay) }
             val bodyFat = safeFetch { fetchLatestBodyFat(endOfDay) }
             val leanBodyMass = safeFetch { fetchLatestLeanBodyMass(endOfDay) }
@@ -229,15 +263,11 @@ class HealthConnectManager @Inject constructor(
             val sleep = try { fetchSleepSummary(startOfDay, endOfDay) } catch (e: Exception) { null }
 
             // P3 vitals — each degrades to null independently (granted-but-empty or read error).
-            val restingHeartRate = safeFetch { fetchLatestRestingHeartRate(endOfDay) }
+            // (restingHeartRate is read earlier, for the active-minutes threshold, and reused here.)
             val hrvRmssd = safeFetch { fetchLatestHrvRmssd(endOfDay) }
             val respiratoryRate = safeFetch { fetchLatestRespiratoryRate(endOfDay) }
             val bodyTemperature = safeFetch { fetchLatestBodyTemperature(endOfDay) }
             val hydrationMl = safeFetch { fetchHydrationMl(startOfDay, endOfDay) }
-
-            val activeTime = sessions.sumOf { it.durationMinutes }.coerceAtLeast(
-                if (steps > 0) (steps / 100).coerceAtMost(60) else 0L
-            )
 
             HealthSummary(
                 steps = steps,
@@ -281,6 +311,79 @@ class HealthConnectManager @Inject constructor(
                 lastUpdated = 0L
             )
         }
+    }
+
+    /**
+     * Reads a day's INTRADAY time-of-day series (Phase 1) — hourly steps + active-calories buckets and
+     * a 5-minute averaged heart-rate series — over the correct local-day window. Deliberately SEPARATE
+     * from [fetchHealthSummary] so a failure here (or an absent signal) never regresses the daily
+     * summary. Each metric degrades independently to an empty list; the whole call returns an empty
+     * [IntradayDay] on any top-level failure. Device-local (not synced).
+     *
+     * HR is read as raw [HeartRateRecord] samples (the same shape as the per-workout read) then
+     * downsampled via [bucketHeartRate] to bound storage (~288 buckets/day worst case). Many phones
+     * expose no sub-daily HR without a worn wearable — then the HR series is simply empty.
+     */
+    suspend fun fetchIntradaySeries(date: LocalDate = LocalDate.now()): com.hellohealth.domain.model.IntradayDay {
+        val client = healthConnectClient ?: return com.hellohealth.domain.model.IntradayDay()
+        val zoneId = ZoneId.systemDefault()
+        val startOfDay = date.atStartOfDay(zoneId).toInstant()
+        val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
+        val range = TimeRangeFilter.between(startOfDay, endOfDay)
+
+        return try {
+            // Steps/active-cal are HOURLY buckets — but some providers (e.g. Samsung) write only a
+            // single aggregated DAILY record, which aggregateGroupByDuration then spreads uniformly
+            // across all 24 hours (every bucket identical). That's a fake hourly shape, so we drop a
+            // degenerate (all-equal) series rather than draw a flat, misleading bar chart.
+            val steps = safeHourlyBuckets(client, StepsRecord.COUNT_TOTAL, range) { it.toDouble() }
+                .takeUnless { isDegenerate(it) } ?: emptyList()
+            val activeCal = safeHourlyBuckets(client, ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, range) { it.inKilocalories }
+                .takeUnless { isDegenerate(it) } ?: emptyList()
+            val hr = try {
+                val samples = client.readRecords(
+                    ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = range)
+                ).records
+                    .flatMap { it.samples }
+                    .filter { it.time >= startOfDay && it.time < endOfDay }
+                    .map { it.time.toEpochMilli() to it.beatsPerMinute.toDouble() }
+                bucketHeartRate(samples, startOfDay.toEpochMilli(), HR_BUCKET_MINUTES)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            com.hellohealth.domain.model.IntradayDay(steps = steps, activeCalories = activeCal, heartRate = hr)
+        } catch (e: Exception) {
+            AppLogger.w(FeatureTag.ACTIVITY, "fetchIntradaySeries failed for $date: ${e.message}")
+            com.hellohealth.domain.model.IntradayDay()
+        }
+    }
+
+    /**
+     * Aggregates [metric] into 1-hour buckets over [range] via `aggregateGroupByDuration`, mapping each
+     * bucket's aggregate through [extract]. Empty/failed → empty list (metric degrades independently).
+     */
+    private suspend fun <T : Any> safeHourlyBuckets(
+        client: HealthConnectClient,
+        metric: androidx.health.connect.client.aggregate.AggregateMetric<T>,
+        range: TimeRangeFilter,
+        extract: (T) -> Double,
+    ): List<com.hellohealth.domain.model.IntradayBucket> = try {
+        client.aggregateGroupByDuration(
+            AggregateGroupByDurationRequest(
+                metrics = setOf(metric),
+                timeRangeFilter = range,
+                timeRangeSlicer = Duration.ofHours(1),
+            )
+        ).mapNotNull { slice ->
+            val value = slice.result[metric]?.let(extract) ?: return@mapNotNull null
+            com.hellohealth.domain.model.IntradayBucket(
+                startEpochMs = slice.startTime.toEpochMilli(),
+                bucketMinutes = 60,
+                value = value,
+            )
+        }
+    } catch (e: Exception) {
+        emptyList()
     }
 
     suspend fun fetchWeeklyStats(): com.hellohealth.domain.model.WeeklyStats {
@@ -515,18 +618,20 @@ class HealthConnectManager @Inject constructor(
         return response?.get(StepsRecord.COUNT_TOTAL) ?: 0L
     }
 
-    private suspend fun aggregateActiveCalories(timeRangeFilter: TimeRangeFilter): Double {
+    private suspend fun aggregateActiveCalories(timeRangeFilter: TimeRangeFilter): Double? {
         val response = healthConnectClient?.aggregate(
             AggregateRequest(metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), timeRangeFilter = timeRangeFilter)
         )
-        return response?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories ?: 0.0
+        // Nullable: null = the provider wrote NO active-calories record (reconstruct from total), which
+        // is distinct from a present-and-genuine 0 kcal.
+        return response?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories
     }
 
-    private suspend fun aggregateTotalCalories(timeRangeFilter: TimeRangeFilter): Double {
+    private suspend fun aggregateTotalCalories(timeRangeFilter: TimeRangeFilter): Double? {
         val response = healthConnectClient?.aggregate(
             AggregateRequest(metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL), timeRangeFilter = timeRangeFilter)
         )
-        return response?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
+        return response?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories
     }
 
     private suspend fun aggregateDistance(timeRangeFilter: TimeRangeFilter): Double {
@@ -988,6 +1093,9 @@ class HealthConnectManager @Inject constructor(
         Duration.between(startTime, endTime).seconds
 
     companion object {
+        /** Width of an intraday heart-rate bucket (minutes) — bounds stored rows to ~288/day. */
+        internal const val HR_BUCKET_MINUTES = 5
+
         /**
          * BMR-source selection for [fetchHealthSummary]: prefer the Health Connect basal-rate record
          * ([hcBmr]) when present and positive, otherwise invoke [fallback] (profile-derived → 1800.0).
@@ -996,5 +1104,91 @@ class HealthConnectManager @Inject constructor(
          */
         internal suspend fun selectBmr(hcBmr: Double?, fallback: suspend () -> Double): Double =
             if (hcBmr != null && hcBmr > 0.0) hcBmr else fallback()
+
+        /**
+         * Total-calories resolution for [fetchHealthSummary]: use the Health Connect
+         * `TotalCaloriesBurnedRecord` aggregate ([hcTotal]) when present; otherwise reconstruct it as
+         * [active] + [bmr] (active burn plus resting/basal burn) rather than falling back to active
+         * calories alone. The bare `?: active` fallback dropped the entire resting-burn component on
+         * days the provider wrote no total-calories record, so "Total burn" wrongly equalled "Active
+         * burn". Pure/`internal` so the precedence is unit-testable.
+         */
+        internal fun resolveTotalCalories(hcTotal: Double?, active: Double, bmr: Double): Double =
+            hcTotal ?: (active + bmr)
+
+        /**
+         * Active-calories resolution for [fetchHealthSummary]. Use the Health Connect
+         * `ActiveCaloriesBurnedRecord` aggregate ([hcActive]) when the provider wrote one (including a
+         * genuine 0). When it is ABSENT, the caller reconstructs active via [ActiveEnergyEstimator]
+         * instead (movement-physiology MET estimate reconciled against the device total). Kept for the
+         * provider-writes-active path. Pure/`internal`.
+         */
+        internal fun resolveActiveCalories(hcActive: Double?, hcTotal: Double?, bmr: Double): Double =
+            hcActive ?: hcTotal?.let { (it - bmr).coerceAtLeast(0.0) } ?: 0.0
+
+        /**
+         * Fraction (0..1) of the local day [date] that has elapsed, for scaling a full-day BMR to a
+         * partial-day total in [ActiveEnergyEstimator]. A past day is fully elapsed (1.0); today is the
+         * elapsed seconds since local midnight ÷ 86400.
+         */
+        internal fun elapsedFractionOfDay(date: java.time.LocalDate, zoneId: java.time.ZoneId, now: java.time.Instant = java.time.Instant.now()): Double {
+            val startOfDay = date.atStartOfDay(zoneId).toInstant()
+            val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
+            return when {
+                now >= endOfDay -> 1.0
+                now <= startOfDay -> 1.0 // future/edge: treat as full day so the ceiling isn't ~0
+                else -> {
+                    val elapsed = java.time.Duration.between(startOfDay, now).seconds.toDouble()
+                    val full = java.time.Duration.between(startOfDay, endOfDay).seconds.toDouble()
+                    (elapsed / full).coerceIn(0.0, 1.0)
+                }
+            }
+        }
+
+        /**
+         * True when an hourly bucket series is a DEGENERATE uniform spread — ≥3 buckets all sharing the
+         * same positive value — the fingerprint of a provider that wrote one aggregated daily record
+         * which `aggregateGroupByDuration` smeared evenly across the hours. Such a series carries no
+         * real intraday shape, so callers drop it (empty state) rather than draw a flat chart.
+         */
+        internal fun isDegenerate(buckets: List<com.hellohealth.domain.model.IntradayBucket>): Boolean {
+            if (buckets.size < 3) return false
+            val values = buckets.map { it.value }
+            val first = values.first()
+            return first > 0.0 && values.all { kotlin.math.abs(it - first) < 0.0001 }
+        }
+
+        /**
+         * Downsamples raw heart-rate samples into fixed [bucketMinutes]-wide, start-of-day-aligned
+         * buckets, each the AVERAGE bpm of the samples falling in it (empty buckets are omitted, so gaps
+         * render as gaps). Pure so the bucketing is unit-testable without a Health Connect client.
+         *
+         * @param samples (sampleEpochMs, bpm) pairs, any order.
+         * @param dayStartEpochMs local-midnight epoch ms — bucket boundaries align to it.
+         * @param bucketMinutes bucket width (5 for the intraday HR series).
+         */
+        internal fun bucketHeartRate(
+            samples: List<Pair<Long, Double>>,
+            dayStartEpochMs: Long,
+            bucketMinutes: Int,
+        ): List<com.hellohealth.domain.model.IntradayBucket> {
+            if (samples.isEmpty() || bucketMinutes <= 0) return emptyList()
+            val widthMs = bucketMinutes * 60_000L
+            // bucketIndex -> (sum, count)
+            val acc = sortedMapOf<Long, Pair<Double, Int>>()
+            for ((t, bpm) in samples) {
+                val idx = Math.floorDiv(t - dayStartEpochMs, widthMs)
+                val start = dayStartEpochMs + idx * widthMs
+                val (sum, count) = acc[start] ?: (0.0 to 0)
+                acc[start] = (sum + bpm) to (count + 1)
+            }
+            return acc.map { (start, sc) ->
+                com.hellohealth.domain.model.IntradayBucket(
+                    startEpochMs = start,
+                    bucketMinutes = bucketMinutes,
+                    value = sc.first / sc.second,
+                )
+            }
+        }
     }
 }

@@ -54,6 +54,8 @@ data class HealthUiState(
     val vitalsTrend: List<LatestVitals> = emptyList(),
     // Body composition
     val body: BodyAnalytics = BodyAnalytics(),
+    // Intraday "through the day" series (device-local)
+    val intraday: com.hellohealth.domain.model.IntradayDay = com.hellohealth.domain.model.IntradayDay(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -79,12 +81,18 @@ class HealthViewModel @Inject constructor(
         selectedDateHolder.selectedDate.flatMapLatest { date ->
             val iso = date.toString()
             combine(
-                activitySummaryFlow(date),
-                vitalsRepository.observeReadinessAsOf(date),
-                vitalsRepository.observeVitalsForDay(iso),
-                vitalsRepository.observeRecentVitals(TREND_DAYS),
-                bodyFlow(date),
-            ) { summaryAndGoals, readiness, latest, trend, body ->
+                combine(
+                    activitySummaryFlow(date),
+                    vitalsRepository.observeReadinessAsOf(date),
+                    vitalsRepository.observeVitalsForDay(iso),
+                    vitalsRepository.observeRecentVitals(TREND_DAYS),
+                    bodyFlow(date),
+                ) { summaryAndGoals, readiness, latest, trend, body ->
+                    Quintuple(summaryAndGoals, readiness, latest, trend, body)
+                },
+                activityRepository.observeIntradaySeries(iso),
+            ) { core, intraday ->
+                val (summaryAndGoals, readiness, latest, trend, body) = core
                 val (summary, goals) = summaryAndGoals
                 HealthUiState(
                     selectedDate = date,
@@ -96,6 +104,7 @@ class HealthViewModel @Inject constructor(
                     latestVitals = latest,
                     vitalsTrend = trend,
                     body = body,
+                    intraday = intraday,
                 )
             }
         }.stateIn(
@@ -166,3 +175,6 @@ class HealthViewModel @Inject constructor(
         const val TREND_DAYS = 30
     }
 }
+
+/** Internal carrier so the 5-arg activity/vitals/body combine can be nested under the intraday flow. */
+private data class Quintuple<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)

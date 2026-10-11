@@ -62,6 +62,8 @@ fun TrendHybridLayout(metrics: List<TrendMetric>, modifier: Modifier = Modifier)
 
 @Composable
 private fun HeroChartCard(metric: TrendMetric) {
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
@@ -73,7 +75,7 @@ private fun HeroChartCard(metric: TrendMetric) {
             if (metric.points.size < 2) {
                 EmptyHint(metric)
             } else {
-                TrendLine(points = metric.points, lineColor = metric.color)
+                InteractiveTrendLine(metric = metric, gridColor = gridColor, labelColor = labelColor)
             }
         }
     }
@@ -81,6 +83,8 @@ private fun HeroChartCard(metric: TrendMetric) {
 
 @Composable
 private fun MetricTile(metric: TrendMetric, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     ElevatedCard(
         modifier = modifier
             .animateContentSize(animationSpec = tween(300))
@@ -94,7 +98,7 @@ private fun MetricTile(metric: TrendMetric, expanded: Boolean, onToggle: () -> U
             if (metric.points.size < 2) {
                 EmptyHint(metric)
             } else if (expanded) {
-                TrendLine(points = metric.points, lineColor = metric.color)
+                InteractiveTrendLine(metric = metric, gridColor = gridColor, labelColor = labelColor)
             } else {
                 Sparkline(points = metric.points, lineColor = metric.color)
             }

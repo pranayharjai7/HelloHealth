@@ -806,4 +806,50 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 15 to 16 adds intraday_series and preserves existing data`() {
+        // A genuine v15 user has a vitals_samples rollup row. MIGRATION_15_16 is purely additive: it
+        // CREATEs intraday_series and touches nothing else, so the rollup row must survive.
+        helper.createDatabase(dbName, 15).apply {
+            execSQL(
+                "INSERT INTO vitals_samples " +
+                    "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, " +
+                    "restingHeartRate, hrvRmssd, respiratoryRate, bodyTemperature, hydrationMl, spo2, " +
+                    "sleepDurationMinutes, deepSleepMinutes, " +
+                    "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                    "VALUES ('u1|rollup|2026-10-09', 'u1', '2026-10-09', 1000, 0, 'rollup', " +
+                    "58.0, 42.0, 14.0, 36.6, 500.0, 97.0, 420, NULL, 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        // Apply MIGRATION_15_16 and validate the resulting schema matches 16.json exactly — the guard
+        // that the hand-written CREATE matches Room's generated v16 entity (column order + affinities).
+        val db = helper.runMigrationsAndValidate(dbName, 16, true, MIGRATION_15_16)
+
+        // The pre-existing rollup is untouched by the additive create.
+        db.query("SELECT restingHeartRate FROM vitals_samples WHERE id = 'u1|rollup|2026-10-09'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(58.0, c.getDouble(0), 0.0001)
+        }
+
+        // The new table exists and is empty.
+        db.query("SELECT count(*) FROM intraday_series").use { c -> assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0)) }
+
+        // A populated bucket round-trips (proves affinities + value NOT NULL + deterministic id).
+        db.execSQL(
+            "INSERT INTO intraday_series " +
+                "(id, userId, localDate, metric, bucketStartUtcEpochMs, bucketMinutes, tzOffsetMinutes, value, " +
+                "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1|steps|2026-10-09|1000', 'u1', '2026-10-09', 'steps', 1000, 60, 0, 1234.0, 1000, 0, NULL, 0)"
+        )
+        db.query("SELECT metric, value, bucketMinutes FROM intraday_series WHERE id = 'u1|steps|2026-10-09|1000'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("steps", c.getString(0))
+            assertEquals(1234.0, c.getDouble(1), 0.0001)
+            assertEquals(60, c.getInt(2))
+        }
+        db.close()
+    }
 }
