@@ -636,3 +636,19 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
         )
     }
 }
+
+/**
+ * v16 → v17: adds sleep-staging columns to the existing `vitals_samples` table (health-intelligence
+ * Phase 2). Additive, nullable INTEGER columns — a migrated user's rows get NULLs until the next
+ * Health Connect fetch populates real stage data. `deepSleepMinutes` already exists (MIGRATION_9_10),
+ * so only the new stage/score columns are added. Affinities match Room's generated v17 schema
+ * (validated against 17.json by MigrationTest).
+ */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `vitals_samples` ADD COLUMN `remSleepMinutes` INTEGER")
+        db.execSQL("ALTER TABLE `vitals_samples` ADD COLUMN `lightSleepMinutes` INTEGER")
+        db.execSQL("ALTER TABLE `vitals_samples` ADD COLUMN `awakeSleepMinutes` INTEGER")
+        db.execSQL("ALTER TABLE `vitals_samples` ADD COLUMN `sleepScore` INTEGER")
+    }
+}

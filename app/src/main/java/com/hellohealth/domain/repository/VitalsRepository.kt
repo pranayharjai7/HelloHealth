@@ -71,7 +71,11 @@ interface VitalsRepository {
         hydrationMl: Double?,
         spo2: Double?,
         sleepDurationMinutes: Int?,
-        deepSleepMinutes: Int?
+        deepSleepMinutes: Int?,
+        remSleepMinutes: Int? = null,
+        lightSleepMinutes: Int? = null,
+        awakeSleepMinutes: Int? = null,
+        sleepScore: Int? = null,
     )
 
     /**

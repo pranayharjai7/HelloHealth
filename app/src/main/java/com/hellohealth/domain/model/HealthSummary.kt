@@ -44,7 +44,17 @@ data class HealthSummary(
     val sleepDurationMinutes: Long = 0,
     val sleepStartTime: java.time.Instant? = null,
     val sleepEndTime: java.time.Instant? = null,
-    
+    // Sleep staging (null when the provider wrote no stages — a duration-only night)
+    val deepSleepMinutes: Long? = null,
+    val remSleepMinutes: Long? = null,
+    val lightSleepMinutes: Long? = null,
+    val awakeSleepMinutes: Long? = null,
+    val sleepLatencyMinutes: Long? = null,
+    val sleepEfficiencyPercent: Double? = null,
+    val sleepScore: Int? = null,
+    /** Flattened stage segments for the hypnogram (empty when no stages). */
+    val sleepStages: List<com.hellohealth.domain.health.SleepStageSegment> = emptyList(),
+
     // Sessions
     val exerciseSessions: List<ExerciseSession> = emptyList(),
     val lastUpdated: Long = System.currentTimeMillis()

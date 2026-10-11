@@ -239,7 +239,11 @@ class ActivityRepositoryImpl @Inject constructor(
                 hydrationMl = summary.hydrationMl,
                 spo2 = summary.oxygenSaturation,
                 sleepDurationMinutes = summary.sleepDurationMinutes.toInt().takeIf { it > 0 },
-                deepSleepMinutes = null
+                deepSleepMinutes = summary.deepSleepMinutes?.toInt(),
+                remSleepMinutes = summary.remSleepMinutes?.toInt(),
+                lightSleepMinutes = summary.lightSleepMinutes?.toInt(),
+                awakeSleepMinutes = summary.awakeSleepMinutes?.toInt(),
+                sleepScore = summary.sleepScore,
             )
         }.onFailure { e ->
             AppLogger.e(FeatureTag.VITALS, "persistVitalsRollup failed for $date", e)

@@ -112,7 +112,7 @@ class WellnessRepositoryImplTest {
         override fun observeRecentRollups(days: Int) = flowOf(emptyList<com.hellohealth.domain.model.vitals.HealthMetricsData>())
         override fun observeRecentVitals(days: Int) = flowOf(emptyList<com.hellohealth.domain.model.vitals.LatestVitals>())
         override fun observeLatestVitals() = flowOf<com.hellohealth.domain.model.vitals.LatestVitals?>(null)
-        override suspend fun upsertRollup(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?, sleepDurationMinutes: Int?, deepSleepMinutes: Int?) {}
+        override suspend fun upsertRollup(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?, sleepDurationMinutes: Int?, deepSleepMinutes: Int?, remSleepMinutes: Int?, lightSleepMinutes: Int?, awakeSleepMinutes: Int?, sleepScore: Int?) {}
         override suspend fun upsertSample(localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?, respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?) {}
     }
 

@@ -103,7 +103,8 @@ class ActivityRepositoryImplBmrFallbackTest {
         override suspend fun upsertRollup(
             localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?,
             respiratoryRate: Double?, bodyTemperature: Double?, hydrationMl: Double?, spo2: Double?,
-            sleepDurationMinutes: Int?, deepSleepMinutes: Int?
+            sleepDurationMinutes: Int?, deepSleepMinutes: Int?,
+            remSleepMinutes: Int?, lightSleepMinutes: Int?, awakeSleepMinutes: Int?, sleepScore: Int?,
         ) {}
         override suspend fun upsertSample(
             localDate: String, timestampUtcEpochMs: Long, restingHeartRate: Double?, hrvRmssd: Double?,
