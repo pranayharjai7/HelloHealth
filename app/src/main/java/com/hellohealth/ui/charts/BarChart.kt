@@ -1,70 +1,109 @@
 package com.hellohealth.ui.charts
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.hellohealth.ui.charts.interaction.ChartProjection
+import com.hellohealth.ui.charts.interaction.ChartValueTable
+import com.hellohealth.ui.charts.interaction.CrosshairStyle
+import com.hellohealth.ui.charts.interaction.InteractiveChart
+import com.hellohealth.ui.charts.interaction.TooltipRow
+import com.hellohealth.ui.charts.interaction.TooltipSpec
 
-/** One bar: a [value] with an optional axis [label] shown beneath selected bars (e.g. hour ticks). */
+/** One bar: a [value] with an x-axis [label] (e.g. an hour tick like "06"). */
 data class BarDatum(val value: Float, val label: String? = null)
 
 /**
- * A simple, dataviz-compliant bar chart (single series, one y-axis). Rounded-top bars anchored to the
- * baseline, a 2px surface gap between bars, a reveal animation, and a direct value label on the tallest
- * bar — identity is never color-alone (the caller supplies a title + the hue comes from [ChartPalette]
- * via [barColor]). Sparse [BarDatum.label]s render as x-axis ticks. Empty / all-zero inputs draw a flat
- * baseline rather than crashing.
+ * A dataviz-compliant bar chart: a magnitude y-axis + gridlines, sparse x-axis labels (from
+ * [BarDatum.label]), bars **capped ≤24dp thick** (never fill the slot), and per-bar tap tooltips
+ * (tap/scrub a bar to read its exact value). Wraps the shared [ChartScaffold] inside [InteractiveChart];
+ * a collapsible value table sits beneath.
  *
- * Follows the `drawTrend` conventions in [TrendCharts] (index x, baseline anchoring). Built for the
- * Phase-1 "steps / calories through the day" hourly graphs; reused anywhere a per-bucket magnitude is
- * shown.
+ * @param unit magnitude unit for the y-axis + tooltip (e.g. "steps", "Cal").
+ * @param xLabelFor optional label for bar i (e.g. the hour) shown in the tooltip title + x-axis.
  */
 @Composable
 fun BarChart(
     bars: List<BarDatum>,
     barColor: Color,
+    unit: String,
+    gridColor: Color,
+    labelColor: Color,
     modifier: Modifier = Modifier,
+    xLabelFor: (Int) -> String? = { bars.getOrNull(it)?.label },
 ) {
-    val progress: Float by animateFloatAsState(1f, tween(650), label = "barReveal")
-    Column(modifier = modifier.fillMaxWidth()) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(140.dp)
-                .padding(top = 8.dp),
-        ) {
-            if (bars.isEmpty()) return@Canvas
-            val maxValue = bars.maxOf { it.value }.coerceAtLeast(0.0001f)
-            val n = bars.size
-            val gapPx = 2.dp.toPx()
-            val slot = size.width / n
-            val barWidth = (slot - gapPx).coerceAtLeast(1f)
-            val chartHeight = size.height
-            val maxIndex = bars.indexOfFirst { it.value == bars.maxOf { b -> b.value } }
+    if (bars.isEmpty()) return
+    val maxV = bars.maxOf { it.value }
+    val yAxis = niceAxis(0f, maxV, unit)
+    // X ticks: sparse labels (every ~6th bar) placed at bar-center fractions.
+    val xTicks = bars.indices.filter { xLabelFor(it) != null }
+    val xAxis = if (xTicks.isNotEmpty()) Axis(
+        min = 0f, max = 1f,
+        ticks = xTicks.map { (it + 0.5f) / bars.size },
+        format = { frac -> xLabelFor(((frac * bars.size)).toInt().coerceIn(0, bars.lastIndex)) ?: "" },
+    ) else null
+    val density = LocalDensity.current
 
-            bars.forEachIndexed { i, bar ->
-                val h = (bar.value / maxValue) * chartHeight * progress
-                if (h <= 0f) return@forEachIndexed
-                val left = i * slot + gapPx / 2f
-                val top = chartHeight - h
-                drawRoundRect(
-                    color = if (i == maxIndex) barColor else barColor.copy(alpha = 0.72f),
-                    topLeft = Offset(left, top),
-                    size = Size(barWidth, h),
-                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+    Column(modifier) {
+        InteractiveChart(
+            heightDp = 160.dp,
+            accent = barColor,
+            crosshair = CrosshairStyle.MarkLift,
+            project = { size ->
+                val plot = ChartGutters.plotRect(size, hasX = xAxis != null, hasY = true, density = density)
+                val slot = plot.width / bars.size
+                ChartProjection(
+                    size = size,
+                    count = bars.size,
+                    hitRadiusPx = slot / 2f,
+                    anchorOf = { i ->
+                        val cx = plot.left + (i + 0.5f) * slot
+                        val top = plot.bottom - (bars[i].value / yAxis.span) * plot.height
+                        Offset(cx, top)
+                    },
                 )
+            },
+            tooltipFor = { i ->
+                TooltipSpec(
+                    title = xLabelFor(i)?.let { "${it}:00" } ?: "Bar ${i + 1}",
+                    rows = listOf(TooltipRow("", "${bars[i].value.toInt()} $unit", barColor)),
+                )
+            },
+        ) { m ->
+            ChartScaffold(
+                heightDp = 160.dp,
+                xAxis = xAxis,
+                yAxis = yAxis,
+                gridColor = gridColor,
+                labelColor = labelColor,
+                modifier = m,
+            ) { mapping ->
+                val plot = mapping.plot
+                val slot = plot.width / bars.size
+                val barW = minOf(slot - 2.dp.toPx(), 24.dp.toPx()).coerceAtLeast(1f)
+                bars.forEachIndexed { i, bar ->
+                    if (bar.value <= 0f) return@forEachIndexed
+                    val h = (bar.value / yAxis.span) * plot.height
+                    val cx = plot.left + (i + 0.5f) * slot
+                    drawRoundRect(
+                        color = barColor.copy(alpha = 0.85f),
+                        topLeft = Offset(cx - barW / 2f, plot.bottom - h),
+                        size = Size(barW, h),
+                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                    )
+                }
             }
         }
+        ChartValueTable(
+            rowCount = bars.size,
+            header = listOf("Hour", unit),
+            cell = { r, c -> if (c == 0) (xLabelFor(r) ?: r.toString()) else bars[r].value.toInt().toString() },
+        )
     }
 }

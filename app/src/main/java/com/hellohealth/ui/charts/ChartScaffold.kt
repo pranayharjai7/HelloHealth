@@ -42,15 +42,32 @@ class ChartMapping(
     }
 }
 
+/** Fixed gutter sizes so a chart's interaction overlay can reproduce the EXACT same plot rect without
+ *  re-measuring text (keeps crosshair anchors aligned with the drawn marks). */
+object ChartGutters {
+    val left = 34.dp      // y-tick labels
+    val bottom = 16.dp    // x-tick labels
+    val top = 6.dp
+
+    /** The inner plot rect for a given canvas [size], given which axes are present. */
+    fun plotRect(size: Size, hasX: Boolean, hasY: Boolean, density: androidx.compose.ui.unit.Density): Rect {
+        with(density) {
+            return Rect(
+                left = if (hasY) left.toPx() else 0f,
+                top = top.toPx(),
+                right = size.width,
+                bottom = size.height - if (hasX) bottom.toPx() else 0f,
+            )
+        }
+    }
+}
+
 /**
  * The shared chart chrome: reserves a left gutter for y-tick labels and a bottom gutter for x-tick
  * labels, draws recessive 1px solid hairline gridlines + tick labels (in muted TEXT tokens, never the
  * series color), then hands the inner plot [Rect] + a [ChartMapping] to [plot] so the chart's existing
- * Canvas math draws inside it almost unchanged.
- *
- * This is the single place axes/gridlines/units live, so every chart that wraps it becomes readable at
- * once (the dataviz "recessive grid/axes + y-ticks rounded to clean numbers + units" requirements).
- * Pass a null axis to omit that gutter (e.g. a sparkline wants neither).
+ * Canvas math draws inside it almost unchanged. Gutters are FIXED ([ChartGutters]) so an interaction
+ * overlay can reproduce the same plot rect for aligned hit-testing.
  */
 @Composable
 fun ChartScaffold(
@@ -66,15 +83,7 @@ fun ChartScaffold(
     val tickStyle = TextStyle(color = labelColor, fontSize = 10.sp)
 
     Canvas(modifier = modifier.fillMaxWidth().height(heightDp)) {
-        val leftGutter = if (yAxis != null) widestTick(measurer, yAxis, tickStyle) + 6.dp.toPx() else 0f
-        val bottomGutter = if (xAxis != null) 16.dp.toPx() else 0f
-        val topPad = 6.dp.toPx()
-        val plotRect = Rect(
-            left = leftGutter,
-            top = topPad,
-            right = size.width,
-            bottom = size.height - bottomGutter,
-        )
+        val plotRect = ChartGutters.plotRect(size, hasX = xAxis != null, hasY = yAxis != null, density = this)
         val mapping = ChartMapping(plotRect, xAxis, yAxis)
 
         // Horizontal gridlines + y-tick labels at each nice tick inside the band.
@@ -100,6 +109,3 @@ fun ChartScaffold(
         }
     }
 }
-
-private fun widestTick(measurer: TextMeasurer, axis: Axis, style: TextStyle): Float =
-    axis.ticks.maxOfOrNull { measurer.measure(axis.format(it), style).size.width.toFloat() } ?: 0f

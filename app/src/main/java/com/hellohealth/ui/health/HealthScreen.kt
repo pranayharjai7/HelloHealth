@@ -163,14 +163,19 @@ private fun IntradaySection(intraday: com.hellohealth.domain.model.IntradayDay) 
     val stepColor = com.hellohealth.ui.charts.chartSeries1()
     val calColor = com.hellohealth.ui.charts.chartSeries2()
     val hrColor = com.hellohealth.ui.charts.chartSeries3()
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 
     SectionCard("Steps through the day") {
         if (intraday.steps.isEmpty()) {
             ChartEmpty("No step timeline for this day yet.")
         } else {
             com.hellohealth.ui.charts.BarChart(
-                bars = intraday.steps.map { com.hellohealth.ui.charts.BarDatum(it.value.toFloat()) },
+                bars = intraday.steps.toHourlyBars(),
                 barColor = stepColor,
+                unit = "steps",
+                gridColor = gridColor,
+                labelColor = labelColor,
             )
         }
     }
@@ -180,8 +185,11 @@ private fun IntradaySection(intraday: com.hellohealth.domain.model.IntradayDay) 
             ChartEmpty("Your source doesn't share hourly active calories.")
         } else {
             com.hellohealth.ui.charts.BarChart(
-                bars = intraday.activeCalories.map { com.hellohealth.ui.charts.BarDatum(it.value.toFloat()) },
+                bars = intraday.activeCalories.toHourlyBars(),
                 barColor = calColor,
+                unit = "Cal",
+                gridColor = gridColor,
+                labelColor = labelColor,
             )
         }
     }
@@ -193,8 +201,23 @@ private fun IntradaySection(intraday: com.hellohealth.domain.model.IntradayDay) 
             com.hellohealth.ui.charts.TimeOfDayChart(
                 points = intraday.heartRate.map { com.hellohealth.ui.charts.TimePoint(it.startEpochMs, it.value.toFloat()) },
                 lineColor = hrColor,
+                unit = "bpm",
+                gridColor = gridColor,
+                labelColor = labelColor,
             )
         }
+    }
+}
+
+/** Hourly intraday buckets → bars, labelling the hour on every 6th bucket (00/06/12/18) for the x-axis. */
+private fun List<com.hellohealth.domain.model.IntradayBucket>.toHourlyBars(): List<com.hellohealth.ui.charts.BarDatum> {
+    val zone = java.time.ZoneId.systemDefault()
+    return map { b ->
+        val hour = java.time.Instant.ofEpochMilli(b.startEpochMs).atZone(zone).hour
+        com.hellohealth.ui.charts.BarDatum(
+            value = b.value.toFloat(),
+            label = if (hour % 6 == 0) "%02d".format(hour) else null,
+        )
     }
 }
 
