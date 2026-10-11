@@ -845,6 +845,14 @@ private fun AnalyticsChartCard(
                         return chartHeight - (ratio * chartHeight)
                     }
 
+                    // Recessive interior gridlines (hairline) at quarter steps — gives the eye a scale
+                    // between the min/max labels the card already shows.
+                    val gridTone = lineColor.copy(alpha = 0.10f)
+                    listOf(0.25f, 0.5f, 0.75f).forEach { f ->
+                        val gy = chartHeight - f * chartHeight
+                        drawLine(gridTone, Offset(0f, gy), Offset(chartWidth, gy), strokeWidth = 1f)
+                    }
+
                     val linePath = Path()
                     val fillPath = Path()
                     points.forEachIndexed { index, point ->

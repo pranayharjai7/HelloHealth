@@ -176,9 +176,39 @@ private fun DualTrend(
     // Shared band when sharedScale, else each series normalised independently.
     val sharedMin = (seriesA + seriesB).minOfOrNull { it.second } ?: 0f
     val sharedMax = (seriesA + seriesB).maxOfOrNull { it.second } ?: 1f
+    // The primary series carries the crosshair index (A if present, else B).
+    val primary = seriesA.ifEmpty { seriesB }
+    val primaryColor = if (seriesA.isNotEmpty()) seriesAColor else seriesBColor
 
+    com.hellohealth.ui.charts.interaction.InteractiveChart(
+        heightDp = 170.dp,
+        accent = primaryColor,
+        project = { size ->
+            com.hellohealth.ui.charts.interaction.ChartProjection(
+                size = size,
+                count = primary.size,
+                anchorOf = { i ->
+                    val x = (primary[i].first / maxX) * size.width
+                    // Anchor y uses the primary series' own band so the dot sits on its line.
+                    val lo: Float; val hi: Float
+                    if (sharedScale) { lo = sharedMin; hi = sharedMax } else {
+                        lo = primary.minOf { it.second }; hi = primary.maxOf { it.second }
+                    }
+                    val span = (hi - lo).takeIf { it > 0.001f } ?: 1f
+                    Offset(x, size.height - ((primary[i].second - lo) / span) * size.height)
+                },
+            )
+        },
+        tooltipFor = { i ->
+            val rows = buildList {
+                seriesA.getOrNull(i)?.let { add(com.hellohealth.ui.charts.interaction.TooltipRow(seriesAName, fmtVal(it.second, aIsPercent, seriesAUnit), seriesAColor)) }
+                seriesB.getOrNull(i)?.let { add(com.hellohealth.ui.charts.interaction.TooltipRow(seriesBName, fmtVal(it.second, false, seriesBUnit), seriesBColor)) }
+            }
+            com.hellohealth.ui.charts.interaction.TooltipSpec(labels.getOrNull(i) ?: "Day ${i + 1}", rows)
+        },
+    ) { chartMod ->
     Canvas(
-        modifier = Modifier
+        modifier = chartMod
             .fillMaxWidth()
             .height(170.dp)
             .graphicsLayer(alpha = progress, translationY = (1f - progress) * 30f)
@@ -212,12 +242,17 @@ private fun DualTrend(
         if (seriesB.isNotEmpty()) draw(seriesB, seriesBColor)
         if (seriesA.isNotEmpty()) draw(seriesA, seriesAColor)
     }
+    }
 
     Spacer(Modifier.height(6.dp))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         labels.forEach { Text(it, fontSize = 10.sp, color = onSurface.copy(alpha = 0.5f)) }
     }
 }
+
+/** Tooltip value formatter shared by DualTrend rows. */
+private fun fmtVal(v: Float, isPercent: Boolean, unit: String): String =
+    if (isPercent) "${(v * 100).toInt()}%" else "${v.toInt()}${if (unit.isNotEmpty()) " $unit" else ""}"
 
 /** Scatter of (x,y) points sharing one plot; dashed baseline omitted (no causal trend line). */
 @Composable
@@ -233,18 +268,43 @@ private fun Scatter(points: List<Pair<Double, Int>>, xLabel: String, yLabel: Str
         Text("↔ $xLabel", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = onSurface.copy(alpha = 0.7f))
     }
     Spacer(Modifier.height(8.dp))
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(170.dp)
-            .graphicsLayer(alpha = progress)
-    ) {
-        val padL = 8f; val padB = 8f
-        fun mapX(x: Double) = padL + ((x - xLo) / (xHi - xLo)).toFloat() * (size.width - padL)
-        fun mapY(y: Double) = (size.height - padB) - ((y - yLo) / (yHi - yLo)).toFloat() * (size.height - padB)
-        points.forEach { (x, y) ->
-            drawCircle(dotColor.copy(alpha = 0.85f), 11f, Offset(mapX(x), mapY(y.toDouble())))
-            drawCircle(Color.White.copy(alpha = 0.5f), 3f, Offset(mapX(x), mapY(y.toDouble())))
+    com.hellohealth.ui.charts.interaction.InteractiveChart(
+        heightDp = 170.dp,
+        accent = dotColor,
+        crosshair = com.hellohealth.ui.charts.interaction.CrosshairStyle.MarkLift,
+        project = { size ->
+            val padL = 8f; val padB = 8f
+            com.hellohealth.ui.charts.interaction.ChartProjection(
+                size = size,
+                count = points.size,
+                hitRadiusPx = 16f,
+                anchorOf = { i ->
+                    val x = padL + ((points[i].first - xLo) / (xHi - xLo)).toFloat() * (size.width - padL)
+                    val y = (size.height - padB) - ((points[i].second.toDouble() - yLo) / (yHi - yLo)).toFloat() * (size.height - padB)
+                    Offset(x, y)
+                },
+            )
+        },
+        tooltipFor = { i ->
+            com.hellohealth.ui.charts.interaction.TooltipSpec(
+                title = "${"%.1f".format(points[i].first)} $xLabel",
+                rows = listOf(com.hellohealth.ui.charts.interaction.TooltipRow(yLabel, "${points[i].second}", dotColor)),
+            )
+        },
+    ) { chartMod ->
+        Canvas(
+            modifier = chartMod
+                .fillMaxWidth()
+                .height(170.dp)
+                .graphicsLayer(alpha = progress)
+        ) {
+            val padL = 8f; val padB = 8f
+            fun mapX(x: Double) = padL + ((x - xLo) / (xHi - xLo)).toFloat() * (size.width - padL)
+            fun mapY(y: Double) = (size.height - padB) - ((y - yLo) / (yHi - yLo)).toFloat() * (size.height - padB)
+            points.forEach { (x, y) ->
+                drawCircle(dotColor.copy(alpha = 0.85f), 11f, Offset(mapX(x), mapY(y.toDouble())))
+                drawCircle(Color.White.copy(alpha = 0.5f), 3f, Offset(mapX(x), mapY(y.toDouble())))
+            }
         }
     }
     Spacer(Modifier.height(6.dp))
