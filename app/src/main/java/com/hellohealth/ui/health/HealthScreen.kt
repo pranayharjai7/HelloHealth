@@ -329,8 +329,63 @@ private fun BodySection(
 @Composable
 private fun SleepSection(summary: HealthSummary) {
     SectionCard("Sleep") {
-        val mins = summary.sleepDurationMinutes
-        MiniStat("Duration", if (mins > 0) "${mins / 60}h ${mins % 60}m" else DASH)
+        val durationMin = summary.sleepDurationMinutes
+        if (durationMin <= 0) {
+            ChartEmpty("No sleep recorded for this night.")
+            return@SectionCard
+        }
+        val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        val labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+
+        // Score + band header (score present only when stages were available).
+        summary.sleepScore?.let { score ->
+            val band = when {
+                score >= 85 -> "Excellent"; score >= 70 -> "Good"; score >= 50 -> "Fair"; else -> "Needs attention"
+            }
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("$score", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary)
+                Text(band, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = 4.dp))
+                Spacer(Modifier.weight(1f))
+                Text("${durationMin / 60}h ${durationMin % 60}m asleep", style = MaterialTheme.typography.bodySmall,
+                    color = labelColor, modifier = Modifier.padding(bottom = 4.dp))
+            }
+            Spacer(Modifier.height(14.dp))
+        }
+
+        // Hypnogram (when stage segments exist).
+        if (summary.sleepStages.isNotEmpty()) {
+            com.hellohealth.ui.charts.Hypnogram(
+                segments = summary.sleepStages,
+                gridColor = gridColor,
+                labelColor = labelColor,
+                awakeColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                remColor = com.hellohealth.ui.charts.chartSeries1(),
+                lightColor = com.hellohealth.ui.charts.chartSeries3(),
+                deepColor = com.hellohealth.ui.charts.chartSeries2(),
+            )
+            Spacer(Modifier.height(14.dp))
+        }
+
+        // Stage breakdown.
+        val hasStages = summary.deepSleepMinutes != null || summary.remSleepMinutes != null
+        if (hasStages) {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                MiniStat("Deep", summary.deepSleepMinutes?.let { "${it}m" } ?: DASH)
+                MiniStat("REM", summary.remSleepMinutes?.let { "${it}m" } ?: DASH)
+                MiniStat("Light", summary.lightSleepMinutes?.let { "${it}m" } ?: DASH)
+                MiniStat("Awake", summary.awakeSleepMinutes?.let { "${it}m" } ?: DASH)
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                MiniStat("Latency", summary.sleepLatencyMinutes?.let { "${it}m" } ?: DASH)
+                MiniStat("Efficiency", summary.sleepEfficiencyPercent?.let { "${it.toInt()}%" } ?: DASH)
+            }
+        } else {
+            // Duration-only night (provider wrote no stages).
+            MiniStat("Duration", "${durationMin / 60}h ${durationMin % 60}m")
+        }
     }
 }
 
