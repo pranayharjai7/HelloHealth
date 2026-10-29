@@ -372,19 +372,19 @@ private fun SleepSection(summary: HealthSummary) {
         val hasStages = summary.deepSleepMinutes != null || summary.remSleepMinutes != null
         if (hasStages) {
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                MiniStat("Deep", summary.deepSleepMinutes?.let { "${it}m" } ?: DASH)
-                MiniStat("REM", summary.remSleepMinutes?.let { "${it}m" } ?: DASH)
-                MiniStat("Light", summary.lightSleepMinutes?.let { "${it}m" } ?: DASH)
-                MiniStat("Awake", summary.awakeSleepMinutes?.let { "${it}m" } ?: DASH)
+                MiniStat("Deep", summary.deepSleepMinutes?.let { formatSleepMinutes(it) } ?: DASH)
+                MiniStat("REM", summary.remSleepMinutes?.let { formatSleepMinutes(it) } ?: DASH)
+                MiniStat("Light", summary.lightSleepMinutes?.let { formatSleepMinutes(it) } ?: DASH)
+                MiniStat("Awake", summary.awakeSleepMinutes?.let { formatSleepMinutes(it) } ?: DASH)
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                MiniStat("Latency", summary.sleepLatencyMinutes?.let { "${it}m" } ?: DASH)
+                MiniStat("Latency", summary.sleepLatencyMinutes?.let { formatSleepMinutes(it) } ?: DASH)
                 MiniStat("Efficiency", summary.sleepEfficiencyPercent?.let { "${it.toInt()}%" } ?: DASH)
             }
         } else {
             // Duration-only night (provider wrote no stages).
-            MiniStat("Duration", "${durationMin / 60}h ${durationMin % 60}m")
+            MiniStat("Duration", formatSleepMinutes(durationMin))
         }
     }
 }
@@ -417,6 +417,17 @@ private fun SectionHeader(title: String) {
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(top = 8.dp),
     )
+}
+
+/**
+ * Formats a sleep duration in minutes as a human-readable span: under an hour stays "35m"; an hour or
+ * more becomes "4h 33m", dropping the minutes when zero ("5h"). Keeps the Sleep card readable instead
+ * of showing large raw minute counts like "273m".
+ */
+private fun formatSleepMinutes(minutes: Long): String = when {
+    minutes < 60 -> "${minutes}m"
+    minutes % 60 == 0L -> "${minutes / 60}h"
+    else -> "${minutes / 60}h ${minutes % 60}m"
 }
 
 @Composable
