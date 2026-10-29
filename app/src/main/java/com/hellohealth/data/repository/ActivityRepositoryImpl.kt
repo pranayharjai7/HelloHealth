@@ -61,11 +61,15 @@ class ActivityRepositoryImpl @Inject constructor(
     ): HealthSummary {
         val cachedSnapshot = loadSnapshot(date)
         val hasLivePermissions = healthConnectManager.isAvailable && healthConnectManager.hasAllPermissions()
+        // A snapshot written before Phase 2 has sleep duration but no staged sleep score; re-fetch it
+        // once so the Sleep card can show stages/score instead of the duration-only fallback.
+        val staleSleep = cachedSnapshot?.summary?.let { it.sleepDurationMinutes > 0 && it.sleepScore == null } == true
         val shouldUseLiveData = hasLivePermissions && (
             forceRefresh ||
             cachedSnapshot == null ||
             date == LocalDate.now() ||
-            cachedSnapshot.syncStatus == SnapshotSyncStatus.PARTIAL
+            cachedSnapshot.syncStatus == SnapshotSyncStatus.PARTIAL ||
+            staleSleep
         )
 
         if (shouldUseLiveData) {
@@ -239,7 +243,11 @@ class ActivityRepositoryImpl @Inject constructor(
                 hydrationMl = summary.hydrationMl,
                 spo2 = summary.oxygenSaturation,
                 sleepDurationMinutes = summary.sleepDurationMinutes.toInt().takeIf { it > 0 },
-                deepSleepMinutes = null
+                deepSleepMinutes = summary.deepSleepMinutes?.toInt(),
+                remSleepMinutes = summary.remSleepMinutes?.toInt(),
+                lightSleepMinutes = summary.lightSleepMinutes?.toInt(),
+                awakeSleepMinutes = summary.awakeSleepMinutes?.toInt(),
+                sleepScore = summary.sleepScore,
             )
         }.onFailure { e ->
             AppLogger.e(FeatureTag.VITALS, "persistVitalsRollup failed for $date", e)

@@ -261,6 +261,12 @@ class HealthConnectManager @Inject constructor(
             val bloodPressure = safeFetch { fetchLatestBloodPressure(endOfDay) }
             val glucose = safeFetch { fetchLatestBloodGlucose(endOfDay) }
             val sleep = try { fetchSleepSummary(startOfDay, endOfDay) } catch (e: Exception) { null }
+            // Sleep staging + score (degrades to null stages when the provider wrote none).
+            val sleepStageRead = try { fetchSleepStages(startOfDay, endOfDay) } catch (e: Exception) { null }
+            val sleepSummary = sleepStageRead?.let {
+                com.hellohealth.domain.health.SleepStages.summarize(it.sessionStartMs, it.sessionEndMs, it.segments)
+            }
+            val sleepScoreResult = sleepSummary?.let { com.hellohealth.domain.health.SleepScore.compute(it) }
 
             // P3 vitals — each degrades to null independently (granted-but-empty or read error).
             // (restingHeartRate is read earlier, for the active-minutes threshold, and reused here.)
@@ -299,6 +305,14 @@ class HealthConnectManager @Inject constructor(
                 sleepDurationMinutes = sleep?.first ?: 0,
                 sleepStartTime = sleep?.second,
                 sleepEndTime = sleep?.third,
+                deepSleepMinutes = sleepSummary?.deepMinutes,
+                remSleepMinutes = sleepSummary?.remMinutes,
+                lightSleepMinutes = sleepSummary?.lightMinutes,
+                awakeSleepMinutes = sleepSummary?.awakeMinutes,
+                sleepLatencyMinutes = sleepSummary?.latencyMinutes,
+                sleepEfficiencyPercent = sleepSummary?.efficiencyPercent,
+                sleepScore = sleepScoreResult?.score,
+                sleepStages = sleepStageRead?.segments ?: emptyList(),
                 exerciseSessions = sessions,
                 lastUpdated = System.currentTimeMillis()
             )
@@ -827,6 +841,50 @@ class HealthConnectManager @Inject constructor(
             overlappingSessions.maxByOrNull { it.endTime }?.endTime
         )
     }
+
+    /**
+     * Reads the day's sleep STAGE segments (deep/REM/light/awake) from `SleepSessionRecord.stages`,
+     * which [fetchSleepSummary] ignores. Returns the flattened segments across all sessions overlapping
+     * the day plus the overall in-bed span (earliest start → latest end), or null when there's no sleep
+     * session. An empty segment list means the provider wrote a session but no stages (duration-only) —
+     * the caller degrades via [com.hellohealth.domain.health.SleepStages]. No new permission (same
+     * SleepSessionRecord read).
+     */
+    private suspend fun fetchSleepStages(startOfDay: Instant, endOfRange: Instant): SleepStageRead? {
+        val response = healthConnectClient?.readRecords(
+            ReadRecordsRequest(
+                recordType = SleepSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.before(endOfRange),
+                ascendingOrder = false,
+                pageSize = 20
+            )
+        )
+        val overlapping = response?.records
+            ?.filter { it.endTime > startOfDay && it.startTime < endOfRange }
+            ?.takeIf { it.isNotEmpty() }
+            ?: return null
+
+        val segments = overlapping.flatMap { record ->
+            record.stages.map { st ->
+                com.hellohealth.domain.health.SleepStageSegment(
+                    startMs = st.startTime.toEpochMilli(),
+                    endMs = st.endTime.toEpochMilli(),
+                    stage = st.stage,
+                )
+            }
+        }.sortedBy { it.startMs }
+        return SleepStageRead(
+            sessionStartMs = overlapping.minOf { it.startTime }.toEpochMilli(),
+            sessionEndMs = overlapping.maxOf { it.endTime }.toEpochMilli(),
+            segments = segments,
+        )
+    }
+
+    private data class SleepStageRead(
+        val sessionStartMs: Long,
+        val sessionEndMs: Long,
+        val segments: List<com.hellohealth.domain.health.SleepStageSegment>,
+    )
 
     private suspend fun fetchExerciseSessions(timeRangeFilter: TimeRangeFilter): List<ExerciseSession> {
         val client = healthConnectClient ?: return emptyList()

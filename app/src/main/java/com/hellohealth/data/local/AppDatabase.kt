@@ -70,7 +70,7 @@ import com.hellohealth.data.local.entities.WorkoutSessionEntity
         AchievementEntity::class,
         IntradaySeriesEntity::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

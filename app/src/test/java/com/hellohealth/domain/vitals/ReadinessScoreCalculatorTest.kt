@@ -49,6 +49,28 @@ class ReadinessScoreCalculatorTest {
     }
 
     @Test
+    fun `a high sleep score lifts readiness above a mediocre one (quality, not just hours)`() {
+        val history = List(10) { HealthMetricsData(0L, 50.0, 65.0, 420, 100, sleepScore = 70) }
+        // Same duration (7h) both nights, but one has an excellent staged score and one a poor one.
+        val greatSleep = HealthMetricsData(0L, 50.0, 65.0, 420, 110, sleepScore = 95)
+        val poorSleep = HealthMetricsData(0L, 50.0, 65.0, 420, 30, sleepScore = 40)
+
+        val greatScore = calculator.calculate(history, greatSleep).score
+        val poorScore = calculator.calculate(history, poorSleep).score
+
+        assertTrue("quality sleep should beat poor sleep at equal hours ($greatScore vs $poorScore)", greatScore > poorScore)
+    }
+
+    @Test
+    fun `sleep score of 70 is roughly neutral`() {
+        val history = List(10) { HealthMetricsData(0L, 50.0, 65.0, 420, 100, sleepScore = 70) }
+        val today = HealthMetricsData(0L, 50.0, 65.0, 420, 100, sleepScore = 70)
+        val result = calculator.calculate(history, today)
+        // HRV/RHR at baseline (no deviation), sleep score 70 → penalty ~0 → score near the 80 base.
+        assertTrue("near-neutral, got ${result.score}", result.score in 76..84)
+    }
+
+    @Test
     fun `gracefully handles completely missing HRV and RHR data`() {
         // Neither today NOR history carries HRV/RHR — the watch was never worn during sleep, only
         // sleep duration was manually logged. With nothing for the 3/2-day fallbacks to find, the

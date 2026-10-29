@@ -132,7 +132,11 @@ class VitalsRepositoryImpl @Inject constructor(
         hydrationMl: Double?,
         spo2: Double?,
         sleepDurationMinutes: Int?,
-        deepSleepMinutes: Int?
+        deepSleepMinutes: Int?,
+        remSleepMinutes: Int?,
+        lightSleepMinutes: Int?,
+        awakeSleepMinutes: Int?,
+        sleepScore: Int?,
     ) {
         val userId = sessionManager.getCurrentUserId()
         if (userId == null) {
@@ -160,6 +164,10 @@ class VitalsRepositoryImpl @Inject constructor(
                 spo2 = spo2,
                 sleepDurationMinutes = sleepDurationMinutes,
                 deepSleepMinutes = deepSleepMinutes,
+                remSleepMinutes = remSleepMinutes,
+                lightSleepMinutes = lightSleepMinutes,
+                awakeSleepMinutes = awakeSleepMinutes,
+                sleepScore = sleepScore,
                 updatedAtEpochMs = nowMs,
                 updatedAtTzOffsetMinutes = Timestamps.currentTzOffsetMinutes(zone),
                 deletedAtEpochMs = null,
@@ -219,7 +227,8 @@ class VitalsRepositoryImpl @Inject constructor(
         hrvRmssd = hrvRmssd,
         restingHeartRate = restingHeartRate,
         sleepDurationMinutes = sleepDurationMinutes,
-        deepSleepMinutes = deepSleepMinutes
+        deepSleepMinutes = deepSleepMinutes,
+        sleepScore = sleepScore,
     )
 
     private fun VitalsSampleEntity.toLatestVitals() = LatestVitals(

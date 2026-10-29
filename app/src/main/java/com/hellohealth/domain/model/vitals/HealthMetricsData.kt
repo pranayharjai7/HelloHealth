@@ -15,5 +15,7 @@ data class HealthMetricsData(
     val hrvRmssd: Double?,
     val restingHeartRate: Double?,
     val sleepDurationMinutes: Int?,
-    val deepSleepMinutes: Int?
+    val deepSleepMinutes: Int?,
+    /** Composite 0–100 sleep score (Phase 2) when stages were available, else null. */
+    val sleepScore: Int? = null,
 )

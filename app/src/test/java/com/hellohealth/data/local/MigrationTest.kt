@@ -852,4 +852,43 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 16 to 17 adds sleep-stage columns and preserves existing data`() {
+        // A genuine v16 user has a vitals_samples rollup. MIGRATION_16_17 is additive ALTER TABLE ADD
+        // COLUMN, so the existing row must survive and the new columns default to NULL.
+        helper.createDatabase(dbName, 16).apply {
+            execSQL(
+                "INSERT INTO vitals_samples " +
+                    "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, " +
+                    "restingHeartRate, hrvRmssd, respiratoryRate, bodyTemperature, hydrationMl, spo2, " +
+                    "sleepDurationMinutes, deepSleepMinutes, " +
+                    "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                    "VALUES ('u1|rollup|2026-10-11', 'u1', '2026-10-11', 1000, 0, 'rollup', " +
+                    "58.0, 42.0, 14.0, 36.6, 500.0, 97.0, 420, 60, 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(dbName, 17, true, MIGRATION_16_17)
+
+        // Pre-existing row survives; the new columns are NULL on it.
+        db.query("SELECT deepSleepMinutes, remSleepMinutes, lightSleepMinutes, awakeSleepMinutes, sleepScore FROM vitals_samples WHERE id = 'u1|rollup|2026-10-11'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(60, c.getInt(0))      // existing deep survives
+            assertTrue("rem defaults null", c.isNull(1))
+            assertTrue("light defaults null", c.isNull(2))
+            assertTrue("awake defaults null", c.isNull(3))
+            assertTrue("score defaults null", c.isNull(4))
+        }
+
+        // New columns accept writes (affinities correct).
+        db.execSQL("UPDATE vitals_samples SET remSleepMinutes = 95, lightSleepMinutes = 240, awakeSleepMinutes = 14, sleepScore = 72 WHERE id = 'u1|rollup|2026-10-11'")
+        db.query("SELECT remSleepMinutes, sleepScore FROM vitals_samples WHERE id = 'u1|rollup|2026-10-11'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(95, c.getInt(0))
+            assertEquals(72, c.getInt(1))
+        }
+        db.close()
+    }
 }

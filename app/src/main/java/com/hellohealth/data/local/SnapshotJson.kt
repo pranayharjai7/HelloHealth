@@ -43,9 +43,20 @@ data class SnapshotSummaryJson(
     val sleepDurationMinutes: Long = 0,
     val sleepStartTime: String? = null,
     val sleepEndTime: String? = null,
+    val deepSleepMinutes: Long? = null,
+    val remSleepMinutes: Long? = null,
+    val lightSleepMinutes: Long? = null,
+    val awakeSleepMinutes: Long? = null,
+    val sleepLatencyMinutes: Long? = null,
+    val sleepEfficiencyPercent: Double? = null,
+    val sleepScore: Int? = null,
+    val sleepStages: List<SleepStageJson> = emptyList(),
     val exerciseSessions: List<ExerciseSessionJson> = emptyList(),
     val lastUpdated: Long = 0L
 )
+
+@Serializable
+data class SleepStageJson(val startMs: Long, val endMs: Long, val stage: Int)
 
 @Serializable
 data class ExerciseSessionJson(
@@ -100,6 +111,14 @@ fun HealthSummary.toJsonModel() = SnapshotSummaryJson(
     sleepDurationMinutes = sleepDurationMinutes,
     sleepStartTime = sleepStartTime?.toString(),
     sleepEndTime = sleepEndTime?.toString(),
+    deepSleepMinutes = deepSleepMinutes,
+    remSleepMinutes = remSleepMinutes,
+    lightSleepMinutes = lightSleepMinutes,
+    awakeSleepMinutes = awakeSleepMinutes,
+    sleepLatencyMinutes = sleepLatencyMinutes,
+    sleepEfficiencyPercent = sleepEfficiencyPercent,
+    sleepScore = sleepScore,
+    sleepStages = sleepStages.map { SleepStageJson(it.startMs, it.endMs, it.stage) },
     exerciseSessions = exerciseSessions.map {
         ExerciseSessionJson(
             id = it.id,
@@ -145,6 +164,14 @@ fun SnapshotSummaryJson.toDomain() = HealthSummary(
     sleepDurationMinutes = sleepDurationMinutes,
     sleepStartTime = sleepStartTime?.let(Instant::parse),
     sleepEndTime = sleepEndTime?.let(Instant::parse),
+    deepSleepMinutes = deepSleepMinutes,
+    remSleepMinutes = remSleepMinutes,
+    lightSleepMinutes = lightSleepMinutes,
+    awakeSleepMinutes = awakeSleepMinutes,
+    sleepLatencyMinutes = sleepLatencyMinutes,
+    sleepEfficiencyPercent = sleepEfficiencyPercent,
+    sleepScore = sleepScore,
+    sleepStages = sleepStages.map { com.hellohealth.domain.health.SleepStageSegment(it.startMs, it.endMs, it.stage) },
     exerciseSessions = exerciseSessions.map {
         ExerciseSession(
             id = it.id,

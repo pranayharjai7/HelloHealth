@@ -110,8 +110,17 @@ class ReadinessScoreCalculator @Inject constructor() {
 
         var sleepPenalty = 0f
         var hasSleep = false
+        val sleepScore = todayMetric.sleepScore
         val sleepMinutes = todayMetric.sleepDurationMinutes
-        if (sleepMinutes != null && sleepMinutes > 0) {
+        if (sleepScore != null) {
+            // Prefer the composite sleep SCORE (Phase 2) — reflects quality (stages/efficiency), not
+            // just hours. Center on 70 (the "good" band floor): a 70 is neutral (penalty 0), a perfect
+            // 100 gives a small bonus (negative penalty), a poor night penalizes. Scaled to the same
+            // +/-0.3 penalty range the duration heuristic used so downstream weighting is unchanged.
+            sleepPenalty = ((70f - sleepScore) / 100f * 0.3f).coerceIn(-0.1f, 0.3f)
+            hasSleep = true
+        } else if (sleepMinutes != null && sleepMinutes > 0) {
+            // Fallback: duration-only heuristic when no staged score is available.
             val sleepHours = sleepMinutes / 60f
             if (sleepHours < 6.0f) {
                 sleepPenalty = ((6.0f - sleepHours) / 6.0f) * 0.3f
