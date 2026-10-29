@@ -19,7 +19,7 @@ Finally populate the always-null `deepSleepMinutes` + new stage fields and feed 
   the one spot to feed real data once `HealthSummary` carries it.
 - Readiness uses sleep *duration* only (0.30 weight); `deepSleepMinutes` on `HealthMetricsData` is never
   read — a seam to upgrade to the composite sleep score.
-- Hypnogram: reuse `timeOfDayFraction` + `ChartScaffold` + `InteractiveChart`/`ChartValueTable`; BUILD a
+- Hypnogram: reuse `timeOfDayFraction` + `ChartScaffold` + `InteractiveChart`; BUILD a
   new stage-band renderer + `SleepStageSegment` input + stage→lane/color map (the y-axis is a
   categorical stage ladder, not a numeric niceAxis).
 
@@ -75,7 +75,7 @@ degradation + existing tests green (adjust expectations).
 
 **S5 — hypnogram renderer.** New `ui/charts/Hypnogram.kt`: stage-band chart (Awake/REM/Light/Deep lanes)
 over the time axis, reusing `timeOfDayFraction` + `ChartScaffold` (categorical y) + `InteractiveChart`
-(`ChartProjection` anchored per segment, tooltip "01:40–02:15 · Deep") + `ChartValueTable`. Stage→lane
+(`ChartProjection` anchored per segment, tooltip "01:40–02:15 · Deep"). Stage→lane
 + color map. Pure `timeOfDayFraction` already tested; add a lane-mapping test.
 
 **S6 — Sleep card UI.** Replace `SleepSection` (duration-only) with a full card: score + band, stage

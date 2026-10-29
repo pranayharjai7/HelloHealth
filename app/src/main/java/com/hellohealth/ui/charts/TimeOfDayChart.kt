@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.hellohealth.ui.charts.interaction.ChartProjection
-import com.hellohealth.ui.charts.interaction.ChartValueTable
 import com.hellohealth.ui.charts.interaction.InteractiveChart
 import com.hellohealth.ui.charts.interaction.TooltipRow
 import com.hellohealth.ui.charts.interaction.TooltipSpec
@@ -96,14 +95,6 @@ fun TimeOfDayChart(
                 }
             }
         }
-        ChartValueTable(
-            rowCount = sorted.size,
-            header = listOf("Time", unit),
-            cell = { r, c ->
-                if (c == 0) Instant.ofEpochMilli(sorted[r].epochMs).atZone(zone).toLocalTime().format(fmt)
-                else sorted[r].value.toInt().toString()
-            },
-        )
     }
 }
 

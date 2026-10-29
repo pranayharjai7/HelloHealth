@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.dp
 import com.hellohealth.domain.health.SleepStageSegment
 import com.hellohealth.domain.health.SleepStages
 import com.hellohealth.ui.charts.interaction.ChartProjection
-import com.hellohealth.ui.charts.interaction.ChartValueTable
 import com.hellohealth.ui.charts.interaction.CrosshairStyle
 import com.hellohealth.ui.charts.interaction.InteractiveChart
 import com.hellohealth.ui.charts.interaction.TooltipRow
@@ -24,8 +23,8 @@ import java.time.format.DateTimeFormatter
 /**
  * A hypnogram: the night's sleep stages drawn as filled bands across four lanes (Awake / REM / Light /
  * Deep, top→bottom) on a wall-clock time x-axis. Reuses the shared chart layer — [ChartScaffold] for
- * the time axis + lane labels, [InteractiveChart] for tap-to-inspect ("01:40–02:15 · Deep"), and a
- * [ChartValueTable] fallback. The y-axis is categorical (lane centers), not numeric.
+ * the time axis + lane labels and [InteractiveChart] for tap-to-inspect ("01:40–02:15 · Deep"). The
+ * y-axis is categorical (lane centers), not numeric.
  *
  * Segments are the flattened `SleepSessionRecord.stages`; stages map to lanes via [laneOf]. Awake
  * segments (STAGE_TYPE_AWAKE / AWAKE_IN_BED) share the top lane; SLEEPING folds into Light.
@@ -115,18 +114,6 @@ fun Hypnogram(
                 }
             }
         }
-        ChartValueTable(
-            rowCount = shown.size,
-            header = listOf("From", "To", "Stage"),
-            cell = { r, c ->
-                val seg = shown[r]
-                when (c) {
-                    0 -> Instant.ofEpochMilli(seg.startMs).atZone(zone).toLocalTime().format(fmt)
-                    1 -> Instant.ofEpochMilli(seg.endMs).atZone(zone).toLocalTime().format(fmt)
-                    else -> LANE_NAMES[laneOf(seg.stage)!!]
-                }
-            },
-        )
     }
 }
 

@@ -144,11 +144,6 @@ fun InteractiveTrendLine(
                 drawTrendInRect(pts, metric.color, mapping, maxIndex, yAxis)
             }
         }
-        com.hellohealth.ui.charts.interaction.ChartValueTable(
-            rowCount = pts.size,
-            header = listOf("When", metric.unit),
-            cell = { r, c -> if (c == 0) (labels.getOrNull(r) ?: "${r + 1}") else formatValue(pts[r].second, metric.unit) },
-        )
     }
 }
 

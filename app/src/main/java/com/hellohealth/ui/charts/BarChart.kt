@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.hellohealth.ui.charts.interaction.ChartProjection
-import com.hellohealth.ui.charts.interaction.ChartValueTable
 import com.hellohealth.ui.charts.interaction.CrosshairStyle
 import com.hellohealth.ui.charts.interaction.InteractiveChart
 import com.hellohealth.ui.charts.interaction.TooltipRow
@@ -100,10 +99,5 @@ fun BarChart(
                 }
             }
         }
-        ChartValueTable(
-            rowCount = bars.size,
-            header = listOf("Hour", unit),
-            cell = { r, c -> if (c == 0) (xLabelFor(r) ?: r.toString()) else bars[r].value.toInt().toString() },
-        )
     }
 }

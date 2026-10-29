@@ -1,6 +1,5 @@
 package com.hellohealth.ui.charts.interaction
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,14 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -219,38 +213,3 @@ private fun TooltipBubble(anchor: Offset, spec: TooltipSpec, size: Size) {
     }
 }
 
-/**
- * Collapsible value table placed under a chart — the dataviz "table fallback" so every value is
- * reachable with zero interaction (and by TalkBack). Reads straight from the chart's data via [cell].
- */
-@Composable
-fun ChartValueTable(rowCount: Int, header: List<String>, cell: (row: Int, col: Int) -> String) {
-    var open by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth()) {
-        TextButton(onClick = { open = !open }) {
-            Text(if (open) "Hide values" else "Show values", style = MaterialTheme.typography.labelMedium)
-            Icon(if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = null)
-        }
-        AnimatedVisibility(open) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-                TableRow(header, bold = true)
-                for (r in 0 until rowCount) TableRow(header.indices.map { c -> cell(r, c) }, bold = false)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TableRow(cells: List<String>, bold: Boolean) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        cells.forEach { c ->
-            Text(
-                c,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (bold) 0.8f else 0.6f),
-            )
-        }
-    }
-}
