@@ -227,7 +227,8 @@ class VitalsRepositoryImpl @Inject constructor(
         hrvRmssd = hrvRmssd,
         restingHeartRate = restingHeartRate,
         sleepDurationMinutes = sleepDurationMinutes,
-        deepSleepMinutes = deepSleepMinutes
+        deepSleepMinutes = deepSleepMinutes,
+        sleepScore = sleepScore,
     )
 
     private fun VitalsSampleEntity.toLatestVitals() = LatestVitals(
