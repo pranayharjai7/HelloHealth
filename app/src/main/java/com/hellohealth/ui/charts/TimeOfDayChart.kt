@@ -6,8 +6,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.hellohealth.ui.charts.interaction.ChartProjection
@@ -117,16 +117,19 @@ private inline fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTimeSegm
 
     val baselineY = size.height
     for (seg in segments) {
-        if (seg.size < 2) continue
-        val line = Path(); val fill = Path()
-        seg.forEachIndexed { i, p ->
-            val o = toPixel(timeOfDayFraction(p.epochMs, zone), p.value)
-            if (i == 0) { line.moveTo(o.x, o.y); fill.moveTo(o.x, baselineY); fill.lineTo(o.x, o.y) }
-            else { line.lineTo(o.x, o.y); fill.lineTo(o.x, o.y) }
+        val pixels = seg.map { toPixel(timeOfDayFraction(it.epochMs, zone), it.value) }
+        if (pixels.size < 2) {
+            // A lone reading between two gaps: draw it as a soft dot rather than dropping it.
+            pixels.firstOrNull()?.let { drawCircle(lineColor, radius = 4f, center = it) }
+            continue
         }
-        val lastO = toPixel(timeOfDayFraction(seg.last().epochMs, zone), seg.last().value)
-        fill.lineTo(lastO.x, baselineY); fill.close()
+        val line = smoothPath(pixels)
+        val fill = smoothPath(pixels).apply {
+            lineTo(pixels.last().x, baselineY)
+            lineTo(pixels.first().x, baselineY)
+            close()
+        }
         drawPath(fill, brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.30f), lineColor.copy(alpha = 0.02f))))
-        drawPath(line, color = lineColor, style = Stroke(width = 4f, cap = StrokeCap.Round))
+        drawPath(line, color = lineColor, style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
 }

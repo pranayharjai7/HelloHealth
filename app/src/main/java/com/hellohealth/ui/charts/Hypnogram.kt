@@ -109,7 +109,7 @@ fun Hypnogram(
                         color = laneColors[lane],
                         topLeft = Offset(x0, top),
                         size = Size((x1 - x0).coerceAtLeast(1f), (laneH - gap).coerceAtLeast(1f)),
-                        cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                        cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx()),
                     )
                 }
             }

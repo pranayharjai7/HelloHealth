@@ -94,7 +94,7 @@ fun BarChart(
                         color = barColor.copy(alpha = 0.85f),
                         topLeft = Offset(cx - barW / 2f, plot.bottom - h),
                         size = Size(barW, h),
-                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                        cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
                     )
                 }
             }
