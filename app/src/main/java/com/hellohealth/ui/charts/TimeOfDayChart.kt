@@ -9,7 +9,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hellohealth.ui.charts.interaction.ChartProjection
 import com.hellohealth.ui.charts.interaction.InteractiveChart
 import com.hellohealth.ui.charts.interaction.TooltipRow
@@ -57,6 +60,11 @@ fun TimeOfDayChart(
     val xAxis = hourAxis()
     val fmt = DateTimeFormatter.ofPattern("HH:mm")
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
+    // The series low/high (labelled inline on the plot) and a reference baseline (the first reading).
+    val minV = sorted.minByOrNull { it.value }
+    val maxV = sorted.maxByOrNull { it.value }
+    val baselineValue = sorted.first().value
 
     androidx.compose.foundation.layout.Column(modifier) {
         InteractiveChart(
@@ -87,19 +95,29 @@ fun TimeOfDayChart(
                 labelColor = labelColor,
                 modifier = m,
             ) { mapping ->
-                drawTimeSegments(sorted, zone, maxGapFraction, lineColor) { frac, v ->
-                    Offset(
-                        mapping.plot.left + frac * mapping.plot.width,
-                        mapping.mapY(v),
-                    )
+                val toPixel = { frac: Float, v: Float ->
+                    Offset(mapping.plot.left + frac * mapping.plot.width, mapping.mapY(v))
                 }
+                // Faint dotted reference baseline at the first reading.
+                val baseY = mapping.mapY(baselineValue)
+                drawLine(
+                    color = labelColor.copy(alpha = 0.35f),
+                    start = Offset(mapping.plot.left, baseY),
+                    end = Offset(mapping.plot.right, baseY),
+                    strokeWidth = 1f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 8f)),
+                )
+                drawTimeSegments(sorted, zone, maxGapFraction, lineColor, toPixel)
+                // Inline min/max value labels pinned at the low/high points.
+                minV?.let { labelPoint(textMeasurer, toPixel(timeOfDayFraction(it.epochMs, zone), it.value), "${it.value.toInt()}", labelColor, lineColor, below = true) }
+                maxV?.let { labelPoint(textMeasurer, toPixel(timeOfDayFraction(it.epochMs, zone), it.value), "${it.value.toInt()}", labelColor, lineColor, below = false) }
             }
         }
     }
 }
 
-/** Draws the gap-broken line + gradient fill, mapping (dayFraction, value) → pixel via [toPixel]. */
-private inline fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTimeSegments(
+/** Draws the gap-broken ribbon line + faint fill, mapping (dayFraction, value) → pixel via [toPixel]. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTimeSegments(
     sorted: List<TimePoint>,
     zone: ZoneId,
     maxGapFraction: Float,
@@ -129,7 +147,39 @@ private inline fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTimeSegm
             lineTo(pixels.first().x, baselineY)
             close()
         }
-        drawPath(fill, brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.30f), lineColor.copy(alpha = 0.02f))))
-        drawPath(line, color = lineColor, style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        // Faint fade so the ribbon line is the hero (not a heavy area block).
+        drawPath(fill, brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.14f), lineColor.copy(alpha = 0.0f))))
+        drawPath(line, color = lineColor, style = Stroke(width = 5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
+}
+
+/**
+ * Pins a small value label (with a marker dot) at a data point — the Revolut-style inline min/max.
+ * [below] is the PREFERRED side (low label below the point, high label above), but the label flips to
+ * the other side when the preferred side would overflow the plot, and its x is clamped inside the plot
+ * — so a max near the top never collides with the top axis tick, and a label never clips at the edges.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.labelPoint(
+    measurer: androidx.compose.ui.text.TextMeasurer,
+    at: Offset,
+    text: String,
+    labelColor: Color,
+    markerColor: Color,
+    below: Boolean,
+) {
+    drawCircle(markerColor, radius = 4f, center = at)
+    val style = androidx.compose.ui.text.TextStyle(color = labelColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    val laid = measurer.measure(text, style)
+    val gap = 10f
+    val aboveY = at.y - laid.size.height - gap
+    val belowY = at.y + gap
+    // Preferred side, but flip if it would overflow the plot vertically.
+    val ty = when {
+        below && belowY + laid.size.height <= size.height -> belowY
+        below -> aboveY
+        !below && aboveY >= 0f -> aboveY
+        else -> belowY
+    }
+    val tx = (at.x - laid.size.width / 2f).coerceIn(0f, size.width - laid.size.width)
+    drawText(laid, topLeft = Offset(tx, ty.coerceIn(0f, size.height - laid.size.height)))
 }

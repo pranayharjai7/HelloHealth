@@ -52,7 +52,7 @@ private fun DrawScope.drawTrend(
 
     drawPath(
         path = fillPath,
-        brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.42f), lineColor.copy(alpha = 0.03f))),
+        brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.16f), lineColor.copy(alpha = 0.0f))),
     )
     drawPath(path = linePath, color = lineColor, style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
     if (dotRadius > 0f) {
@@ -70,7 +70,7 @@ fun TrendLine(points: List<Pair<Float, Float>>, lineColor: Color, modifier: Modi
             .height(180.dp)
             .graphicsLayer(alpha = progress, translationY = (1f - progress) * 36f),
     ) {
-        drawTrend(points, lineColor, strokeWidth = 4f, dotRadius = 7f)
+        drawTrend(points, lineColor, strokeWidth = 5f, dotRadius = 7f)
     }
 }
 
@@ -78,7 +78,7 @@ fun TrendLine(points: List<Pair<Float, Float>>, lineColor: Color, modifier: Modi
 @Composable
 fun Sparkline(points: List<Pair<Float, Float>>, lineColor: Color, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.fillMaxWidth().height(44.dp)) {
-        drawTrend(points, lineColor, strokeWidth = 3f, dotRadius = 0f)
+        drawTrend(points, lineColor, strokeWidth = 3.5f, dotRadius = 0f)
     }
 }
 
@@ -168,7 +168,7 @@ private fun DrawScope.drawTrendInRect(
         lineTo(pixels.first().x, plot.bottom)
         close()
     }
-    drawPath(fill, brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.38f), lineColor.copy(alpha = 0.03f))))
-    drawPath(line, color = lineColor, style = Stroke(width = 4f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(fill, brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.16f), lineColor.copy(alpha = 0.0f))))
+    drawPath(line, color = lineColor, style = Stroke(width = 5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
     points.lastOrNull()?.let { drawCircle(lineColor, radius = 7f, center = px(points.lastIndex)) }
 }
