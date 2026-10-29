@@ -43,6 +43,7 @@ import com.hellohealth.domain.model.DailyHealthSnapshot
 import coil.compose.AsyncImage
 import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
+import com.hellohealth.ui.common.toDisplayNameOr
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.HealthCard
@@ -310,7 +311,7 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = authUser?.name ?: "Healthy User",
+                            text = authUser?.name.toDisplayNameOr("Healthy User"),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
@@ -825,7 +826,7 @@ fun ProfileBottomSheet(
                 ProfileAvatar(user = user, onClick = {})
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = user?.name ?: "Healthy User",
+                    text = user?.name.toDisplayNameOr("Healthy User"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
