@@ -65,6 +65,12 @@ data class TooltipRow(val label: String, val value: String, val swatch: Color? =
 
 enum class CrosshairStyle { Vertical, MarkLift }
 
+/** How strongly a pinch translates finger-span change into zoom, applied to the ABSOLUTE span ratio
+ *  (current span ÷ span when the pinch started). ~1.4 feels natural; the old incremental model needed
+ *  a much larger gain that still failed because it ratcheted per frame. */
+private const val ZOOM_GAIN = 1.4f
+
+
 /**
  * Wraps a chart's Canvas [chartBody] and adds the shared, scrub-and-pin interaction layer the dataviz
  * method requires: drag scrubs a crosshair that snaps to the nearest data point; releasing leaves the
@@ -87,7 +93,7 @@ fun InteractiveChart(
     // too few points to benefit (e.g. scatter) pass false to stay fixed.
     zoomable: Boolean = true,
     // Max horizontal zoom factor. Clamped per-chart so a sparse series can't zoom into nonsense.
-    maxZoom: Float = 6f,
+    maxZoom: Float = 10f,
     chartBody: @Composable (Modifier, ChartViewport) -> Unit,
 ) {
     var selected by remember { mutableStateOf(-1) }
@@ -97,6 +103,12 @@ fun InteractiveChart(
     val projection = remember(canvasSize, viewport) {
         if (canvasSize == Size.Zero) null else project(canvasSize, viewport)
     }
+    // The gesture coroutine is long-lived and MUST NOT restart mid-gesture. It is keyed only on
+    // canvasSize/zoomable (stable during a touch); it reads the live viewport + projection through these
+    // updated refs so it always sees the latest without the pointerInput being torn down and relaunched
+    // on every viewport change (which was cancelling pinches/pans after a single frame).
+    val viewportRef = androidx.compose.runtime.rememberUpdatedState(viewport)
+    val projectionRef = androidx.compose.runtime.rememberUpdatedState(projection)
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
     val minHit = with(density) { 24.dp.toPx() }
@@ -112,8 +124,7 @@ fun InteractiveChart(
                 //   • one finger, held still past long-press   → SCRUB (pin + tooltip), drag moves the pin
                 //   • two fingers                              → ZOOM only (pinch; no lateral pan)
                 //   • double-tap                               → reset zoom (separate detector below)
-                .pointerInput(projection, zoomable) {
-                    val proj = projection
+                .pointerInput(canvasSize, zoomable) {
                     val plotW = ChartGutters.plotRect(size.toSize(), hasX = true, hasY = true, density = this).width
                     val longPressMs = android.view.ViewConfiguration.getLongPressTimeout().toLong()
                     val touchSlop = viewConfiguration.touchSlop
@@ -123,8 +134,11 @@ fun InteractiveChart(
                             val downTime = android.os.SystemClock.uptimeMillis()
                             var mode = 0 // 0 = undecided, 1 = pan, 2 = scrub, 3 = zoom
                             var lastX = down.position.x
-                            var lastPinchC = Float.NaN
-                            var lastPinchSpan = Float.NaN
+                            // Absolute pinch model: latch the span + scale when the 2nd finger lands, then
+                            // recompute scale from the CURRENT span each frame. Immune to the per-frame
+                            // ratchet that made the old incremental model discard zoom on every wobble.
+                            var startSpan = Float.NaN
+                            var scaleAtStart = 1f
 
                             while (true) {
                                 val event = awaitPointerEvent()
@@ -133,28 +147,35 @@ fun InteractiveChart(
                                     // Released without ever deciding a mode → treat as a tap: pin the
                                     // nearest point (or clear if the tap missed). Keeps tap-to-inspect
                                     // working, esp. for non-zoomable charts (scatter/weekly).
-                                    if (mode == 0 && proj != null) {
-                                        val h = hitTest(proj, down.position, minHit)
-                                        selected = h
-                                        if (h >= 0) { pointerX = down.position.x; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                    if (mode == 0) {
+                                        val proj = projectionRef.value
+                                        if (proj != null) {
+                                            val h = hitTest(proj, down.position, minHit)
+                                            selected = h
+                                            if (h >= 0) { pointerX = down.position.x; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        }
                                     }
                                     break
                                 }
 
                                 if (zoomable && pressed.size >= 2) {
-                                    // Two fingers → zoom only (ignore centroid translation entirely).
                                     mode = 3
-                                    val p0 = pressed[0]; val p1 = pressed[1]
-                                    val span = (p0.position - p1.position).getDistance()
-                                    if (!lastPinchSpan.isNaN() && lastPinchSpan > 1f) {
-                                        val zoom = span / lastPinchSpan
-                                        val cur = viewport
-                                        viewport = cur.copy(scale = (cur.scale * zoom).coerceIn(1f, maxZoom)).clamped()
+                                    val span = (pressed[0].position - pressed[1].position).getDistance()
+                                    if (startSpan.isNaN()) {
+                                        // Latch on 2nd-finger-down (and re-latch after dropping to 1 finger).
+                                        startSpan = span
+                                        scaleAtStart = viewportRef.value.scale
+                                    } else if (span > 1f && startSpan > 1f) {
+                                        val ratio = 1f + (span / startSpan - 1f) * ZOOM_GAIN
+                                        val cur = viewportRef.value
+                                        viewport = cur.copy(scale = (scaleAtStart * ratio).coerceIn(1f, maxZoom)).clamped()
                                     }
-                                    lastPinchSpan = span
                                     pressed.forEach { it.consume() }
                                     continue
                                 }
+                                // Back to (or still) one finger: drop the pinch latch so a re-pinch re-latches,
+                                // and resync lastX so the pan after a pinch doesn't jump from a stale value.
+                                if (!startSpan.isNaN()) { startSpan = Float.NaN; lastX = pressed.first().position.x }
 
                                 val cur = pressed.first()
                                 val dx = cur.position.x - lastX
@@ -166,35 +187,40 @@ fun InteractiveChart(
                                         // Moved before the long-press fired → pan.
                                         mode = if (zoomable) 1 else 2
                                         if (mode == 2) {
-                                            val h = hitTest(proj ?: break, cur.position, minHit)
-                                            if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                            projectionRef.value?.let { p ->
+                                                val h = hitTest(p, cur.position, minHit)
+                                                if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                            }
                                         }
                                     } else if (held) {
                                         // Held still long enough → scrub; pin the starting point.
                                         mode = 2
                                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        val h = hitTest(proj ?: break, cur.position, minHit)
-                                        if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                        projectionRef.value?.let { p ->
+                                            val h = hitTest(p, cur.position, minHit)
+                                            if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                        }
                                     }
                                 }
 
                                 when (mode) {
-                                    1 -> { // pan
+                                    1 -> { // pan — content tracks the finger 1:1
                                         if (plotW > 0f && dx != 0f) {
-                                            val c = viewport
+                                            val c = viewportRef.value
                                             viewport = c.copy(panFraction = c.panFraction - dx / plotW * c.windowFraction).clamped()
                                         }
                                         cur.consume()
                                     }
                                     2 -> { // scrub
-                                        val h = hitTest(proj ?: break, cur.position, minHit)
-                                        pointerX = cur.position.x
-                                        if (h >= 0 && h != selected) { selected = h; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        projectionRef.value?.let { p ->
+                                            val h = hitTest(p, cur.position, minHit)
+                                            pointerX = cur.position.x
+                                            if (h >= 0 && h != selected) { selected = h; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        }
                                         cur.consume()
                                     }
                                 }
                                 lastX = cur.position.x
-                                lastPinchSpan = Float.NaN
                             }
                         }
                     }
