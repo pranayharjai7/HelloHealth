@@ -94,7 +94,7 @@ fun DashboardScreen(
     val coachingViewModel: CoachingViewModel = hiltViewModel()
     val coachingState by coachingViewModel.uiState.collectAsState()
     val wellnessViewModel: com.hellohealth.ui.wellness.WellnessViewModel = hiltViewModel()
-    val wellnessSnapshot by wellnessViewModel.snapshot.collectAsState()
+    val wellnessState by wellnessViewModel.uiState.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -344,7 +344,8 @@ fun DashboardScreen(
 
                 // Hero wellness score card (top of the stack) → Wellness screen.
                 WellnessCard(
-                    snapshot = wellnessSnapshot,
+                    snapshot = wellnessState.snapshot,
+                    isLoading = wellnessState.isLoading,
                     onClick = onNavigateToWellness
                 )
 
@@ -361,6 +362,7 @@ fun DashboardScreen(
                     goalActiveMinutes = uiState.healthSummary.activeTimeGoal.toInt(),
                     vitals = vitalsState,
                     isConnected = uiState.hasHealthPermissions || uiState.lastSyncTime != null,
+                    isLoading = uiState.isLoading && uiState.healthSummary.lastUpdated == 0L,
                     onClick = onNavigateToHealth
                 )
 

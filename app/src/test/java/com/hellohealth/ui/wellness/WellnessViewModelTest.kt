@@ -50,15 +50,25 @@ class WellnessViewModelTest {
     fun `snapshot reacts to the selected date`() = runTest(dispatcher) {
         val holder = SelectedDateHolder()
         val vm = WellnessViewModel(FakeRepo(), holder)
-        val job = launch { vm.snapshot.collect {} }
+        val job = launch { vm.uiState.collect {} }
 
         advanceUntilIdle()
-        assertEquals(80, vm.snapshot.value?.score) // today
+        assertEquals(80, vm.uiState.value.snapshot?.score) // today
+        assertEquals("loading clears after first emission", false, vm.uiState.value.isLoading)
 
         holder.set(LocalDate.now().minusDays(2))
         advanceUntilIdle()
-        assertEquals("past day re-scopes the snapshot", 40, vm.snapshot.value?.score)
+        assertEquals("past day re-scopes the snapshot", 40, vm.uiState.value.snapshot?.score)
 
         job.cancel()
+    }
+
+    @Test
+    fun `initial state is loading before the first emission`() = runTest(dispatcher) {
+        val holder = SelectedDateHolder()
+        val vm = WellnessViewModel(FakeRepo(), holder)
+        // Before anyone collects / the flow emits, the state must read as loading, not empty.
+        assertEquals(true, vm.uiState.value.isLoading)
+        assertEquals(null, vm.uiState.value.snapshot)
     }
 }
