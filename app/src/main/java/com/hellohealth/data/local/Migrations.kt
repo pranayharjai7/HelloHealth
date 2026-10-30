@@ -681,3 +681,32 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
         db.execSQL("ALTER TABLE `cached_foods` ADD COLUMN `vitaminCMgPer` REAL")
     }
 }
+
+/**
+ * v18 → v19: the `nutrition_goals` table — the user's optional overrides for the otherwise-derived
+ * nutrition targets (one row per user). New CREATE TABLE with the 4 Syncable columns last, matching
+ * [com.hellohealth.data.local.entities.NutritionGoalsEntity] and Room's generated v19 schema
+ * (validated against 19.json by MigrationTest). Additive — no existing table is touched.
+ */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `nutrition_goals` (" +
+                "`userId` TEXT NOT NULL, " +
+                "`useCustomCalories` INTEGER NOT NULL, " +
+                "`calorieBudget` INTEGER, " +
+                "`useCustomMacros` INTEGER NOT NULL, " +
+                "`macroMode` TEXT NOT NULL, " +
+                "`proteinG` INTEGER, " +
+                "`carbsG` INTEGER, " +
+                "`fatG` INTEGER, " +
+                "`fiberG` INTEGER, " +
+                "`trackedMicros` TEXT NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                "`updatedAtTzOffsetMinutes` INTEGER NOT NULL, " +
+                "`deletedAtEpochMs` INTEGER, " +
+                "`isSynced` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`userId`))"
+        )
+    }
+}

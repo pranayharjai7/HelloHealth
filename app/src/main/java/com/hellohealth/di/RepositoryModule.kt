@@ -52,6 +52,12 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindNutritionGoalsRepository(
+        impl: com.hellohealth.data.repository.NutritionGoalsRepositoryImpl
+    ): com.hellohealth.domain.repository.NutritionGoalsRepository
+
+    @Binds
+    @Singleton
     abstract fun bindProfileRepository(
         profileRepositoryImpl: ProfileRepositoryImpl
     ): ProfileRepository

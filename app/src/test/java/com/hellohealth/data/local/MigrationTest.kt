@@ -927,4 +927,43 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 18 to 19 creates nutrition_goals and preserves other tables`() {
+        // A v18 user has a nutrition entry; MIGRATION_18_19 only CREATEs nutrition_goals, so the
+        // existing row must survive and the new table must accept an override row.
+        helper.createDatabase(dbName, 18).apply {
+            execSQL(
+                "INSERT INTO nutrition_entries " +
+                    "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, foodName, " +
+                    "quantity, unit, calories, entryMethod, updatedAtEpochMs, updatedAtTzOffsetMinutes, " +
+                    "deletedAtEpochMs, isSynced) " +
+                    "VALUES ('n1', 'u1', '2026-10-30', 1000, 0, 'food', 'Spinach', 100.0, 'g', 23.0, " +
+                    "'catalog', 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(dbName, 19, true, MIGRATION_18_19)
+
+        // Existing data survived the CREATE-only migration.
+        db.query("SELECT foodName FROM nutrition_entries WHERE id = 'n1'").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals("Spinach", c.getString(0))
+        }
+
+        // The new table accepts a custom-override row (bool as INTEGER, nullable ints, CSV micros).
+        db.execSQL(
+            "INSERT INTO nutrition_goals " +
+                "(userId, useCustomCalories, calorieBudget, useCustomMacros, macroMode, proteinG, carbsG, " +
+                "fatG, fiberG, trackedMicros, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1', 1, 2000, 1, 'GRAMS', 180, 200, 60, 30, 'IRON,VITAMIN_C', 1000, 0, NULL, 0)"
+        )
+        db.query("SELECT calorieBudget, proteinG, trackedMicros FROM nutrition_goals WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(2000, c.getInt(0))
+            assertEquals(180, c.getInt(1))
+            assertEquals("IRON,VITAMIN_C", c.getString(2))
+        }
+        db.close()
+    }
 }
