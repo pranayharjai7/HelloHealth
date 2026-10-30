@@ -1,6 +1,7 @@
 package com.hellohealth.ui.charts.interaction
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
+import com.hellohealth.ui.charts.ChartGutters
+import com.hellohealth.ui.charts.ChartViewport
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -72,28 +75,64 @@ enum class CrosshairStyle { Vertical, MarkLift }
 fun InteractiveChart(
     heightDp: Dp,
     accent: Color,
-    project: (Size) -> ChartProjection,
+    project: (Size, ChartViewport) -> ChartProjection,
     tooltipFor: (Int) -> TooltipSpec,
     modifier: Modifier = Modifier,
     crosshair: CrosshairStyle = CrosshairStyle.Vertical,
     // Optional override: given the live pointer x and the nearest index, a chart may return a special
     // tooltip (e.g. "No reading" when the pointer is inside a data gap). Null → fall back to tooltipFor.
     tooltipAt: ((pointerX: Float, nearestIndex: Int) -> TooltipSpec?)? = null,
-    chartBody: @Composable (Modifier) -> Unit,
+    // When true (default) a two-finger pinch zooms and pans the x-axis; double-tap resets. Charts with
+    // too few points to benefit (e.g. scatter) pass false to stay fixed.
+    zoomable: Boolean = true,
+    // Max horizontal zoom factor. Clamped per-chart so a sparse series can't zoom into nonsense.
+    maxZoom: Float = 6f,
+    chartBody: @Composable (Modifier, ChartViewport) -> Unit,
 ) {
     var selected by remember { mutableStateOf(-1) }
     var pointerX by remember { mutableStateOf(Float.NaN) }
-    var projection by remember { mutableStateOf<ChartProjection?>(null) }
+    var viewport by remember { mutableStateOf(ChartViewport()) }
+    var canvasSize by remember { mutableStateOf(Size.Zero) }
+    val projection = remember(canvasSize, viewport) {
+        if (canvasSize == Size.Zero) null else project(canvasSize, viewport)
+    }
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
     val minHit = with(density) { 24.dp.toPx() }
 
     Box(modifier.fillMaxWidth().height(heightDp)) {
-        chartBody(Modifier.matchParentSize().onSizeChanged { projection = project(it.toSize()) })
+        chartBody(Modifier.matchParentSize().onSizeChanged { canvasSize = it.toSize() }, viewport)
 
         Box(
             Modifier
                 .matchParentSize()
+                // Two-finger pinch/pan navigates the x-axis; kept on its own detector so it never fights
+                // the one-finger scrub below or the parent vertical scroll (two-finger is unambiguous).
+                .then(
+                    if (zoomable) Modifier.pointerInput(canvasSize) {
+                        val plotW = ChartGutters.plotRect(size.toSize(), hasX = true, hasY = true, density = this).width
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                if (pressed.size < 2 || plotW <= 0f) continue // single finger → leave to scrub
+                                val p0 = pressed[0]; val p1 = pressed[1]
+                                val prevC = (p0.previousPosition + p1.previousPosition) / 2f
+                                val curC = (p0.position + p1.position) / 2f
+                                val prevSpan = (p0.previousPosition - p1.previousPosition).getDistance()
+                                val curSpan = (p0.position - p1.position).getDistance()
+                                val zoom = if (prevSpan > 1f) curSpan / prevSpan else 1f
+                                val panPx = curC.x - prevC.x
+                                val cur = viewport
+                                val newScale = (cur.scale * zoom).coerceIn(1f, maxZoom)
+                                // Dragging right moves the window left (pan in fraction-of-full-range).
+                                val panDelta = -panPx / plotW * cur.windowFraction
+                                viewport = cur.copy(scale = newScale, panFraction = cur.panFraction + panDelta).clamped()
+                                pressed.forEach { it.consume() }
+                            }
+                        }
+                    } else Modifier
+                )
                 .pointerInput(projection) {
                     val proj = projection ?: return@pointerInput
                     // One unified handler distinguishes tap (clear) from drag (scrub) by movement,
@@ -103,6 +142,7 @@ fun InteractiveChart(
                             val down = awaitPointerEvent()
                             val first = down.changes.firstOrNull() ?: continue
                             if (!first.pressed) continue
+                            if (down.changes.size > 1) continue // let the transform detector own multitouch
                             val hit = hitTest(proj, first.position, minHit)
                             if (hit >= 0) { selected = hit; pointerX = first.position.x; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
                             else selected = -1 // tap on empty space clears the pin
@@ -117,6 +157,11 @@ fun InteractiveChart(
                         if (i >= 0 && i != selected) { selected = i; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
                     }
                 }
+                .then(
+                    if (zoomable) Modifier.pointerInput(Unit) {
+                        detectTapGestures(onDoubleTap = { viewport = ChartViewport() })
+                    } else Modifier
+                )
         ) {
             val proj = projection
             if (proj != null && selected in 0 until proj.count) {
@@ -129,7 +174,23 @@ fun InteractiveChart(
                     TooltipBubble(proj.anchorOf(selected), tooltipFor(selected), proj.size)
                 }
             }
+            // A quiet "zoomed · double-tap to reset" hint + a scrollbar strip showing the window position.
+            if (zoomable && !viewport.isIdentity && proj != null) {
+                ViewportHint(viewport, accent, proj.size)
+            }
         }
+    }
+}
+
+/** A thin bottom scrollbar strip indicating the visible window within the full range when zoomed. */
+@Composable
+private fun ViewportHint(viewport: ChartViewport, accent: Color, size: Size) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val trackY = this.size.height - 2f
+        val x0 = viewport.panFraction * this.size.width
+        val x1 = (viewport.panFraction + viewport.windowFraction) * this.size.width
+        drawLine(accent.copy(alpha = 0.15f), Offset(0f, trackY), Offset(this.size.width, trackY), strokeWidth = 3f)
+        drawLine(accent.copy(alpha = 0.8f), Offset(x0, trackY), Offset(x1, trackY), strokeWidth = 3f)
     }
 }
 

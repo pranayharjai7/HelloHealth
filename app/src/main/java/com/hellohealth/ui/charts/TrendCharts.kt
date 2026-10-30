@@ -116,13 +116,13 @@ fun InteractiveTrendLine(
         com.hellohealth.ui.charts.interaction.InteractiveChart(
             heightDp = 180.dp,
             accent = metric.color,
-            project = { size ->
+            project = { size, vp ->
                 val plot = ChartGutters.plotRect(size, hasX = xAxis != null, hasY = true, density = density)
                 com.hellohealth.ui.charts.interaction.ChartProjection(
                     size = size,
                     count = pts.size,
                     anchorOf = { i ->
-                        val x = plot.left + (pts[i].first / maxIndex) * plot.width
+                        val x = plot.left + vp.toWindow(pts[i].first / maxIndex) * plot.width
                         val y = plot.bottom - ((pts[i].second - yAxis.min) / yAxis.span) * plot.height
                         Offset(x, y)
                     },
@@ -135,8 +135,8 @@ fun InteractiveTrendLine(
                     rows = listOf(com.hellohealth.ui.charts.interaction.TooltipRow("", formatValue(pts[i].second, metric.unit), metric.color)),
                 )
             },
-        ) { m ->
-            ChartScaffold(heightDp = 180.dp, xAxis = xAxis, yAxis = yAxis, gridColor = gridColor, labelColor = labelColor, modifier = m) { mapping ->
+        ) { m, vp ->
+            ChartScaffold(heightDp = 180.dp, xAxis = xAxis, yAxis = yAxis, gridColor = gridColor, labelColor = labelColor, modifier = m, viewport = vp) { mapping ->
                 drawTrendInRect(pts, metric.color, mapping, maxIndex, yAxis)
             }
         }
@@ -158,7 +158,7 @@ private fun DrawScope.drawTrendInRect(
 ) {
     val plot = mapping.plot
     fun px(i: Int) = Offset(
-        plot.left + (points[i].first / maxIndex) * plot.width,
+        mapping.visibleX(points[i].first / maxIndex),
         plot.bottom - ((points[i].second - yAxis.min) / yAxis.span) * plot.height,
     )
     val pixels = points.indices.map { px(it) }

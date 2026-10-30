@@ -89,19 +89,22 @@ fun TimeOfDayChart(
     }
 
     androidx.compose.foundation.layout.Column(modifier) {
-        // Holds the plot rect computed in project() so the gap-tooltip can map pointer-x → day-fraction.
+        // Holds the plot rect + active viewport computed in project() so the gap-tooltip can map
+        // pointer-x → day-fraction through the same zoom/pan transform the marks use.
         var plotRect by remember { mutableStateOf<Rect?>(null) }
+        var activeVp by remember { mutableStateOf(ChartViewport()) }
         InteractiveChart(
             heightDp = 180.dp,
             accent = lineColor,
-            project = { size ->
+            project = { size, vp ->
                 val plot = ChartGutters.plotRect(size, hasX = true, hasY = true, density = density)
                 plotRect = plot
+                activeVp = vp
                 ChartProjection(
                     size = size,
                     count = sorted.size,
                     anchorOf = { i ->
-                        val x = plot.left + timeOfDayFraction(sorted[i].epochMs, zone) * plot.width
+                        val x = plot.left + vp.toWindow(timeOfDayFraction(sorted[i].epochMs, zone)) * plot.width
                         val y = plot.bottom - ((sorted[i].value - yAxis.min) / yAxis.span) * plot.height
                         Offset(x, y)
                     },
@@ -115,12 +118,13 @@ fun TimeOfDayChart(
                 if (gaps.isEmpty()) return@gapTooltip null
                 val plot = plotRect ?: return@gapTooltip null
                 if (plot.width <= 0f) return@gapTooltip null
-                val frac = ((pointerX - plot.left) / plot.width).coerceIn(0f, 1f)
-                // If the pointer's time-fraction falls strictly inside a gap span, there's no reading.
+                // Invert the viewport: pointer pixel → window fraction → full-range day fraction.
+                val windowFrac = (pointerX - plot.left) / plot.width
+                val frac = (activeVp.panFraction + windowFrac * activeVp.windowFraction).coerceIn(0f, 1f)
                 val inGap = gaps.any { (a, b) -> frac > a && frac < b }
                 if (inGap) TooltipSpec(title = "No reading", rows = listOf(TooltipRow("", "device not worn", labelColor))) else null
             },
-        ) { m ->
+        ) { m, vp ->
             ChartScaffold(
                 heightDp = 180.dp,
                 xAxis = xAxis,
@@ -128,14 +132,15 @@ fun TimeOfDayChart(
                 gridColor = gridColor,
                 labelColor = labelColor,
                 modifier = m,
+                viewport = vp,
             ) { mapping ->
                 val toPixel = { frac: Float, v: Float ->
-                    Offset(mapping.plot.left + frac * mapping.plot.width, mapping.mapY(v))
+                    Offset(mapping.visibleX(frac), mapping.mapY(v))
                 }
                 // Shade interior gaps (device not worn) so a gap reads as known absence, not a blank chart.
                 for ((a, b) in gaps) {
-                    val x0 = mapping.plot.left + a * mapping.plot.width
-                    val x1 = mapping.plot.left + b * mapping.plot.width
+                    val x0 = mapping.visibleX(a)
+                    val x1 = mapping.visibleX(b)
                     drawRect(
                         color = labelColor.copy(alpha = 0.06f),
                         topLeft = Offset(x0, mapping.plot.top),

@@ -183,7 +183,8 @@ private fun DualTrend(
     com.hellohealth.ui.charts.interaction.InteractiveChart(
         heightDp = 170.dp,
         accent = primaryColor,
-        project = { size ->
+        zoomable = false, // weekly cross-insight chart: ~7 points + custom Canvas (no ChartScaffold); zoom adds nothing
+        project = { size, _ ->
             com.hellohealth.ui.charts.interaction.ChartProjection(
                 size = size,
                 count = primary.size,
@@ -206,7 +207,7 @@ private fun DualTrend(
             }
             com.hellohealth.ui.charts.interaction.TooltipSpec(labels.getOrNull(i) ?: "Day ${i + 1}", rows)
         },
-    ) { chartMod ->
+    ) { chartMod, _ ->
     Canvas(
         modifier = chartMod
             .fillMaxWidth()
@@ -272,7 +273,8 @@ private fun Scatter(points: List<Pair<Double, Int>>, xLabel: String, yLabel: Str
         heightDp = 170.dp,
         accent = dotColor,
         crosshair = com.hellohealth.ui.charts.interaction.CrosshairStyle.MarkLift,
-        project = { size ->
+        zoomable = false, // scatter is 2D (both axes are data) — single-axis x zoom doesn't apply
+        project = { size, _ ->
             val padL = 8f; val padB = 8f
             com.hellohealth.ui.charts.interaction.ChartProjection(
                 size = size,
@@ -291,7 +293,7 @@ private fun Scatter(points: List<Pair<Double, Int>>, xLabel: String, yLabel: Str
                 rows = listOf(com.hellohealth.ui.charts.interaction.TooltipRow(yLabel, "${points[i].second}", dotColor)),
             )
         },
-    ) { chartMod ->
+    ) { chartMod, _ ->
         Canvas(
             modifier = chartMod
                 .fillMaxWidth()

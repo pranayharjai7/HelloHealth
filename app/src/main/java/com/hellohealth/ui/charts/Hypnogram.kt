@@ -72,7 +72,7 @@ fun Hypnogram(
             heightDp = 150.dp,
             accent = deepColor,
             crosshair = CrosshairStyle.MarkLift,
-            project = { size ->
+            project = { size, vp ->
                 val plot = ChartGutters.plotRect(size, hasX = true, hasY = true, density = density)
                 val laneH = plot.height / 4f
                 ChartProjection(
@@ -82,7 +82,7 @@ fun Hypnogram(
                     anchorOf = { i ->
                         val seg = shown[i]
                         val lane = laneOf(seg.stage)!! // filtered above
-                        val cx = plot.left + (fracOf(seg.startMs) + fracOf(seg.endMs)) / 2f * plot.width
+                        val cx = plot.left + vp.toWindow((fracOf(seg.startMs) + fracOf(seg.endMs)) / 2f) * plot.width
                         val cy = plot.top + (lane + 0.5f) * laneH
                         Offset(cx, cy)
                     },
@@ -95,15 +95,15 @@ fun Hypnogram(
                 val lane = laneOf(seg.stage)!!
                 TooltipSpec("$from–$to", listOf(TooltipRow("", LANE_NAMES[lane], laneColors[lane])))
             },
-        ) { m ->
-            ChartScaffold(heightDp = 150.dp, xAxis = xAxis, yAxis = yAxis, gridColor = gridColor, labelColor = labelColor, modifier = m) { mapping ->
+        ) { m, vp ->
+            ChartScaffold(heightDp = 150.dp, xAxis = xAxis, yAxis = yAxis, gridColor = gridColor, labelColor = labelColor, modifier = m, viewport = vp) { mapping ->
                 val plot = mapping.plot
                 val laneH = plot.height / 4f
                 val gap = 2.dp.toPx()
                 shown.forEach { seg ->
                     val lane = laneOf(seg.stage)!!
-                    val x0 = plot.left + fracOf(seg.startMs) * plot.width
-                    val x1 = plot.left + fracOf(seg.endMs) * plot.width
+                    val x0 = mapping.visibleX(fracOf(seg.startMs))
+                    val x1 = mapping.visibleX(fracOf(seg.endMs))
                     val top = plot.top + lane * laneH + gap / 2f
                     drawRoundRect(
                         color = laneColors[lane],

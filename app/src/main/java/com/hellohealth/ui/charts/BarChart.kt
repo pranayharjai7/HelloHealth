@@ -54,7 +54,7 @@ fun BarChart(
             heightDp = 160.dp,
             accent = barColor,
             crosshair = CrosshairStyle.MarkLift,
-            project = { size ->
+            project = { size, vp ->
                 val plot = ChartGutters.plotRect(size, hasX = xAxis != null, hasY = true, density = density)
                 val slot = plot.width / bars.size
                 ChartProjection(
@@ -62,7 +62,7 @@ fun BarChart(
                     count = bars.size,
                     hitRadiusPx = slot / 2f,
                     anchorOf = { i ->
-                        val cx = plot.left + (i + 0.5f) * slot
+                        val cx = plot.left + vp.toWindow((i + 0.5f) / bars.size) * plot.width
                         val top = plot.bottom - (bars[i].value / yAxis.span) * plot.height
                         Offset(cx, top)
                     },
@@ -74,7 +74,7 @@ fun BarChart(
                     rows = listOf(TooltipRow("", "${bars[i].value.toInt()} $unit", barColor)),
                 )
             },
-        ) { m ->
+        ) { m, vp ->
             ChartScaffold(
                 heightDp = 160.dp,
                 xAxis = xAxis,
@@ -82,14 +82,15 @@ fun BarChart(
                 gridColor = gridColor,
                 labelColor = labelColor,
                 modifier = m,
+                viewport = vp,
             ) { mapping ->
                 val plot = mapping.plot
                 val slot = plot.width / bars.size
-                val barW = minOf(slot - 2.dp.toPx(), 24.dp.toPx()).coerceAtLeast(1f)
+                val barW = minOf((slot * vp.scale) - 2.dp.toPx(), 24.dp.toPx()).coerceAtLeast(1f)
                 bars.forEachIndexed { i, bar ->
                     if (bar.value <= 0f) return@forEachIndexed
                     val h = (bar.value / yAxis.span) * plot.height
-                    val cx = plot.left + (i + 0.5f) * slot
+                    val cx = mapping.visibleX((i + 0.5f) / bars.size)
                     drawRoundRect(
                         color = barColor.copy(alpha = 0.85f),
                         topLeft = Offset(cx - barW / 2f, plot.bottom - h),
