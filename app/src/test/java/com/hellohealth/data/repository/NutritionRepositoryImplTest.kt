@@ -256,4 +256,37 @@ class NutritionRepositoryImplTest {
         repo.seedCatalogIfEmpty()
         assertEquals(0, foodDao.count())
     }
+
+    @Test
+    fun `seedCatalogIfEmpty re-seeds when stored seed rows predate micronutrients`() = runTest {
+        // Simulate an existing user whose catalog was seeded before the micronutrient backfill:
+        // seed:spinach is present but its sodiumMgPer is null.
+        foodDao.insertAll(
+            listOf(
+                CachedFoodEntity(
+                    id = "seed:spinach", name = "Spinach", source = "seed",
+                    basisUnit = "per_100g", caloriesPer = 23.0, sodiumMgPer = null,
+                    lastRefreshedEpochMs = 1L,
+                )
+            )
+        )
+        // A refreshed catalog now carries micronutrients.
+        val refreshed = listOf(
+            CachedFoodEntity(
+                id = "seed:spinach", name = "Spinach", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 23.0, sodiumMgPer = 79.0,
+                calciumMgPer = 99.0, ironMgPer = 2.71, lastRefreshedEpochMs = 2L,
+            )
+        )
+        val repo = repo("u1", catalogResult = Result.success(refreshed))
+
+        // Count is > 0 but the sentinel row lacks micros → re-seed (REPLACE) runs.
+        repo.seedCatalogIfEmpty()
+        assertEquals(79.0, foodDao.getById("seed:spinach")?.sodiumMgPer)
+
+        // Now the sentinel has micros → a subsequent call is a no-op (no needless re-seed).
+        val repo2 = repo("u1", catalogResult = Result.failure(RuntimeException("should not be read")))
+        repo2.seedCatalogIfEmpty()
+        assertEquals(79.0, foodDao.getById("seed:spinach")?.sodiumMgPer)
+    }
 }

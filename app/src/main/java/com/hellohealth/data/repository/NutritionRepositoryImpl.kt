@@ -238,12 +238,17 @@ class NutritionRepositoryImpl @Inject constructor(
     }
 
     override suspend fun seedCatalogIfEmpty() {
-        // Count-gated + idempotent: seed the bundled common-foods asset only when the cache is empty,
-        // so this is safe to call on every launch (covers fresh installs and migrated users, and
-        // self-heals a prior partial seed). Never throws — a bad asset just leaves the cache empty
-        // and the app falls back to quick-add + remote search. Mirrors the exercise-catalog seed.
+        // Count-gated + idempotent: seed the bundled common-foods asset when the cache is empty, so this
+        // is safe to call on every launch (fresh installs + migrated users, and self-heals a partial
+        // seed). ALSO re-seeds when the bundled catalog has gained data the stored rows lack — detected
+        // by a sentinel seed row ("seed:spinach") missing its micronutrients — so a catalog content
+        // update (e.g. the micronutrient backfill) reaches existing users. insertAll is REPLACE, so a
+        // re-seed overwrites the seed:* rows in place and leaves user-fetched usda:/off: rows untouched.
+        // Never throws — a bad asset just leaves the cache as-is and the app falls back to remote search.
         val existing = runCatching { cachedFoodDao.count() }.getOrDefault(0)
-        if (existing > 0) return
+        val needsMicroBackfill = existing > 0 &&
+            runCatching { cachedFoodDao.getById("seed:spinach")?.sodiumMgPer == null }.getOrDefault(false)
+        if (existing > 0 && !needsMicroBackfill) return
         catalogAssetLoader.load(Timestamps.nowEpochMs())
             .onSuccess { foods ->
                 if (foods.isEmpty()) {
@@ -251,7 +256,7 @@ class NutritionRepositoryImpl @Inject constructor(
                     return
                 }
                 runCatching { cachedFoodDao.insertAll(foods) }
-                    .onSuccess { AppLogger.d(FeatureTag.NUTRITION, "seeded ${foods.size} catalog food(s)") }
+                    .onSuccess { AppLogger.d(FeatureTag.NUTRITION, "seeded ${foods.size} catalog food(s)${if (needsMicroBackfill) " (micronutrient backfill)" else ""}") }
                     .onFailure { AppLogger.w(FeatureTag.NUTRITION, "catalog seed insert failed: ${it.message}") }
             }
             .onFailure {
