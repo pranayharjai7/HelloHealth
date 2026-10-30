@@ -1,6 +1,7 @@
 package com.hellohealth.ui.charts.interaction
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -106,55 +107,96 @@ fun InteractiveChart(
         Box(
             Modifier
                 .matchParentSize()
-                // Two-finger pinch/pan navigates the x-axis; kept on its own detector so it never fights
-                // the one-finger scrub below or the parent vertical scroll (two-finger is unambiguous).
-                .then(
-                    if (zoomable) Modifier.pointerInput(canvasSize) {
-                        val plotW = ChartGutters.plotRect(size.toSize(), hasX = true, hasY = true, density = this).width
-                        awaitPointerEventScope {
+                // One unified gesture handler so the three modes never fight each other:
+                //   • one finger, moved right away            → PAN the viewport left/right
+                //   • one finger, held still past long-press   → SCRUB (pin + tooltip), drag moves the pin
+                //   • two fingers                              → ZOOM only (pinch; no lateral pan)
+                //   • double-tap                               → reset zoom (separate detector below)
+                .pointerInput(projection, zoomable) {
+                    val proj = projection
+                    val plotW = ChartGutters.plotRect(size.toSize(), hasX = true, hasY = true, density = this).width
+                    val longPressMs = android.view.ViewConfiguration.getLongPressTimeout().toLong()
+                    val touchSlop = viewConfiguration.touchSlop
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val downTime = android.os.SystemClock.uptimeMillis()
+                            var mode = 0 // 0 = undecided, 1 = pan, 2 = scrub, 3 = zoom
+                            var lastX = down.position.x
+                            var lastPinchC = Float.NaN
+                            var lastPinchSpan = Float.NaN
+
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val pressed = event.changes.filter { it.pressed }
-                                if (pressed.size < 2 || plotW <= 0f) continue // single finger → leave to scrub
-                                val p0 = pressed[0]; val p1 = pressed[1]
-                                val prevC = (p0.previousPosition + p1.previousPosition) / 2f
-                                val curC = (p0.position + p1.position) / 2f
-                                val prevSpan = (p0.previousPosition - p1.previousPosition).getDistance()
-                                val curSpan = (p0.position - p1.position).getDistance()
-                                val zoom = if (prevSpan > 1f) curSpan / prevSpan else 1f
-                                val panPx = curC.x - prevC.x
-                                val cur = viewport
-                                val newScale = (cur.scale * zoom).coerceIn(1f, maxZoom)
-                                // Dragging right moves the window left (pan in fraction-of-full-range).
-                                val panDelta = -panPx / plotW * cur.windowFraction
-                                viewport = cur.copy(scale = newScale, panFraction = cur.panFraction + panDelta).clamped()
-                                pressed.forEach { it.consume() }
+                                if (pressed.isEmpty()) {
+                                    // Released without ever deciding a mode → treat as a tap: pin the
+                                    // nearest point (or clear if the tap missed). Keeps tap-to-inspect
+                                    // working, esp. for non-zoomable charts (scatter/weekly).
+                                    if (mode == 0 && proj != null) {
+                                        val h = hitTest(proj, down.position, minHit)
+                                        selected = h
+                                        if (h >= 0) { pointerX = down.position.x; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                    }
+                                    break
+                                }
+
+                                if (zoomable && pressed.size >= 2) {
+                                    // Two fingers → zoom only (ignore centroid translation entirely).
+                                    mode = 3
+                                    val p0 = pressed[0]; val p1 = pressed[1]
+                                    val span = (p0.position - p1.position).getDistance()
+                                    if (!lastPinchSpan.isNaN() && lastPinchSpan > 1f) {
+                                        val zoom = span / lastPinchSpan
+                                        val cur = viewport
+                                        viewport = cur.copy(scale = (cur.scale * zoom).coerceIn(1f, maxZoom)).clamped()
+                                    }
+                                    lastPinchSpan = span
+                                    pressed.forEach { it.consume() }
+                                    continue
+                                }
+
+                                val cur = pressed.first()
+                                val dx = cur.position.x - lastX
+                                if (mode == 0) {
+                                    val moved = kotlin.math.abs(cur.position.x - down.position.x) > touchSlop ||
+                                        kotlin.math.abs(cur.position.y - down.position.y) > touchSlop
+                                    val held = android.os.SystemClock.uptimeMillis() - downTime >= longPressMs
+                                    if (moved) {
+                                        // Moved before the long-press fired → pan.
+                                        mode = if (zoomable) 1 else 2
+                                        if (mode == 2) {
+                                            val h = hitTest(proj ?: break, cur.position, minHit)
+                                            if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                        }
+                                    } else if (held) {
+                                        // Held still long enough → scrub; pin the starting point.
+                                        mode = 2
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        val h = hitTest(proj ?: break, cur.position, minHit)
+                                        if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                    }
+                                }
+
+                                when (mode) {
+                                    1 -> { // pan
+                                        if (plotW > 0f && dx != 0f) {
+                                            val c = viewport
+                                            viewport = c.copy(panFraction = c.panFraction - dx / plotW * c.windowFraction).clamped()
+                                        }
+                                        cur.consume()
+                                    }
+                                    2 -> { // scrub
+                                        val h = hitTest(proj ?: break, cur.position, minHit)
+                                        pointerX = cur.position.x
+                                        if (h >= 0 && h != selected) { selected = h; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        cur.consume()
+                                    }
+                                }
+                                lastX = cur.position.x
+                                lastPinchSpan = Float.NaN
                             }
                         }
-                    } else Modifier
-                )
-                .pointerInput(projection) {
-                    val proj = projection ?: return@pointerInput
-                    // One unified handler distinguishes tap (clear) from drag (scrub) by movement,
-                    // avoiding the two-sibling-detector down-event conflict.
-                    awaitPointerEventScope {
-                        while (true) {
-                            val down = awaitPointerEvent()
-                            val first = down.changes.firstOrNull() ?: continue
-                            if (!first.pressed) continue
-                            if (down.changes.size > 1) continue // let the transform detector own multitouch
-                            val hit = hitTest(proj, first.position, minHit)
-                            if (hit >= 0) { selected = hit; pointerX = first.position.x; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-                            else selected = -1 // tap on empty space clears the pin
-                        }
-                    }
-                }
-                .pointerInput(projection) {
-                    val proj = projection ?: return@pointerInput
-                    detectHorizontalDrag { pos ->
-                        val i = hitTest(proj, pos, minHit)
-                        pointerX = pos.x
-                        if (i >= 0 && i != selected) { selected = i; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
                     }
                 }
                 .then(
@@ -191,20 +233,6 @@ private fun ViewportHint(viewport: ChartViewport, accent: Color, size: Size) {
         val x1 = (viewport.panFraction + viewport.windowFraction) * this.size.width
         drawLine(accent.copy(alpha = 0.15f), Offset(0f, trackY), Offset(this.size.width, trackY), strokeWidth = 3f)
         drawLine(accent.copy(alpha = 0.8f), Offset(x0, trackY), Offset(x1, trackY), strokeWidth = 3f)
-    }
-}
-
-/** Scrub detector: reports the pointer position on down + every horizontal move. */
-private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectHorizontalDrag(
-    onPos: (Offset) -> Unit,
-) {
-    awaitPointerEventScope {
-        while (true) {
-            val down = awaitPointerEvent()
-            val change = down.changes.firstOrNull { it.pressed } ?: continue
-            onPos(change.position)
-            change.consume()
-        }
     }
 }
 
