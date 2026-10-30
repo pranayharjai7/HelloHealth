@@ -10,6 +10,7 @@ import com.hellohealth.data.local.dao.CachedFoodDao
 import com.hellohealth.data.local.dao.NutritionEntryDao
 import com.hellohealth.data.local.entities.CachedFoodEntity
 import com.hellohealth.data.local.entities.NutritionEntryEntity
+import com.hellohealth.domain.health.MicronutrientTargets.Micro
 import com.hellohealth.domain.model.nutrition.FoodEntry
 import com.hellohealth.domain.model.nutrition.MealCategory
 import com.hellohealth.domain.model.nutrition.NutritionDaySummary
@@ -136,6 +137,7 @@ class NutritionRepositoryImpl @Inject constructor(
             carbsG = scaled.carbsG,
             fatG = scaled.fatG,
             fibreG = scaled.fibreG,
+            micros = scaled.micros,
             entryMethod = ENTRY_CATALOG,
         )
     }
@@ -280,6 +282,7 @@ class NutritionRepositoryImpl @Inject constructor(
         carbsG: Double?,
         fatG: Double?,
         fibreG: Double?,
+        micros: Map<com.hellohealth.domain.health.MicronutrientTargets.Micro, Double> = emptyMap(),
         entryMethod: String,
     ) {
         val nowMs = Timestamps.nowEpochMs()
@@ -301,6 +304,14 @@ class NutritionRepositoryImpl @Inject constructor(
                 carbsG = carbsG,
                 fatG = fatG,
                 fibreG = fibreG,
+                sodiumMg = micros[Micro.SODIUM],
+                saturatedFatG = micros[Micro.SATURATED_FAT],
+                sugarG = micros[Micro.SUGAR],
+                calciumMg = micros[Micro.CALCIUM],
+                ironMg = micros[Micro.IRON],
+                potassiumMg = micros[Micro.POTASSIUM],
+                vitaminDMcg = micros[Micro.VITAMIN_D],
+                vitaminCMg = micros[Micro.VITAMIN_C],
                 waterMl = null,
                 entryMethod = entryMethod,
                 updatedAtEpochMs = nowMs,
@@ -319,12 +330,13 @@ class NutritionRepositoryImpl @Inject constructor(
         val carbsG: Double?,
         val fatG: Double?,
         val fibreG: Double?,
+        val micros: Map<com.hellohealth.domain.health.MicronutrientTargets.Micro, Double>,
     )
 
     /**
      * Scale a catalog food's per-basis facts to the logged [quantity]. For a `per_100g` basis the
      * quantity is grams (factor = grams/100); for a `per_serving` basis the quantity is a serving
-     * count (factor = quantity). Null per-basis macros stay null.
+     * count (factor = quantity). Null per-basis macros stay null; absent micronutrients stay absent.
      */
     private fun scaleMacros(food: CachedFoodEntity, quantity: Double): ScaledMacros {
         val factor = when (food.basisUnit) {
@@ -332,12 +344,23 @@ class NutritionRepositoryImpl @Inject constructor(
             else -> quantity // per_serving (or unknown → treat quantity as the multiplier)
         }
         fun scale(value: Double?) = value?.let { it * factor }
+        val micros = buildMap {
+            scale(food.sodiumMgPer)?.let { put(Micro.SODIUM, it) }
+            scale(food.saturatedFatGPer)?.let { put(Micro.SATURATED_FAT, it) }
+            scale(food.sugarGPer)?.let { put(Micro.SUGAR, it) }
+            scale(food.calciumMgPer)?.let { put(Micro.CALCIUM, it) }
+            scale(food.ironMgPer)?.let { put(Micro.IRON, it) }
+            scale(food.potassiumMgPer)?.let { put(Micro.POTASSIUM, it) }
+            scale(food.vitaminDMcgPer)?.let { put(Micro.VITAMIN_D, it) }
+            scale(food.vitaminCMgPer)?.let { put(Micro.VITAMIN_C, it) }
+        }
         return ScaledMacros(
             calories = food.caloriesPer * factor,
             proteinG = scale(food.proteinGPer),
             carbsG = scale(food.carbsGPer),
             fatG = scale(food.fatGPer),
             fibreG = scale(food.fibreGPer),
+            micros = micros,
         )
     }
 
@@ -360,22 +383,41 @@ class NutritionRepositoryImpl @Inject constructor(
             fibreG = entries.sumOf { it.fibreG ?: 0.0 },
             waterMl = waterRows.sumOf { it.waterMl ?: 0.0 },
             entriesByMeal = byMeal,
+            // Sum each micronutrient over the entries that carried it; a micro no entry had stays absent
+            // (so the UI shows "— no data" rather than a fake 0).
+            micros = Micro.entries.mapNotNull { micro ->
+                val present = entries.mapNotNull { it.micros[micro] }
+                if (present.isEmpty()) null else micro to present.sum()
+            }.toMap(),
         )
     }
 
-    private fun NutritionEntryEntity.toFoodEntry() = FoodEntry(
-        id = id,
-        mealCategory = MealCategory.fromWire(mealCategory),
-        foodName = foodName,
-        quantity = quantity,
-        unit = unit,
-        calories = calories,
-        proteinG = proteinG,
-        carbsG = carbsG,
-        fatG = fatG,
-        fibreG = fibreG,
-        timestampUtcEpochMs = timestampUtcEpochMs,
-    )
+    private fun NutritionEntryEntity.toFoodEntry(): FoodEntry {
+        val micros = buildMap {
+            sodiumMg?.let { put(Micro.SODIUM, it) }
+            saturatedFatG?.let { put(Micro.SATURATED_FAT, it) }
+            sugarG?.let { put(Micro.SUGAR, it) }
+            calciumMg?.let { put(Micro.CALCIUM, it) }
+            ironMg?.let { put(Micro.IRON, it) }
+            potassiumMg?.let { put(Micro.POTASSIUM, it) }
+            vitaminDMcg?.let { put(Micro.VITAMIN_D, it) }
+            vitaminCMg?.let { put(Micro.VITAMIN_C, it) }
+        }
+        return FoodEntry(
+            id = id,
+            mealCategory = MealCategory.fromWire(mealCategory),
+            foodName = foodName,
+            quantity = quantity,
+            unit = unit,
+            calories = calories,
+            proteinG = proteinG,
+            carbsG = carbsG,
+            fatG = fatG,
+            fibreG = fibreG,
+            micros = micros,
+            timestampUtcEpochMs = timestampUtcEpochMs,
+        )
+    }
 
     /** Wrap user text as a case-insensitive `%…%` LIKE pattern, escaping literal wildcards. */
     private fun buildLikePattern(query: String): String {

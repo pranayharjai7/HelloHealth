@@ -25,6 +25,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
@@ -36,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -49,9 +52,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -139,6 +144,7 @@ fun NutritionScreen(
                 item { Spacer(modifier = Modifier.height(4.dp)) }
 
                 item { DayTotalsCard(summary) }
+                item { MicronutrientsCard(summary) }
 
                 // Search box + typeahead results.
                 item {
@@ -253,6 +259,87 @@ private fun MacroPill(label: String, grams: Double) {
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurface,
     )
+}
+
+/**
+ * Collapsible "Micronutrients" breakdown — each curated nutrient vs its FDA Daily Value, shown as a
+ * progress bar with the consumed/target amounts. A nutrient no food carried shows "— no data" (never a
+ * fake 0). Limit nutrients (sodium/saturated fat/sugar) are framed as ceilings to stay under. This is a
+ * reference view, not medical advice.
+ */
+@Composable
+private fun MicronutrientsCard(summary: NutritionDaySummary) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val trackedCount = com.hellohealth.domain.health.MicronutrientTargets.Micro.entries.count { summary.micros.containsKey(it) }
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Micronutrients", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = onSurface)
+                    Text(
+                        if (trackedCount > 0) "$trackedCount of 8 tracked today · vs daily value" else "Log foods to see vitamins & minerals",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = onSurface.copy(alpha = 0.55f),
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = onSurface.copy(alpha = 0.6f),
+                )
+            }
+            if (expanded) {
+                Spacer(Modifier.height(12.dp))
+                com.hellohealth.domain.health.MicronutrientTargets.Micro.entries.forEach { micro ->
+                    MicronutrientRow(micro, summary.micros[micro])
+                    Spacer(Modifier.height(10.dp))
+                }
+                Text(
+                    "Reference daily values (FDA), not medical advice.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onSurface.copy(alpha = 0.5f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MicronutrientRow(micro: com.hellohealth.domain.health.MicronutrientTargets.Micro, consumed: Double?) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val primary = MaterialTheme.colorScheme.primary
+    val warn = Color(0xFFEF5350)
+    val target = com.hellohealth.domain.health.MicronutrientTargets.targetFor(micro)
+    val fraction = consumed?.let { (it / target).toFloat().coerceIn(0f, 1f) } ?: 0f
+    // Limit nutrients (sodium/sat fat/sugar) turn red as they approach the ceiling; goals use the accent.
+    val barColor = if (micro.isLimit && fraction >= 0.8f) warn else primary
+    Column {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(micro.label, style = MaterialTheme.typography.bodyMedium, color = onSurface, modifier = Modifier.weight(1f))
+            Text(
+                if (consumed != null) "${consumed.roundToInt()} / ${target.roundToInt()} ${micro.unit}${if (micro.isLimit) " max" else ""}"
+                else "— no data",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (consumed != null) onSurface else onSurface.copy(alpha = 0.4f),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = { fraction },
+            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+            color = barColor,
+            trackColor = onSurface.copy(alpha = 0.08f),
+        )
+    }
 }
 
 @Composable

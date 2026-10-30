@@ -18,6 +18,8 @@ data class NutritionDaySummary(
     val fibreG: Double,
     val waterMl: Double,
     val entriesByMeal: Map<MealCategory, List<FoodEntry>>,
+    /** Day totals per curated micronutrient (summed over entries that carried it). Absent key = no data all day. */
+    val micros: Map<com.hellohealth.domain.health.MicronutrientTargets.Micro, Double> = emptyMap(),
 ) {
     companion object {
         /** An all-zero summary for a day with no entries (or no signed-in user). */

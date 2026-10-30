@@ -93,6 +93,15 @@ open class OpenFoodFactsDataSource @Inject constructor(
             carbsGPer = nutriments.carbs100g,
             fatGPer = nutriments.fat100g,
             fibreGPer = nutriments.fibre100g,
+            // OFF stores minerals/vitamins in grams/100g; convert to our mg/mcg display units.
+            sodiumMgPer = nutriments.sodium100g?.let { it * 1000 },
+            saturatedFatGPer = nutriments.saturatedFat100g,
+            sugarGPer = nutriments.sugars100g,
+            calciumMgPer = nutriments.calcium100g?.let { it * 1000 },
+            ironMgPer = nutriments.iron100g?.let { it * 1000 },
+            potassiumMgPer = nutriments.potassium100g?.let { it * 1000 },
+            vitaminDMcgPer = nutriments.vitaminD100g?.let { it * 1_000_000 },
+            vitaminCMgPer = nutriments.vitaminC100g?.let { it * 1000 },
             barcode = barcode,
             lastRefreshedEpochMs = nowEpochMs,
         )
@@ -124,6 +133,15 @@ open class OpenFoodFactsDataSource @Inject constructor(
         @SerialName("carbohydrates_100g") val carbs100g: Double? = null,
         @SerialName("fat_100g") val fat100g: Double? = null,
         @SerialName("fiber_100g") val fibre100g: Double? = null,
+        // OFF reports these per-100g in SI base units (grams), including minerals/vitamins.
+        @SerialName("sodium_100g") val sodium100g: Double? = null,          // g
+        @SerialName("saturated-fat_100g") val saturatedFat100g: Double? = null, // g
+        @SerialName("sugars_100g") val sugars100g: Double? = null,          // g
+        @SerialName("calcium_100g") val calcium100g: Double? = null,        // g
+        @SerialName("iron_100g") val iron100g: Double? = null,              // g
+        @SerialName("potassium_100g") val potassium100g: Double? = null,    // g
+        @SerialName("vitamin-d_100g") val vitaminD100g: Double? = null,     // g
+        @SerialName("vitamin-c_100g") val vitaminC100g: Double? = null,     // g
     )
 
     companion object {

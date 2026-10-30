@@ -67,6 +67,14 @@ open class UsdaFoodDataSource @Inject constructor(
             carbsGPer = nutrientValue(NUM_CARBS),
             fatGPer = nutrientValue(NUM_FAT),
             fibreGPer = nutrientValue(NUM_FIBRE),
+            sodiumMgPer = nutrientValue(NUM_SODIUM),
+            saturatedFatGPer = nutrientValue(NUM_SAT_FAT),
+            sugarGPer = nutrientValue(NUM_SUGAR),
+            calciumMgPer = nutrientValue(NUM_CALCIUM),
+            ironMgPer = nutrientValue(NUM_IRON),
+            potassiumMgPer = nutrientValue(NUM_POTASSIUM),
+            vitaminDMcgPer = nutrientValue(NUM_VITAMIN_D),
+            vitaminCMgPer = nutrientValue(NUM_VITAMIN_C),
             barcode = gtinUpc?.takeIf { it.isNotBlank() },
             lastRefreshedEpochMs = nowEpochMs,
         )
@@ -101,5 +109,14 @@ open class UsdaFoodDataSource @Inject constructor(
         private const val NUM_FAT = "1004"
         private const val NUM_CARBS = "1005"
         private const val NUM_FIBRE = "1079"
+        // Curated micronutrients — FDC FoodData Central nutrient numbers.
+        private const val NUM_SODIUM = "1093"       // mg
+        private const val NUM_SAT_FAT = "1258"      // g
+        private const val NUM_SUGAR = "2000"        // g (total sugars)
+        private const val NUM_CALCIUM = "1087"      // mg
+        private const val NUM_IRON = "1089"         // mg
+        private const val NUM_POTASSIUM = "1092"    // mg
+        private const val NUM_VITAMIN_D = "1114"    // mcg (D2 + D3)
+        private const val NUM_VITAMIN_C = "1162"    // mg
     }
 }

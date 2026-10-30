@@ -891,4 +891,40 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 17 to 18 adds micronutrient columns and preserves existing nutrition entries`() {
+        // A genuine v17 user has a logged food entry. MIGRATION_17_18 is additive ALTER TABLE ADD
+        // COLUMN on nutrition_entries, so the row must survive and the new micro columns default NULL.
+        helper.createDatabase(dbName, 17).apply {
+            execSQL(
+                "INSERT INTO nutrition_entries " +
+                    "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, mealCategory, foodId, " +
+                    "foodName, quantity, unit, calories, proteinG, carbsG, fatG, fibreG, waterMl, entryMethod, " +
+                    "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                    "VALUES ('n1', 'u1', '2026-10-30', 1000, 0, 'food', 'lunch', 'usda:1', " +
+                    "'Spinach', 100.0, 'g', 23.0, 2.9, 3.6, 0.4, 2.2, NULL, 'catalog', 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(dbName, 18, true, MIGRATION_17_18)
+
+        // Pre-existing row survives; the new micronutrient columns are NULL on it (= no data).
+        db.query("SELECT fibreG, sodiumMg, calciumMg, ironMg, potassiumMg, vitaminDMcg, vitaminCMg, saturatedFatG, sugarG FROM nutrition_entries WHERE id = 'n1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(2.2, c.getDouble(0), 0.001) // existing fibre survives
+            for (i in 1..8) assertTrue("micro col $i defaults null", c.isNull(i))
+        }
+
+        // New columns accept writes (REAL affinities correct).
+        db.execSQL("UPDATE nutrition_entries SET sodiumMg = 79.0, calciumMg = 99.0, vitaminCMg = 28.1 WHERE id = 'n1'")
+        db.query("SELECT sodiumMg, calciumMg, vitaminCMg FROM nutrition_entries WHERE id = 'n1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(79.0, c.getDouble(0), 0.001)
+            assertEquals(99.0, c.getDouble(1), 0.001)
+            assertEquals(28.1, c.getDouble(2), 0.001)
+        }
+        db.close()
+    }
 }
