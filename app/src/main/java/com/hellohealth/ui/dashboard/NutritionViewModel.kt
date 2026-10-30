@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.hellohealth.core.date.SelectedDateHolder
 import com.hellohealth.domain.health.BodyEnergy
 import com.hellohealth.domain.health.MacroTargets
+import com.hellohealth.domain.health.MicronutrientTargets
 import com.hellohealth.domain.model.nutrition.EnergyBalance
 import com.hellohealth.domain.model.nutrition.NutritionDaySummary
 import com.hellohealth.domain.repository.ActivityRepository
@@ -44,9 +45,11 @@ data class NutritionUiState(
     val proteinG: Int = 0,
     val carbsG: Int = 0,
     val fatG: Int = 0,
+    val fibreG: Int = 0,
     val proteinTargetG: Int? = null,
     val carbsTargetG: Int? = null,
     val fatTargetG: Int? = null,
+    val fibreTargetG: Int? = null,
     val waterLabel: String = DASH,
     val hasData: Boolean = false,
 ) {
@@ -140,9 +143,11 @@ class NutritionViewModel @Inject constructor(
             proteinG = summary.proteinG.roundToInt(),
             carbsG = summary.carbsG.roundToInt(),
             fatG = summary.fatG.roundToInt(),
+            fibreG = summary.fibreG.roundToInt(),
             proteinTargetG = targets.proteinG,
             carbsTargetG = targets.carbsG,
             fatTargetG = targets.fatG,
+            fibreTargetG = MicronutrientTargets.fiberTargetG(budget),
             waterLabel = formatWater(summary.waterMl),
             hasData = hasData,
         )

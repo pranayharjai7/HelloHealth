@@ -108,17 +108,34 @@ class NutritionViewModelTest {
         hasOnboarded = true,
     )
 
-    private fun daySummary(calories: Double, protein: Double, carbs: Double, fat: Double, waterMl: Double) =
+    private fun daySummary(calories: Double, protein: Double, carbs: Double, fat: Double, waterMl: Double, fibre: Double = 0.0) =
         NutritionDaySummary(
             localDate = today,
             caloriesConsumed = calories,
             proteinG = protein,
             carbsG = carbs,
             fatG = fat,
-            fibreG = 0.0,
+            fibreG = fibre,
             waterMl = waterMl,
             entriesByMeal = emptyMap(),
         )
+
+    @Test
+    fun `fibre grams and target surface on the card state`() = runTest {
+        val vm = NutritionViewModel(
+            FakeNutrition(daySummary(1500.0, 100.0, 150.0, 50.0, waterMl = 0.0, fibre = 22.0)),
+            FakeActivity(caloriesOut = 2600.0),
+            FakeProfile(fullProfile()),
+            SelectedDateHolder(),
+        )
+        vm.uiState.test {
+            var state = awaitItem()
+            while (!state.hasData) state = awaitItem()
+            assertEquals("fibre consumed surfaces", 22, state.fibreG)
+            assertTrue("a fibre target is always shown", (state.fibreTargetG ?: 0) > 0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 
     @Test
     fun `net is caloriesOut minus caloriesIn as a deficit when burn exceeds intake`() = runTest {

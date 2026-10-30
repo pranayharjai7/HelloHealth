@@ -201,7 +201,7 @@ fun NutritionScreen(
     if (showQuickAdd) {
         QuickAddSheet(
             onDismiss = { showQuickAdd = false },
-            onConfirm = { meal, name, calories, protein, carbs, fat ->
+            onConfirm = { meal, name, calories, protein, carbs, fat, fibre ->
                 viewModel.addQuickAdd(
                     meal = meal,
                     foodName = name,
@@ -211,6 +211,7 @@ fun NutritionScreen(
                     proteinG = protein,
                     carbsG = carbs,
                     fatG = fat,
+                    fibreG = fibre,
                 )
                 showQuickAdd = false
             },
@@ -238,6 +239,7 @@ private fun DayTotalsCard(summary: NutritionDaySummary) {
                 MacroPill("P", summary.proteinG)
                 MacroPill("C", summary.carbsG)
                 MacroPill("F", summary.fatG)
+                MacroPill("Fib", summary.fibreG)
             }
         }
     }
@@ -427,7 +429,7 @@ private fun AddFoodSheet(
 @Composable
 private fun QuickAddSheet(
     onDismiss: () -> Unit,
-    onConfirm: (MealCategory, String, Double, Double?, Double?, Double?) -> Unit,
+    onConfirm: (MealCategory, String, Double, Double?, Double?, Double?, Double?) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     var name by remember { mutableStateOf("") }
@@ -435,6 +437,7 @@ private fun QuickAddSheet(
     var proteinText by remember { mutableStateOf("") }
     var carbsText by remember { mutableStateOf("") }
     var fatText by remember { mutableStateOf("") }
+    var fibreText by remember { mutableStateOf("") }
     var meal by remember { mutableStateOf(MealCategory.BREAKFAST) }
 
     fun num(s: String) = s.toDoubleOrNull()
@@ -482,12 +485,19 @@ private fun QuickAddSheet(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true, modifier = Modifier.weight(1f),
                 )
+                OutlinedTextField(
+                    value = fibreText,
+                    onValueChange = { fibreText = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Fiber (g)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true, modifier = Modifier.weight(1f),
+                )
             }
             FilledTonalButton(
                 onClick = {
                     val calories = num(caloriesText) ?: return@FilledTonalButton
                     if (name.isBlank() || calories <= 0) return@FilledTonalButton
-                    onConfirm(meal, name.trim(), calories, num(proteinText), num(carbsText), num(fatText))
+                    onConfirm(meal, name.trim(), calories, num(proteinText), num(carbsText), num(fatText), num(fibreText))
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Add") }

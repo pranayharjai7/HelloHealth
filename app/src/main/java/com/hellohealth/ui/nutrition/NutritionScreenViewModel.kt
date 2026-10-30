@@ -103,6 +103,7 @@ class NutritionScreenViewModel @Inject constructor(
         proteinG: Double? = null,
         carbsG: Double? = null,
         fatG: Double? = null,
+        fibreG: Double? = null,
     ) {
         viewModelScope.launch {
             nutritionRepository.addQuickAdd(
@@ -115,6 +116,7 @@ class NutritionScreenViewModel @Inject constructor(
                 proteinG = proteinG,
                 carbsG = carbsG,
                 fatG = fatG,
+                fibreG = fibreG,
             )
         }
     }

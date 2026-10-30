@@ -116,6 +116,7 @@ fun NutritionCard(
                         MacroBar("Protein", state.proteinG, state.proteinTargetG, Color(0xFF42A5F5))
                         MacroBar("Carbs", state.carbsG, state.carbsTargetG, Color(0xFFFFA726))
                         MacroBar("Fat", state.fatG, state.fatTargetG, Color(0xFFEF5350))
+                        MacroBar("Fiber", state.fibreG, state.fibreTargetG, Color(0xFF66BB6A))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
