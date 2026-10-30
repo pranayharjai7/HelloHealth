@@ -76,9 +76,13 @@ fun InteractiveChart(
     tooltipFor: (Int) -> TooltipSpec,
     modifier: Modifier = Modifier,
     crosshair: CrosshairStyle = CrosshairStyle.Vertical,
+    // Optional override: given the live pointer x and the nearest index, a chart may return a special
+    // tooltip (e.g. "No reading" when the pointer is inside a data gap). Null → fall back to tooltipFor.
+    tooltipAt: ((pointerX: Float, nearestIndex: Int) -> TooltipSpec?)? = null,
     chartBody: @Composable (Modifier) -> Unit,
 ) {
     var selected by remember { mutableStateOf(-1) }
+    var pointerX by remember { mutableStateOf(Float.NaN) }
     var projection by remember { mutableStateOf<ChartProjection?>(null) }
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -100,7 +104,7 @@ fun InteractiveChart(
                             val first = down.changes.firstOrNull() ?: continue
                             if (!first.pressed) continue
                             val hit = hitTest(proj, first.position, minHit)
-                            if (hit >= 0) { selected = hit; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                            if (hit >= 0) { selected = hit; pointerX = first.position.x; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
                             else selected = -1 // tap on empty space clears the pin
                         }
                     }
@@ -109,14 +113,21 @@ fun InteractiveChart(
                     val proj = projection ?: return@pointerInput
                     detectHorizontalDrag { pos ->
                         val i = hitTest(proj, pos, minHit)
+                        pointerX = pos.x
                         if (i >= 0 && i != selected) { selected = i; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
                     }
                 }
         ) {
             val proj = projection
             if (proj != null && selected in 0 until proj.count) {
-                CrosshairLayer(proj, selected, accent, crosshair)
-                TooltipBubble(proj.anchorOf(selected), tooltipFor(selected), proj.size)
+                val gapSpec = tooltipAt?.invoke(pointerX, selected)
+                if (gapSpec != null) {
+                    // Pointer is in a gap: anchor the bubble at the pointer x on the baseline, no crosshair dot.
+                    TooltipBubble(Offset(pointerX, proj.size.height / 2f), gapSpec, proj.size)
+                } else {
+                    CrosshairLayer(proj, selected, accent, crosshair)
+                    TooltipBubble(proj.anchorOf(selected), tooltipFor(selected), proj.size)
+                }
             }
         }
     }

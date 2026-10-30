@@ -1,8 +1,14 @@
 package com.hellohealth.ui.charts
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -65,13 +71,32 @@ fun TimeOfDayChart(
     val minV = sorted.minByOrNull { it.value }
     val maxV = sorted.maxByOrNull { it.value }
     val baselineValue = sorted.first().value
+    // No-data spans (day-fraction) where the watch wasn't worn: the lead-in before the first reading,
+    // the trailing stretch after the last, and any interior gap wider than maxGapFraction between two
+    // readings. Used to shade those spans and to report "No reading" when the pointer lands in one.
+    val gaps: List<Pair<Float, Float>> = remember(sorted, maxGapFraction, zone) {
+        buildList {
+            val firstFrac = timeOfDayFraction(sorted.first().epochMs, zone)
+            val lastFrac = timeOfDayFraction(sorted.last().epochMs, zone)
+            if (firstFrac > maxGapFraction) add(0f to firstFrac)
+            for (i in 1 until sorted.size) {
+                val a = timeOfDayFraction(sorted[i - 1].epochMs, zone)
+                val b = timeOfDayFraction(sorted[i].epochMs, zone)
+                if (b - a > maxGapFraction) add(a to b)
+            }
+            if (1f - lastFrac > maxGapFraction) add(lastFrac to 1f)
+        }
+    }
 
     androidx.compose.foundation.layout.Column(modifier) {
+        // Holds the plot rect computed in project() so the gap-tooltip can map pointer-x → day-fraction.
+        var plotRect by remember { mutableStateOf<Rect?>(null) }
         InteractiveChart(
             heightDp = 180.dp,
             accent = lineColor,
             project = { size ->
                 val plot = ChartGutters.plotRect(size, hasX = true, hasY = true, density = density)
+                plotRect = plot
                 ChartProjection(
                     size = size,
                     count = sorted.size,
@@ -86,6 +111,15 @@ fun TimeOfDayChart(
                 val t = Instant.ofEpochMilli(sorted[i].epochMs).atZone(zone).toLocalTime().format(fmt)
                 TooltipSpec(title = t, rows = listOf(TooltipRow("", "${sorted[i].value.toInt()} $unit", lineColor)))
             },
+            tooltipAt = gapTooltip@{ pointerX, _ ->
+                if (gaps.isEmpty()) return@gapTooltip null
+                val plot = plotRect ?: return@gapTooltip null
+                if (plot.width <= 0f) return@gapTooltip null
+                val frac = ((pointerX - plot.left) / plot.width).coerceIn(0f, 1f)
+                // If the pointer's time-fraction falls strictly inside a gap span, there's no reading.
+                val inGap = gaps.any { (a, b) -> frac > a && frac < b }
+                if (inGap) TooltipSpec(title = "No reading", rows = listOf(TooltipRow("", "device not worn", labelColor))) else null
+            },
         ) { m ->
             ChartScaffold(
                 heightDp = 180.dp,
@@ -97,6 +131,16 @@ fun TimeOfDayChart(
             ) { mapping ->
                 val toPixel = { frac: Float, v: Float ->
                     Offset(mapping.plot.left + frac * mapping.plot.width, mapping.mapY(v))
+                }
+                // Shade interior gaps (device not worn) so a gap reads as known absence, not a blank chart.
+                for ((a, b) in gaps) {
+                    val x0 = mapping.plot.left + a * mapping.plot.width
+                    val x1 = mapping.plot.left + b * mapping.plot.width
+                    drawRect(
+                        color = labelColor.copy(alpha = 0.06f),
+                        topLeft = Offset(x0, mapping.plot.top),
+                        size = Size(x1 - x0, mapping.plot.height),
+                    )
                 }
                 // Faint dotted reference baseline at the first reading.
                 val baseY = mapping.mapY(baselineValue)
@@ -112,6 +156,15 @@ fun TimeOfDayChart(
                 minV?.let { labelPoint(textMeasurer, toPixel(timeOfDayFraction(it.epochMs, zone), it.value), "${it.value.toInt()}", labelColor, lineColor, below = true) }
                 maxV?.let { labelPoint(textMeasurer, toPixel(timeOfDayFraction(it.epochMs, zone), it.value), "${it.value.toInt()}", labelColor, lineColor, below = false) }
             }
+        }
+        // Caption only when there is actually a shaded no-data span — never on a fully-worn day.
+        if (gaps.isNotEmpty()) {
+            androidx.compose.material3.Text(
+                "Shaded stretches are gaps — the watch wasn't worn.",
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                color = labelColor.copy(alpha = 0.9f),
+                modifier = Modifier.padding(top = 6.dp),
+            )
         }
     }
 }
