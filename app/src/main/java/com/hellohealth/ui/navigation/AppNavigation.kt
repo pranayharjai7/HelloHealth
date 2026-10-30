@@ -384,10 +384,25 @@ fun AppNavigation(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
                 onScanBarcode = { navController.navigate(Screen.BarcodeScan.route) },
+                onOpenSettings = { navController.navigate(Screen.NutritionSettings.route) },
                 scannedBarcode = scannedBarcode,
                 onScannedBarcodeConsumed = {
                     backStackEntry.savedStateHandle["scanned_barcode"] = null
                 },
+            )
+        }
+
+        composable(
+            route = Screen.NutritionSettings.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            val vm: com.hellohealth.ui.nutrition.settings.NutritionSettingsViewModel = hiltViewModel()
+            com.hellohealth.ui.nutrition.settings.NutritionSettingsScreen(
+                viewModel = vm,
+                onBack = { navController.popBackStack() },
             )
         }
 
@@ -631,6 +646,7 @@ sealed class Screen(val route: String) {
     object EditProfile : Screen("edit_profile")
     object SyncDebug : Screen("sync_debug")
     object Goals : Screen("goals")
+    object NutritionSettings : Screen("nutrition_settings")
     object LogEmotion : Screen("log_emotion")
     object EmotionCapture : Screen("emotion_capture?startInGallery={startInGallery}") {
         const val startInGalleryArg = "startInGallery"

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -84,6 +85,7 @@ fun NutritionScreen(
     viewModel: NutritionScreenViewModel,
     onBack: () -> Unit,
     onScanBarcode: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     scannedBarcode: String? = null,
     onScannedBarcodeConsumed: () -> Unit = {},
 ) {
@@ -116,8 +118,8 @@ fun NutritionScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onScanBarcode) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcode")
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Nutrition settings")
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
