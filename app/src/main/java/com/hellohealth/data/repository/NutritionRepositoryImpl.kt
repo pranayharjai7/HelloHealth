@@ -1,9 +1,11 @@
 package com.hellohealth.data.repository
 
+import androidx.sqlite.db.SimpleSQLiteQuery
 import com.hellohealth.core.logging.AppLogger
 import com.hellohealth.core.logging.FeatureTag
 import com.hellohealth.core.time.Timestamps
 import com.hellohealth.data.food.FoodCatalogAssetLoader
+import com.hellohealth.data.food.FoodSearch
 import com.hellohealth.data.food.OpenFoodFactsDataSource
 import com.hellohealth.data.food.UsdaFoodDataSource
 import com.hellohealth.data.local.dao.CachedFoodDao
@@ -199,9 +201,19 @@ class NutritionRepositoryImpl @Inject constructor(
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return emptyList()
 
-        // Local cache first — always available, instant, offline. Never throws.
+        // Local cache first — always available, instant, offline. Never throws. Token-AND match:
+        // one `%token%` LIKE per word, so the words match in any order ("breast chicken" finds
+        // "Chicken Breast"). Fetch a generous slice; ranking + the display cap happen below.
         val local = runCatching {
-            cachedFoodDao.search(buildLikePattern(trimmed), SEARCH_LIMIT)
+            val tokens = FoodSearch.tokenize(trimmed)
+            if (tokens.isEmpty()) {
+                emptyList()
+            } else {
+                val where = tokens.joinToString(" AND ") { "name LIKE ? ESCAPE '\\'" }
+                val sql = "SELECT * FROM cached_foods WHERE $where LIMIT $RAW_FETCH_LIMIT"
+                val args = tokens.map { FoodSearch.likePattern(it) }.toTypedArray<Any?>()
+                cachedFoodDao.searchRaw(SimpleSQLiteQuery(sql, args))
+            }
         }.getOrElse {
             AppLogger.w(FeatureTag.NUTRITION, "local food search failed: ${it.message}")
             emptyList()
@@ -216,8 +228,9 @@ class NutritionRepositoryImpl @Inject constructor(
                 .onFailure { AppLogger.w(FeatureTag.NUTRITION, "caching remote foods failed: ${it.message}") }
         }
 
-        // Merge, de-duplicating by id (local wins on a tie), capped at the search limit.
-        return (local + remote).distinctBy { it.id }.take(SEARCH_LIMIT)
+        // Merge, de-duplicate by id, and rank by relevance (exact → prefix → in-order → any-order,
+        // shorter names first, seed over remote on ties), capped at the display limit.
+        return FoodSearch.rank(local + remote, trimmed, SEARCH_LIMIT)
     }
 
     override suspend fun resolveBarcode(barcode: String): CachedFoodEntity? {
@@ -424,15 +437,6 @@ class NutritionRepositoryImpl @Inject constructor(
         )
     }
 
-    /** Wrap user text as a case-insensitive `%…%` LIKE pattern, escaping literal wildcards. */
-    private fun buildLikePattern(query: String): String {
-        val escaped = query
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
-        return "%$escaped%"
-    }
-
     companion object {
         private const val KIND_FOOD = "food"
         private const val KIND_WATER = "water"
@@ -443,5 +447,6 @@ class NutritionRepositoryImpl @Inject constructor(
         private const val UNIT_GLASS = "glass"
         private const val BASIS_PER_100G = "per_100g"
         private const val SEARCH_LIMIT = 25
+        private const val RAW_FETCH_LIMIT = 60
     }
 }

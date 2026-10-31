@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SupportSQLiteQuery
 import com.hellohealth.data.local.entities.CachedFoodEntity
 
 /**
@@ -31,12 +33,11 @@ interface CachedFoodDao {
     suspend fun getByBarcode(barcode: String): CachedFoodEntity?
 
     /**
-     * Typeahead search over the local catalog. [query] is a pre-built SQL `LIKE` pattern (the
-     * repository wraps the user text with `%…%` and escapes literal wildcards); `ESCAPE '\'` honors
-     * that escaping so a `%` typed by the user stays literal. Mirrors [ExerciseDao.search].
+     * Token-based search: the repository builds a `WHERE (name LIKE ? ESCAPE '\') AND (…) …` clause —
+     * one `%token%` pattern per whitespace-separated word — so the words match in ANY order ("breast
+     * chicken" finds "Chicken Breast"). Ordering/ranking is done in Kotlin after the fetch, so this
+     * raw query just filters. See [com.hellohealth.data.repository.NutritionRepositoryImpl.searchFoods].
      */
-    @Query(
-        "SELECT * FROM cached_foods WHERE name LIKE :query ESCAPE '\\' ORDER BY name ASC LIMIT :limit"
-    )
-    suspend fun search(query: String, limit: Int): List<CachedFoodEntity>
+    @RawQuery
+    suspend fun searchRaw(query: SupportSQLiteQuery): List<CachedFoodEntity>
 }
