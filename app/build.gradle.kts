@@ -82,6 +82,26 @@ android {
             }
         }
     }
+
+    // Fail loudly if a release ARTIFACT is being built without the signing keystore, instead of
+    // silently emitting an unsigned AAB/APK that can't be uploaded. Only trips when a release
+    // bundle/assemble task is actually requested, so debug builds and CI configuration stay unaffected.
+    if (!hasReleaseKeystore) {
+        gradle.taskGraph.whenReady {
+            val buildingReleaseArtifact = allTasks.any {
+                it.project == project &&
+                    (it.name == "bundleRelease" || it.name == "assembleRelease" ||
+                        it.name == "packageRelease")
+            }
+            if (buildingReleaseArtifact) {
+                throw GradleException(
+                    "Release signing keystore not found. Set RELEASE_STORE_FILE (and the store/alias/key " +
+                        "passwords) in local.properties pointing at the release .jks before building a " +
+                        "release artifact. Refusing to produce an unsigned release build."
+                )
+            }
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -127,6 +147,7 @@ ksp {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

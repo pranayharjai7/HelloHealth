@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -67,6 +68,9 @@ class MainActivity : ComponentActivity() {
     private var navController: NavHostController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Android 12+ system splash — install BEFORE super.onCreate so the system splash shows during
+        // cold start, then hands off to the in-app Compose SplashScreen. Removes the double-draw.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Make status bar transparent and match the app theme
