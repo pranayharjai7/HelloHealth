@@ -90,6 +90,8 @@ fun NutritionScreen(
     onScannedBarcodeConsumed: () -> Unit = {},
 ) {
     val summary by viewModel.daySummary.collectAsState()
+    val targets by viewModel.targets.collectAsState()
+    val caloriesOut by viewModel.caloriesOut.collectAsState()
     val query by viewModel.query.collectAsState()
     val results by viewModel.searchResults.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -145,15 +147,16 @@ fun NutritionScreen(
             ) {
                 item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                item { DayTotalsCard(summary) }
-                item { MicronutrientsCard(summary) }
+                item { CalorieHeroCard(summary, targets, caloriesOut) }
 
-                // Search box + typeahead results.
+                // Search as its own distinct block (search field + scan + quick-add).
                 item {
-                    SearchField(
+                    SearchBlock(
                         query = query,
                         onQueryChange = viewModel::onQueryChange,
                         onClear = viewModel::clearSearch,
+                        onScan = onScanBarcode,
+                        onQuickAdd = { showQuickAdd = true },
                     )
                 }
                 if (results.isNotEmpty()) {
@@ -161,6 +164,8 @@ fun NutritionScreen(
                         SearchResultRow(food = food, onClick = { addSheetFood = food })
                     }
                 }
+
+                item { MicronutrientsCard(summary, targets) }
 
                 // Meal sections.
                 items(MealCategory.entries.sortedBy { it.order }, key = { it.name }) { meal ->
@@ -177,15 +182,6 @@ fun NutritionScreen(
                         waterMl = summary.waterMl,
                         onAddGlass = { viewModel.addWater() },
                     )
-                }
-
-                // Quick-add entry point.
-                item {
-                    TextButton(onClick = { showQuickAdd = true }) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Quick add (name + calories)")
-                    }
                 }
 
                 item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -227,40 +223,135 @@ fun NutritionScreen(
     }
 }
 
+/**
+ * The hero card: a calories-ONLY ring (eaten-led — center shows eaten big + "of <target> kcal"), side
+ * stats (remaining / burned / % of goal), then four full-word macro bars with distinct colors showing
+ * `consumed / target g`. An over-target macro bar turns red so over-consumption reads visually without
+ * extra text. Targets come from the resolver (profile derivation + the user's overrides).
+ */
 @Composable
-private fun DayTotalsCard(summary: NutritionDaySummary) {
+private fun CalorieHeroCard(
+    summary: NutritionDaySummary,
+    targets: com.hellohealth.domain.health.NutritionTargets.ResolvedTargets?,
+    caloriesOut: Double?,
+) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val primary = MaterialTheme.colorScheme.primary
+    val eaten = summary.caloriesConsumed.roundToInt()
+    val budget = targets?.calorieBudget
+    val remaining = budget?.let { it - eaten }
+    val progress = if (budget != null && budget > 0) (eaten.toFloat() / budget).coerceIn(0f, 1f) else 0f
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text("Today", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "${summary.caloriesConsumed.roundToInt()} kcal",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                MacroPill("P", summary.proteinG)
-                MacroPill("C", summary.carbsG)
-                MacroPill("F", summary.fatG)
-                MacroPill("Fib", summary.fibreG)
+        Column(modifier = Modifier.padding(22.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(150.dp), contentAlignment = Alignment.Center) {
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                        val stroke = 13.dp.toPx()
+                        val d = size.minDimension - stroke
+                        val tl = androidx.compose.ui.geometry.Offset((size.width - d) / 2f, (size.height - d) / 2f)
+                        val arc = androidx.compose.ui.geometry.Size(d, d)
+                        drawArc(onSurface.copy(alpha = 0.08f), 0f, 360f, false, tl, arc,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+                        drawArc(primary, -90f, 360f * progress, false, tl, arc,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("$eaten", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = onSurface)
+                        Text(if (budget != null) "of $budget kcal" else "kcal eaten",
+                            style = MaterialTheme.typography.labelMedium, color = onSurface.copy(alpha = 0.6f))
+                    }
+                }
+                Spacer(Modifier.width(20.dp))
+                Column(Modifier.weight(1f)) {
+                    HeroStat(remaining?.let { "$it" } ?: "—", "kcal remaining", if ((remaining ?: 0) < 0) MaterialTheme.colorScheme.error else primary)
+                    Spacer(Modifier.height(12.dp))
+                    HeroStat(caloriesOut?.roundToInt()?.toString() ?: "—", "kcal burned", onSurface)
+                    Spacer(Modifier.height(12.dp))
+                    HeroStat(if (budget != null) "${(progress * 100).roundToInt()}%" else "—", "of daily goal", onSurface)
+                }
             }
+
+            Spacer(Modifier.height(18.dp))
+            androidx.compose.material3.HorizontalDivider(color = onSurface.copy(alpha = 0.07f))
+            Spacer(Modifier.height(16.dp))
+
+            MacroBar("Protein", summary.proteinG, targets?.proteinG, Color(0xFF5B8DEF))
+            MacroBar("Carbs", summary.carbsG, targets?.carbsG, Color(0xFFF2A33C))
+            MacroBar("Fat", summary.fatG, targets?.fatG, Color(0xFFEF6D6D))
+            MacroBar("Fiber", summary.fibreG, targets?.fiberG, Color(0xFF66BB6A), last = true)
         }
     }
 }
 
 @Composable
-private fun MacroPill(label: String, grams: Double) {
-    Text(
-        text = "$label ${grams.roundToInt()}g",
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
+private fun HeroStat(value: String, label: String, valueColor: Color) {
+    Column {
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = valueColor)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    }
+}
+
+/** A full-word macro bar: `Name   consumed / target g`, colored fill; over-target → red fill. */
+@Composable
+private fun MacroBar(name: String, consumed: Double, target: Int?, color: Color, last: Boolean = false) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val warn = MaterialTheme.colorScheme.error
+    val c = consumed.roundToInt()
+    val over = target != null && c > target
+    val fraction = if (target != null && target > 0) (c.toFloat() / target).coerceIn(0f, 1f) else 0f
+    Column {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.weight(1f))
+            Text(
+                buildString { append(c); append(" / "); append(target?.toString() ?: "—"); append(" g") },
+                style = MaterialTheme.typography.bodySmall, color = onSurface,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(6.dp)).background(onSurface.copy(alpha = 0.09f))) {
+            Box(modifier = Modifier.fillMaxWidth(fraction).height(9.dp).clip(RoundedCornerShape(6.dp)).background(if (over) warn else color))
+        }
+        if (!last) Spacer(Modifier.height(14.dp))
+    }
+}
+
+/**
+ * Search as its own distinct block (separated from the day's info): a search field plus Scan and
+ * Quick-add affordances. Logging lives here, not merged into the summary cards.
+ */
+@Composable
+private fun SearchBlock(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+    onScan: () -> Unit,
+    onQuickAdd: () -> Unit,
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            SearchField(query = query, onQueryChange = onQueryChange, onClear = onClear)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.FilledTonalButton(onClick = onScan, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp)); Text("Scan")
+                }
+                androidx.compose.material3.FilledTonalButton(onClick = onQuickAdd, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp)); Text("Quick add")
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -270,10 +361,16 @@ private fun MacroPill(label: String, grams: Double) {
  * reference view, not medical advice.
  */
 @Composable
-private fun MicronutrientsCard(summary: NutritionDaySummary) {
+private fun MicronutrientsCard(
+    summary: NutritionDaySummary,
+    targets: com.hellohealth.domain.health.NutritionTargets.ResolvedTargets?,
+) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val onSurface = MaterialTheme.colorScheme.onSurface
-    val trackedCount = com.hellohealth.domain.health.MicronutrientTargets.Micro.entries.count { summary.micros.containsKey(it) }
+    // Only the micronutrients the user chose to track (settings); default is all 8.
+    val shown = com.hellohealth.domain.health.MicronutrientTargets.Micro.entries
+        .filter { targets?.trackedMicros?.contains(it) ?: true }
+    val trackedCount = shown.count { summary.micros.containsKey(it) }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -287,7 +384,7 @@ private fun MicronutrientsCard(summary: NutritionDaySummary) {
                 Column(Modifier.weight(1f)) {
                     Text("Micronutrients", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = onSurface)
                     Text(
-                        if (trackedCount > 0) "$trackedCount of 8 tracked today · vs daily value" else "Log foods to see vitamins & minerals",
+                        if (trackedCount > 0) "$trackedCount of ${shown.size} tracked today · vs daily value" else "Log foods to see vitamins & minerals",
                         style = MaterialTheme.typography.bodySmall,
                         color = onSurface.copy(alpha = 0.55f),
                     )
@@ -300,7 +397,7 @@ private fun MicronutrientsCard(summary: NutritionDaySummary) {
             }
             if (expanded) {
                 Spacer(Modifier.height(12.dp))
-                com.hellohealth.domain.health.MicronutrientTargets.Micro.entries.forEach { micro ->
+                shown.forEach { micro ->
                     MicronutrientRow(micro, summary.micros[micro])
                     Spacer(Modifier.height(10.dp))
                 }

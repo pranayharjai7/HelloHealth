@@ -38,6 +38,9 @@ import javax.inject.Inject
 @HiltViewModel
 class NutritionScreenViewModel @Inject constructor(
     private val nutritionRepository: NutritionRepository,
+    private val nutritionGoalsRepository: com.hellohealth.domain.repository.NutritionGoalsRepository,
+    private val profileRepository: com.hellohealth.domain.repository.ProfileRepository,
+    activityRepository: com.hellohealth.domain.repository.ActivityRepository,
 ) : ViewModel() {
 
     private val today: String = LocalDate.now(ZoneId.systemDefault()).toString()
@@ -48,6 +51,22 @@ class NutritionScreenViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = NutritionDaySummary.empty(today),
         )
+
+    /** Resolved targets (profile derivation + the user's stored overrides) for the hero ring + macro bars. */
+    val targets: StateFlow<com.hellohealth.domain.health.NutritionTargets.ResolvedTargets?> =
+        nutritionGoalsRepository.observeNutritionGoals()
+            .flatMapLatest { goals ->
+                flow {
+                    val profile = runCatching { profileRepository.getProfile() }.getOrNull()
+                    emit(com.hellohealth.domain.health.NutritionTargets.resolve(profile, goals))
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Today's calories burned (active + BMR) for the "burned" side stat; null when unknown. */
+    val caloriesOut: StateFlow<Double?> =
+        activityRepository.observeCaloriesOutForDay(today)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
