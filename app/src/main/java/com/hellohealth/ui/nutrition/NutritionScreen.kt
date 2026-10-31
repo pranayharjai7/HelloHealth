@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -44,11 +45,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,10 +62,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.hellohealth.data.local.entities.CachedFoodEntity
 import com.hellohealth.domain.model.nutrition.FoodEntry
 import com.hellohealth.domain.model.nutrition.MealCategory
@@ -93,13 +101,15 @@ fun NutritionScreen(
     val targets by viewModel.targets.collectAsState()
     val caloriesOut by viewModel.caloriesOut.collectAsState()
     val query by viewModel.query.collectAsState()
-    val results by viewModel.searchResults.collectAsState()
+    val searchState by viewModel.searchState.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
     // Add-sheet target: a resolved catalog food OR null for the bare quick-add sheet.
     var addSheetFood by remember { mutableStateOf<CachedFoodEntity?>(null) }
     var showQuickAdd by remember { mutableStateOf(false) }
+    // The full-screen food-search overlay (opened by tapping the search field on the main page).
+    var showSearch by rememberSaveable { mutableStateOf(false) }
 
     // A barcode scan returns the raw code; resolve it (cache → OFF → cache) and, on a hit, open the
     // add sheet pre-filled. Consumed exactly once so a config change doesn't re-open the sheet.
@@ -149,20 +159,14 @@ fun NutritionScreen(
 
                 item { CalorieHeroCard(summary, targets, caloriesOut) }
 
-                // Search as its own distinct block (search field + scan + quick-add).
+                // Search as its own distinct block. Tapping the field opens the full-screen search
+                // overlay (results no longer reflow this page); Scan + Quick-add stay inline.
                 item {
                     SearchBlock(
-                        query = query,
-                        onQueryChange = viewModel::onQueryChange,
-                        onClear = viewModel::clearSearch,
+                        onOpenSearch = { showSearch = true },
                         onScan = onScanBarcode,
                         onQuickAdd = { showQuickAdd = true },
                     )
-                }
-                if (results.isNotEmpty()) {
-                    items(results, key = { it.id }) { food ->
-                        SearchResultRow(food = food, onClick = { addSheetFood = food })
-                    }
                 }
 
                 item { MicronutrientsCard(summary, targets) }
@@ -219,6 +223,124 @@ fun NutritionScreen(
                 )
                 showQuickAdd = false
             },
+        )
+    }
+
+    // Full-screen food-search overlay. Owns its own focused field + result list so the main page
+    // never reflows or pops a keyboard. Dismiss (back/close) clears the query.
+    if (showSearch) {
+        FoodSearchOverlay(
+            query = query,
+            state = searchState,
+            onQueryChange = viewModel::onQueryChange,
+            onDismiss = {
+                viewModel.clearSearch()
+                showSearch = false
+            },
+            onPick = { food ->
+                addSheetFood = food
+                viewModel.clearSearch()
+                showSearch = false
+            },
+        )
+    }
+}
+
+/**
+ * Full-screen search surface shown over the Nutrition screen. A top bar with a back arrow + an
+ * auto-focused text field drives the shared VM query; the body renders a loader / empty / no-results
+ * / ranked-results state from [SearchState]. Reuses [SearchResultRow] for each hit. Implemented as a
+ * full-bleed [Dialog] (no nav route needed); back and the close arrow both dismiss.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FoodSearchOverlay(
+    query: String,
+    state: SearchState,
+    onQueryChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onPick: (CachedFoodEntity) -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    title = {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = onQueryChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester),
+                            placeholder = { Text("Search foods…") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                    IconButton(onClick = { onQueryChange("") }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear")
+                                    }
+                                }
+                            },
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
+                        }
+                    },
+                )
+
+                when (val s = state) {
+                    is SearchState.Idle -> SearchHint("Search for a food to log it.")
+                    is SearchState.Loading -> SearchLoading()
+                    is SearchState.Empty -> SearchHint("No foods found for “$query”.\nTry another spelling or Quick add.")
+                    is SearchState.Results -> LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        item { Spacer(Modifier.height(4.dp)) }
+                        items(s.foods, key = { it.id }) { food ->
+                            SearchResultRow(food = food, onClick = { onPick(food) })
+                        }
+                        item { Spacer(Modifier.height(16.dp)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Centered loader for the search overlay while a query is in flight. */
+@Composable
+private fun SearchLoading() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+}
+
+/** Centered hint/empty text for the search overlay (idle prompt or no-results message). */
+@Composable
+private fun SearchHint(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }
@@ -321,14 +443,13 @@ private fun MacroBar(name: String, consumed: Double, target: Int?, color: Color,
 }
 
 /**
- * Search as its own distinct block (separated from the day's info): a search field plus Scan and
- * Quick-add affordances. Logging lives here, not merged into the summary cards.
+ * Search as its own distinct block (separated from the day's info): a tap-to-open search trigger plus
+ * Scan and Quick-add affordances. Tapping the trigger opens the full-screen [FoodSearchOverlay] — the
+ * field here is a non-editable affordance, so the keyboard never pops inline on the main page.
  */
 @Composable
 private fun SearchBlock(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClear: () -> Unit,
+    onOpenSearch: () -> Unit,
     onScan: () -> Unit,
     onQuickAdd: () -> Unit,
 ) {
@@ -338,19 +459,38 @@ private fun SearchBlock(
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(Modifier.padding(12.dp)) {
-            SearchField(query = query, onQueryChange = onQueryChange, onClear = onClear)
+            SearchTrigger(onClick = onOpenSearch)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.FilledTonalButton(onClick = onScan, modifier = Modifier.weight(1f)) {
+                FilledTonalButton(onClick = onScan, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp)); Text("Scan")
                 }
-                androidx.compose.material3.FilledTonalButton(onClick = onQuickAdd, modifier = Modifier.weight(1f)) {
+                FilledTonalButton(onClick = onQuickAdd, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp)); Text("Quick add")
                 }
             }
         }
+    }
+}
+
+/** A read-only, search-bar-shaped row that opens the full-screen search overlay when tapped. */
+@Composable
+private fun SearchTrigger(onClick: () -> Unit) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(onSurface.copy(alpha = 0.06f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Search, contentDescription = null, tint = onSurface.copy(alpha = 0.6f))
+        Spacer(Modifier.width(12.dp))
+        Text("Search foods…", color = onSurface.copy(alpha = 0.6f))
     }
 }
 
@@ -439,24 +579,6 @@ private fun MicronutrientRow(micro: com.hellohealth.domain.health.MicronutrientT
             trackColor = onSurface.copy(alpha = 0.08f),
         )
     }
-}
-
-@Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit, onClear: () -> Unit) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("Search foods…") },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = onClear) { Icon(Icons.Default.Close, contentDescription = "Clear") }
-            }
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(16.dp),
-    )
 }
 
 @Composable

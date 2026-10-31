@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -72,33 +73,62 @@ class NutritionScreenViewModel @Inject constructor(
     val query: StateFlow<String> = _query.asStateFlow()
 
     /**
-     * Debounced typeahead results. A blank query short-circuits to an empty list (no network); a
-     * non-blank query debounces 300 ms, dedupes, then hits the repo (cache → remote → cache). The
-     * repo swallows all remote failures, so this Flow never errors — worst case it is the local
-     * matches. Wrapped per-query in a `flow` that logs and yields empty on the off-chance the repo
-     * throws, so a search miss can never crash the screen.
+     * Debounced typeahead results paired with the query they were computed for. A blank query
+     * short-circuits to empty (no network); a non-blank query debounces 300 ms, dedupes, then hits
+     * the repo (cache → remote → cache). The repo swallows all remote failures, so this Flow never
+     * errors — worst case it is the local matches. Carrying the source query lets [searchState]
+     * tell "results for the CURRENT query" apart from "stale results for a previous query" (= still
+     * loading), without any mutable latch.
      */
-    val searchResults: StateFlow<List<CachedFoodEntity>> =
+    private val resultsFor: StateFlow<Pair<String, List<CachedFoodEntity>>> =
         _query
             .debounce(300)
             .distinctUntilChanged()
             .flatMapLatest { q ->
                 flow {
                     if (q.isBlank()) {
-                        emit(emptyList())
+                        emit("" to emptyList())
                     } else {
-                        emit(runCatching { nutritionRepository.searchFoods(q) }.getOrElse { e ->
+                        val hits = runCatching { nutritionRepository.searchFoods(q) }.getOrElse { e ->
                             AppLogger.w(FeatureTag.NUTRITION, "searchFoods failed for '$q'", e)
                             emptyList()
-                        })
+                        }
+                        emit(q to hits)
                     }
                 }
             }
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
-                initialValue = emptyList(),
+                initialValue = "" to emptyList(),
             )
+
+    /** The current query's matches (empty while still debouncing/fetching). */
+    val searchResults: StateFlow<List<CachedFoodEntity>> =
+        combine(_query, resultsFor) { q, (resultQ, hits) ->
+            if (q.isNotBlank() && q == resultQ) hits else emptyList()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Search UI state for the full-screen search surface: distinguishes "idle" (no query), "loading"
+     * (query typed, results for THIS query not back yet — so the overlay shows a loader, not a
+     * misleading empty state), "results", and "empty" (query typed, this query matched nothing).
+     * Fully derived from [query] + [resultsFor]: when the latest resolved results are not for the
+     * current query, the search is still in flight → Loading.
+     */
+    val searchState: StateFlow<SearchState> =
+        combine(_query, resultsFor) { q, (resultQ, hits) ->
+            when {
+                q.isBlank() -> SearchState.Idle
+                q != resultQ -> SearchState.Loading       // results haven't caught up to this query
+                hits.isNotEmpty() -> SearchState.Results(hits)
+                else -> SearchState.Empty
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = SearchState.Idle,
+        )
 
     fun onQueryChange(value: String) { _query.value = value }
 
@@ -156,4 +186,16 @@ class NutritionScreenViewModel @Inject constructor(
             AppLogger.w(FeatureTag.NUTRITION, "resolveBarcode failed for '$barcode'", e)
             null
         }
+}
+
+/** UI state for the full-screen food-search surface — drives loader vs. empty vs. results. */
+sealed interface SearchState {
+    /** No query typed yet (or cleared). */
+    data object Idle : SearchState
+    /** A query is typed but its results are still debouncing/fetching — show a loader. */
+    data object Loading : SearchState
+    /** The current query matched nothing. */
+    data object Empty : SearchState
+    /** The current query's ranked matches. */
+    data class Results(val foods: List<CachedFoodEntity>) : SearchState
 }
