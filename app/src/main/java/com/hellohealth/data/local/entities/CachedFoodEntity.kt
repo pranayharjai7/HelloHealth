@@ -40,6 +40,15 @@ data class CachedFoodEntity(
     val carbsGPer: Double? = null,
     val fatGPer: Double? = null,
     val fibreGPer: Double? = null,
+    // Curated micronutrients, same per-basis convention as the macros (null = source didn't provide it).
+    val sodiumMgPer: Double? = null,
+    val saturatedFatGPer: Double? = null,
+    val sugarGPer: Double? = null,
+    val calciumMgPer: Double? = null,
+    val ironMgPer: Double? = null,
+    val potassiumMgPer: Double? = null,
+    val vitaminDMcgPer: Double? = null,
+    val vitaminCMgPer: Double? = null,
     val barcode: String? = null,
     val lastRefreshedEpochMs: Long,
 )

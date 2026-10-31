@@ -20,5 +20,7 @@ data class FoodEntry(
     val carbsG: Double?,
     val fatG: Double?,
     val fibreG: Double?,
+    /** Curated micronutrients present on this entry, scaled to the logged quantity. Absent key = no data. */
+    val micros: Map<com.hellohealth.domain.health.MicronutrientTargets.Micro, Double> = emptyMap(),
     val timestampUtcEpochMs: Long,
 )

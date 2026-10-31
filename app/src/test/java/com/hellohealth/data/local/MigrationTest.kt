@@ -891,4 +891,79 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test
+    fun `migrate 17 to 18 adds micronutrient columns and preserves existing nutrition entries`() {
+        // A genuine v17 user has a logged food entry. MIGRATION_17_18 is additive ALTER TABLE ADD
+        // COLUMN on nutrition_entries, so the row must survive and the new micro columns default NULL.
+        helper.createDatabase(dbName, 17).apply {
+            execSQL(
+                "INSERT INTO nutrition_entries " +
+                    "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, mealCategory, foodId, " +
+                    "foodName, quantity, unit, calories, proteinG, carbsG, fatG, fibreG, waterMl, entryMethod, " +
+                    "updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                    "VALUES ('n1', 'u1', '2026-10-30', 1000, 0, 'food', 'lunch', 'usda:1', " +
+                    "'Spinach', 100.0, 'g', 23.0, 2.9, 3.6, 0.4, 2.2, NULL, 'catalog', 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(dbName, 18, true, MIGRATION_17_18)
+
+        // Pre-existing row survives; the new micronutrient columns are NULL on it (= no data).
+        db.query("SELECT fibreG, sodiumMg, calciumMg, ironMg, potassiumMg, vitaminDMcg, vitaminCMg, saturatedFatG, sugarG FROM nutrition_entries WHERE id = 'n1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(2.2, c.getDouble(0), 0.001) // existing fibre survives
+            for (i in 1..8) assertTrue("micro col $i defaults null", c.isNull(i))
+        }
+
+        // New columns accept writes (REAL affinities correct).
+        db.execSQL("UPDATE nutrition_entries SET sodiumMg = 79.0, calciumMg = 99.0, vitaminCMg = 28.1 WHERE id = 'n1'")
+        db.query("SELECT sodiumMg, calciumMg, vitaminCMg FROM nutrition_entries WHERE id = 'n1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(79.0, c.getDouble(0), 0.001)
+            assertEquals(99.0, c.getDouble(1), 0.001)
+            assertEquals(28.1, c.getDouble(2), 0.001)
+        }
+        db.close()
+    }
+
+    @Test
+    fun `migrate 18 to 19 creates nutrition_goals and preserves other tables`() {
+        // A v18 user has a nutrition entry; MIGRATION_18_19 only CREATEs nutrition_goals, so the
+        // existing row must survive and the new table must accept an override row.
+        helper.createDatabase(dbName, 18).apply {
+            execSQL(
+                "INSERT INTO nutrition_entries " +
+                    "(id, userId, localDate, timestampUtcEpochMs, tzOffsetMinutes, kind, foodName, " +
+                    "quantity, unit, calories, entryMethod, updatedAtEpochMs, updatedAtTzOffsetMinutes, " +
+                    "deletedAtEpochMs, isSynced) " +
+                    "VALUES ('n1', 'u1', '2026-10-30', 1000, 0, 'food', 'Spinach', 100.0, 'g', 23.0, " +
+                    "'catalog', 1000, 0, NULL, 0)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(dbName, 19, true, MIGRATION_18_19)
+
+        // Existing data survived the CREATE-only migration.
+        db.query("SELECT foodName FROM nutrition_entries WHERE id = 'n1'").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals("Spinach", c.getString(0))
+        }
+
+        // The new table accepts a custom-override row (bool as INTEGER, nullable ints, CSV micros).
+        db.execSQL(
+            "INSERT INTO nutrition_goals " +
+                "(userId, useCustomCalories, calorieBudget, useCustomMacros, macroMode, proteinG, carbsG, " +
+                "fatG, fiberG, trackedMicros, updatedAtEpochMs, updatedAtTzOffsetMinutes, deletedAtEpochMs, isSynced) " +
+                "VALUES ('u1', 1, 2000, 1, 'GRAMS', 180, 200, 60, 30, 'IRON,VITAMIN_C', 1000, 0, NULL, 0)"
+        )
+        db.query("SELECT calorieBudget, proteinG, trackedMicros FROM nutrition_goals WHERE userId = 'u1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(2000, c.getInt(0))
+            assertEquals(180, c.getInt(1))
+            assertEquals("IRON,VITAMIN_C", c.getString(2))
+        }
+        db.close()
+    }
 }

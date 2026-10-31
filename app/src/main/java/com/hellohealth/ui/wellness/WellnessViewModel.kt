@@ -10,8 +10,20 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+
+/**
+ * UI state for the wellness surfaces. [isLoading] starts true and flips false on the first repository
+ * emission, so the UI can show a loader (not the misleading empty/"no data" state) during the initial
+ * read — which does slow suspend work (weekly stats → Health Connect) before its first value. A null
+ * [snapshot] AFTER loading is a genuinely empty day.
+ */
+data class WellnessUiState(
+    val snapshot: WellnessSnapshot? = null,
+    val isLoading: Boolean = true,
+)
 
 /**
  * Backs both the dashboard [com.hellohealth.ui.dashboard.components.WellnessCard] and the
@@ -25,11 +37,13 @@ class WellnessViewModel @Inject constructor(
     selectedDateHolder: SelectedDateHolder,
 ) : ViewModel() {
 
-    val snapshot: StateFlow<WellnessSnapshot?> = selectedDateHolder.selectedDate
+    val uiState: StateFlow<WellnessUiState> = selectedDateHolder.selectedDate
         .flatMapLatest { date -> repository.observeSnapshot(date) }
+        .map { WellnessUiState(snapshot = it, isLoading = false) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null,
+            initialValue = WellnessUiState(snapshot = null, isLoading = true),
         )
 }
+

@@ -113,9 +113,10 @@ fun NutritionCard(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        MacroBar("Protein", state.proteinG, state.proteinTargetG, Color(0xFF42A5F5))
-                        MacroBar("Carbs", state.carbsG, state.carbsTargetG, Color(0xFFFFA726))
-                        MacroBar("Fat", state.fatG, state.fatTargetG, Color(0xFFEF5350))
+                        MacroBar("Protein", state.proteinG, state.proteinTargetG, Color(0xFF5B8DEF))
+                        MacroBar("Carbs", state.carbsG, state.carbsTargetG, Color(0xFFF2A33C))
+                        MacroBar("Fat", state.fatG, state.fatTargetG, Color(0xFFEF6D6D))
+                        MacroBar("Fiber", state.fibreG, state.fibreTargetG, Color(0xFF66BB6A))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
@@ -194,6 +195,8 @@ private fun CalorieRing(state: NutritionUiState, accent: Color) {
 @Composable
 private fun MacroBar(label: String, consumedG: Int, targetG: Int?, color: Color) {
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val warn = MaterialTheme.colorScheme.error
+    val over = targetG != null && consumedG > targetG
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -214,7 +217,7 @@ private fun MacroBar(label: String, consumedG: Int, targetG: Int?, color: Color)
                     .fillMaxWidth()
                     .height(5.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color = color,
+                color = if (over) warn else color,
                 trackColor = color.copy(alpha = 0.15f),
             )
         }

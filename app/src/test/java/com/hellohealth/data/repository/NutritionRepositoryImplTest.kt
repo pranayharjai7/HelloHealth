@@ -202,6 +202,65 @@ class NutritionRepositoryImplTest {
     }
 
     @Test
+    fun `search matches tokens in any order`() = runTest {
+        foodDao.upsert(
+            CachedFoodEntity(
+                id = "seed:chicken-breast", name = "Chicken Breast (cooked)", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 165.0, lastRefreshedEpochMs = 1L,
+            )
+        )
+        val repo = repo("u1")
+
+        // Reversed word order still matches — the old single-LIKE could not do this.
+        val hits = repo.searchFoods("breast chicken")
+        assertEquals(1, hits.size)
+        assertEquals("Chicken Breast (cooked)", hits.single().name)
+    }
+
+    @Test
+    fun `search ranks exact and prefix matches above looser token matches`() = runTest {
+        listOf(
+            CachedFoodEntity(
+                id = "seed:chicken-salad-sandwich", name = "Chicken Salad Sandwich", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 200.0, lastRefreshedEpochMs = 1L,
+            ),
+            CachedFoodEntity(
+                id = "seed:chicken", name = "Chicken", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 165.0, lastRefreshedEpochMs = 1L,
+            ),
+            CachedFoodEntity(
+                id = "seed:chicken-breast", name = "Chicken Breast", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 165.0, lastRefreshedEpochMs = 1L,
+            ),
+        ).forEach { foodDao.upsert(it) }
+        val repo = repo("u1")
+
+        val names = repo.searchFoods("chicken").map { it.name }
+        // Exact "Chicken" first, then prefix matches shortest-first.
+        assertEquals("Chicken", names.first())
+        assertEquals(listOf("Chicken", "Chicken Breast", "Chicken Salad Sandwich"), names)
+    }
+
+    @Test
+    fun `search prefers the bundled seed catalog over a remote row on a tie`() = runTest {
+        foodDao.upsert(
+            CachedFoodEntity(
+                id = "seed:yogurt", name = "Yogurt", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 59.0, lastRefreshedEpochMs = 1L,
+            )
+        )
+        val remote = CachedFoodEntity(
+            id = "usda:999", name = "Yogurt", source = "usda",
+            basisUnit = "per_100g", caloriesPer = 61.0, lastRefreshedEpochMs = 1L,
+        )
+        val repo = repo("u1", usdaResults = listOf(remote))
+
+        val hits = repo.searchFoods("yogurt")
+        // Same name, same length → seed row wins the tiebreak and leads.
+        assertEquals("seed:yogurt", hits.first().id)
+    }
+
+    @Test
     fun `resolveBarcode falls back to Open Food Facts on a cache miss and caches the result`() = runTest {
         val offHit = CachedFoodEntity(
             id = "off:555", name = "Sparkling Water", source = "off",
@@ -255,5 +314,38 @@ class NutritionRepositoryImplTest {
         val repo = repo("u1", catalogResult = Result.failure(RuntimeException("bad asset")))
         repo.seedCatalogIfEmpty()
         assertEquals(0, foodDao.count())
+    }
+
+    @Test
+    fun `seedCatalogIfEmpty re-seeds when stored seed rows predate micronutrients`() = runTest {
+        // Simulate an existing user whose catalog was seeded before the micronutrient backfill:
+        // seed:spinach is present but its sodiumMgPer is null.
+        foodDao.insertAll(
+            listOf(
+                CachedFoodEntity(
+                    id = "seed:spinach", name = "Spinach", source = "seed",
+                    basisUnit = "per_100g", caloriesPer = 23.0, sodiumMgPer = null,
+                    lastRefreshedEpochMs = 1L,
+                )
+            )
+        )
+        // A refreshed catalog now carries micronutrients.
+        val refreshed = listOf(
+            CachedFoodEntity(
+                id = "seed:spinach", name = "Spinach", source = "seed",
+                basisUnit = "per_100g", caloriesPer = 23.0, sodiumMgPer = 79.0,
+                calciumMgPer = 99.0, ironMgPer = 2.71, lastRefreshedEpochMs = 2L,
+            )
+        )
+        val repo = repo("u1", catalogResult = Result.success(refreshed))
+
+        // Count is > 0 but the sentinel row lacks micros → re-seed (REPLACE) runs.
+        repo.seedCatalogIfEmpty()
+        assertEquals(79.0, foodDao.getById("seed:spinach")?.sodiumMgPer)
+
+        // Now the sentinel has micros → a subsequent call is a no-op (no needless re-seed).
+        val repo2 = repo("u1", catalogResult = Result.failure(RuntimeException("should not be read")))
+        repo2.seedCatalogIfEmpty()
+        assertEquals(79.0, foodDao.getById("seed:spinach")?.sodiumMgPer)
     }
 }

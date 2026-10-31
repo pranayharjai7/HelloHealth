@@ -20,6 +20,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
+ * Horizontal zoom + pan state for a chart. [scale] ≥ 1 (1 = whole range visible); [panFraction] is the
+ * left edge of the visible window expressed as a fraction of the FULL data range, clamped so the window
+ * [panFraction, panFraction + 1/scale] always stays within [0,1]. At scale 1 this is the identity, so a
+ * chart that never zooms behaves exactly as before.
+ */
+data class ChartViewport(val scale: Float = 1f, val panFraction: Float = 0f) {
+    /** Visible window width as a fraction of the full range. */
+    val windowFraction: Float get() = 1f / scale.coerceAtLeast(1f)
+
+    /** Clamp so the window never runs off either end of the data. */
+    fun clamped(): ChartViewport {
+        val s = scale.coerceAtLeast(1f)
+        val maxPan = (1f - 1f / s).coerceAtLeast(0f)
+        return ChartViewport(s, panFraction.coerceIn(0f, maxPan))
+    }
+
+    /** A full-range fraction f∈[0,1] → its fraction WITHIN the visible window (may be <0 or >1 = off-screen). */
+    fun toWindow(f: Float): Float = (f - panFraction) / windowFraction
+
+    val isIdentity: Boolean get() = scale <= 1.0001f && panFraction == 0f
+}
+
+/**
  * Maps data values into the plot rect. Shared by [ChartScaffold] and the interaction overlay so the
  * drawn marks and the hit-testing use identical geometry.
  */
@@ -27,12 +50,17 @@ class ChartMapping(
     val plot: Rect,
     private val xAxis: Axis?,
     private val yAxis: Axis?,
+    val viewport: ChartViewport = ChartViewport(),
 ) {
+    /** Map a FULL-range fraction (0..1) to a pixel x through the current viewport. */
+    fun visibleX(fraction: Float): Float = plot.left + viewport.toWindow(fraction) * plot.width
+
     /** Map a data-x (same units as [xAxis], or a 0..n index when xAxis is null) to a pixel x. */
     fun mapX(x: Float, indexMax: Float): Float {
         val a = xAxis
-        return if (a != null) plot.left + ((x - a.min) / a.span) * plot.width
-        else plot.left + (if (indexMax <= 0f) 0f else x / indexMax) * plot.width
+        val fullFrac = if (a != null) ((x - a.min) / a.span)
+        else (if (indexMax <= 0f) 0f else x / indexMax)
+        return visibleX(fullFrac)
     }
 
     /** Map a data-y to a pixel y (inverted — larger values higher). */
@@ -77,6 +105,7 @@ fun ChartScaffold(
     gridColor: Color,
     labelColor: Color,
     modifier: Modifier = Modifier,
+    viewport: ChartViewport = ChartViewport(),
     plot: DrawScope.(mapping: ChartMapping) -> Unit,
 ) {
     val measurer = rememberTextMeasurer()
@@ -84,7 +113,7 @@ fun ChartScaffold(
 
     Canvas(modifier = modifier.fillMaxWidth().height(heightDp)) {
         val plotRect = ChartGutters.plotRect(size, hasX = xAxis != null, hasY = yAxis != null, density = this)
-        val mapping = ChartMapping(plotRect, xAxis, yAxis)
+        val mapping = ChartMapping(plotRect, xAxis, yAxis, viewport)
 
         // Horizontal gridlines + y-tick labels at each nice tick inside the band.
         yAxis?.ticks?.forEach { t ->
@@ -95,8 +124,12 @@ fun ChartScaffold(
             drawText(layout, topLeft = Offset(plotRect.left - layout.size.width - 4.dp.toPx(), y - layout.size.height / 2f))
         }
 
-        // X-tick labels along the bottom gutter (no vertical grid — keeps it quiet).
+        // X-tick labels along the bottom gutter (no vertical grid — keeps it quiet). When zoomed, cull
+        // ticks whose position falls outside the visible window so labels stay meaningful.
         xAxis?.ticks?.forEach { t ->
+            val fullFrac = (t - xAxis.min) / xAxis.span
+            val w = viewport.toWindow(fullFrac)
+            if (w < -0.001f || w > 1.001f) return@forEach
             val x = mapping.mapX(t, 1f)
             val layout = measurer.measure(xAxis.format(t), tickStyle)
             val tx = (x - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)

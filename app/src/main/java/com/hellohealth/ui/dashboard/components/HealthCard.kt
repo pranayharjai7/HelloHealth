@@ -47,6 +47,7 @@ fun HealthCard(
     vitals: VitalsUiState,
     isConnected: Boolean,
     onClick: () -> Unit,
+    isLoading: Boolean = false,
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
     val primary = MaterialTheme.colorScheme.primary
@@ -78,18 +79,22 @@ fun HealthCard(
 
             Spacer(Modifier.height(20.dp))
 
-            ActivityCard(
-                steps = steps,
-                goalSteps = goalSteps,
-                activeCalories = activeCalories,
-                goalActiveCalories = goalActiveCalories,
-                activeMinutes = activeMinutes,
-                goalActiveMinutes = goalActiveMinutes,
-                ringSize = 104.dp,
-            )
+            if (isLoading) {
+                com.hellohealth.ui.common.ScoreCardSkeleton(base = onSurface)
+            } else {
+                ActivityCard(
+                    steps = steps,
+                    goalSteps = goalSteps,
+                    activeCalories = activeCalories,
+                    goalActiveCalories = goalActiveCalories,
+                    activeMinutes = activeMinutes,
+                    goalActiveMinutes = goalActiveMinutes,
+                    ringSize = 104.dp,
+                )
 
-            Spacer(Modifier.height(16.dp))
-            Chip("Readiness", if (vitals.hasReadiness && vitals.readinessScore > 0) "${vitals.readinessScore}/100" else "—")
+                Spacer(Modifier.height(16.dp))
+                Chip("Readiness", if (vitals.hasReadiness && vitals.readinessScore > 0) "${vitals.readinessScore}/100" else "—")
+            }
         }
     }
 }

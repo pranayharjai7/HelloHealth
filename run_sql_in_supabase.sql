@@ -757,4 +757,28 @@ CREATE POLICY achievements_owner ON public.achievements
 
 GRANT SELECT, INSERT, UPDATE ON public.achievements TO authenticated;
 
+-- --- nutrition_goals (user's target overrides; NutritionGoalsSyncer, conflict user_id) -------------
+CREATE TABLE IF NOT EXISTS public.nutrition_goals (
+    user_id uuid PRIMARY KEY REFERENCES auth.users(id),
+    use_custom_calories boolean NOT NULL DEFAULT false,
+    calorie_budget integer,
+    use_custom_macros boolean NOT NULL DEFAULT false,
+    macro_mode text NOT NULL DEFAULT 'GRAMS',
+    protein_g integer, carbs_g integer, fat_g integer, fiber_g integer,
+    tracked_micros text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+);
+CREATE OR REPLACE FUNCTION public.set_updated_at_nutrition_goals()
+RETURNS trigger AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trg_nutrition_goals_set_updated_at ON public.nutrition_goals;
+CREATE TRIGGER trg_nutrition_goals_set_updated_at BEFORE UPDATE ON public.nutrition_goals
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_nutrition_goals();
+ALTER TABLE public.nutrition_goals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS nutrition_goals_owner ON public.nutrition_goals;
+CREATE POLICY nutrition_goals_owner ON public.nutrition_goals FOR ALL TO authenticated
+    USING (user_id::text = auth.uid()::text) WITH CHECK (user_id::text = auth.uid()::text);
+GRANT SELECT, INSERT, UPDATE ON public.nutrition_goals TO authenticated;
+
 NOTIFY pgrst, 'reload schema';

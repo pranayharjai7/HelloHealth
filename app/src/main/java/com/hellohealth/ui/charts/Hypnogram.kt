@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.dp
 import com.hellohealth.domain.health.SleepStageSegment
 import com.hellohealth.domain.health.SleepStages
 import com.hellohealth.ui.charts.interaction.ChartProjection
-import com.hellohealth.ui.charts.interaction.ChartValueTable
 import com.hellohealth.ui.charts.interaction.CrosshairStyle
 import com.hellohealth.ui.charts.interaction.InteractiveChart
 import com.hellohealth.ui.charts.interaction.TooltipRow
@@ -24,8 +23,8 @@ import java.time.format.DateTimeFormatter
 /**
  * A hypnogram: the night's sleep stages drawn as filled bands across four lanes (Awake / REM / Light /
  * Deep, top→bottom) on a wall-clock time x-axis. Reuses the shared chart layer — [ChartScaffold] for
- * the time axis + lane labels, [InteractiveChart] for tap-to-inspect ("01:40–02:15 · Deep"), and a
- * [ChartValueTable] fallback. The y-axis is categorical (lane centers), not numeric.
+ * the time axis + lane labels and [InteractiveChart] for tap-to-inspect ("01:40–02:15 · Deep"). The
+ * y-axis is categorical (lane centers), not numeric.
  *
  * Segments are the flattened `SleepSessionRecord.stages`; stages map to lanes via [laneOf]. Awake
  * segments (STAGE_TYPE_AWAKE / AWAKE_IN_BED) share the top lane; SLEEPING folds into Light.
@@ -73,7 +72,7 @@ fun Hypnogram(
             heightDp = 150.dp,
             accent = deepColor,
             crosshair = CrosshairStyle.MarkLift,
-            project = { size ->
+            project = { size, vp ->
                 val plot = ChartGutters.plotRect(size, hasX = true, hasY = true, density = density)
                 val laneH = plot.height / 4f
                 ChartProjection(
@@ -83,7 +82,7 @@ fun Hypnogram(
                     anchorOf = { i ->
                         val seg = shown[i]
                         val lane = laneOf(seg.stage)!! // filtered above
-                        val cx = plot.left + (fracOf(seg.startMs) + fracOf(seg.endMs)) / 2f * plot.width
+                        val cx = plot.left + vp.toWindow((fracOf(seg.startMs) + fracOf(seg.endMs)) / 2f) * plot.width
                         val cy = plot.top + (lane + 0.5f) * laneH
                         Offset(cx, cy)
                     },
@@ -96,37 +95,25 @@ fun Hypnogram(
                 val lane = laneOf(seg.stage)!!
                 TooltipSpec("$from–$to", listOf(TooltipRow("", LANE_NAMES[lane], laneColors[lane])))
             },
-        ) { m ->
-            ChartScaffold(heightDp = 150.dp, xAxis = xAxis, yAxis = yAxis, gridColor = gridColor, labelColor = labelColor, modifier = m) { mapping ->
+        ) { m, vp ->
+            ChartScaffold(heightDp = 150.dp, xAxis = xAxis, yAxis = yAxis, gridColor = gridColor, labelColor = labelColor, modifier = m, viewport = vp) { mapping ->
                 val plot = mapping.plot
                 val laneH = plot.height / 4f
                 val gap = 2.dp.toPx()
                 shown.forEach { seg ->
                     val lane = laneOf(seg.stage)!!
-                    val x0 = plot.left + fracOf(seg.startMs) * plot.width
-                    val x1 = plot.left + fracOf(seg.endMs) * plot.width
+                    val x0 = mapping.visibleX(fracOf(seg.startMs))
+                    val x1 = mapping.visibleX(fracOf(seg.endMs))
                     val top = plot.top + lane * laneH + gap / 2f
                     drawRoundRect(
                         color = laneColors[lane],
                         topLeft = Offset(x0, top),
                         size = Size((x1 - x0).coerceAtLeast(1f), (laneH - gap).coerceAtLeast(1f)),
-                        cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                        cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx()),
                     )
                 }
             }
         }
-        ChartValueTable(
-            rowCount = shown.size,
-            header = listOf("From", "To", "Stage"),
-            cell = { r, c ->
-                val seg = shown[r]
-                when (c) {
-                    0 -> Instant.ofEpochMilli(seg.startMs).atZone(zone).toLocalTime().format(fmt)
-                    1 -> Instant.ofEpochMilli(seg.endMs).atZone(zone).toLocalTime().format(fmt)
-                    else -> LANE_NAMES[laneOf(seg.stage)!!]
-                }
-            },
-        )
     }
 }
 

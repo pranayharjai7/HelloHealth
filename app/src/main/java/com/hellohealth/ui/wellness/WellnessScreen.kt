@@ -58,7 +58,9 @@ fun WellnessScreen(
     viewModel: WellnessViewModel,
     onBack: () -> Unit,
 ) {
-    val snapshot by viewModel.snapshot.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val snapshot = uiState.snapshot
+    val isLoading = uiState.isLoading
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
 
@@ -91,7 +93,7 @@ fun WellnessScreen(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item { ScoreHeader(snapshot, primaryColor) }
+                item { ScoreHeader(snapshot, primaryColor, isLoading) }
 
                 val pillars = snapshot?.pillars.orEmpty()
                 if (pillars.isNotEmpty()) {
@@ -127,7 +129,7 @@ fun WellnessScreen(
 }
 
 @Composable
-private fun ScoreHeader(snapshot: WellnessSnapshot?, primaryColor: Color) {
+private fun ScoreHeader(snapshot: WellnessSnapshot?, primaryColor: Color, isLoading: Boolean = false) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
@@ -137,6 +139,10 @@ private fun ScoreHeader(snapshot: WellnessSnapshot?, primaryColor: Color) {
             modifier = Modifier.fillMaxWidth().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (isLoading) {
+                com.hellohealth.ui.common.ScoreCardSkeleton(base = MaterialTheme.colorScheme.onSurface)
+                return@Column
+            }
             Text(
                 text = snapshot?.score?.toString() ?: "—",
                 fontSize = 64.sp,

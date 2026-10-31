@@ -43,6 +43,7 @@ import com.hellohealth.domain.model.DailyHealthSnapshot
 import coil.compose.AsyncImage
 import com.hellohealth.domain.model.User
 import com.hellohealth.ui.auth.AuthViewModel
+import com.hellohealth.ui.common.toDisplayNameOr
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hellohealth.ui.dashboard.components.EmotionsCard
 import com.hellohealth.ui.dashboard.components.HealthCard
@@ -93,7 +94,7 @@ fun DashboardScreen(
     val coachingViewModel: CoachingViewModel = hiltViewModel()
     val coachingState by coachingViewModel.uiState.collectAsState()
     val wellnessViewModel: com.hellohealth.ui.wellness.WellnessViewModel = hiltViewModel()
-    val wellnessSnapshot by wellnessViewModel.snapshot.collectAsState()
+    val wellnessState by wellnessViewModel.uiState.collectAsState()
     val authUser by authViewModel.currentUser.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -310,7 +311,7 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = authUser?.name ?: "Healthy User",
+                            text = authUser?.name.toDisplayNameOr("Healthy User"),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
@@ -343,7 +344,8 @@ fun DashboardScreen(
 
                 // Hero wellness score card (top of the stack) → Wellness screen.
                 WellnessCard(
-                    snapshot = wellnessSnapshot,
+                    snapshot = wellnessState.snapshot,
+                    isLoading = wellnessState.isLoading,
                     onClick = onNavigateToWellness
                 )
 
@@ -360,6 +362,7 @@ fun DashboardScreen(
                     goalActiveMinutes = uiState.healthSummary.activeTimeGoal.toInt(),
                     vitals = vitalsState,
                     isConnected = uiState.hasHealthPermissions || uiState.lastSyncTime != null,
+                    isLoading = uiState.isLoading && uiState.healthSummary.lastUpdated == 0L,
                     onClick = onNavigateToHealth
                 )
 
@@ -825,7 +828,7 @@ fun ProfileBottomSheet(
                 ProfileAvatar(user = user, onClick = {})
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = user?.name ?: "Healthy User",
+                    text = user?.name.toDisplayNameOr("Healthy User"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )

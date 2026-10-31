@@ -1,7 +1,8 @@
 package com.hellohealth.ui.charts.interaction
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,14 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +41,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
+import com.hellohealth.ui.charts.ChartGutters
+import com.hellohealth.ui.charts.ChartViewport
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -67,6 +65,12 @@ data class TooltipRow(val label: String, val value: String, val swatch: Color? =
 
 enum class CrosshairStyle { Vertical, MarkLift }
 
+/** How strongly a pinch translates finger-span change into zoom, applied to the ABSOLUTE span ratio
+ *  (current span ÷ span when the pinch started). ~1.4 feels natural; the old incremental model needed
+ *  a much larger gain that still failed because it ratcheted per frame. */
+private const val ZOOM_GAIN = 1.4f
+
+
 /**
  * Wraps a chart's Canvas [chartBody] and adds the shared, scrub-and-pin interaction layer the dataviz
  * method requires: drag scrubs a crosshair that snaps to the nearest data point; releasing leaves the
@@ -78,67 +82,183 @@ enum class CrosshairStyle { Vertical, MarkLift }
 fun InteractiveChart(
     heightDp: Dp,
     accent: Color,
-    project: (Size) -> ChartProjection,
+    project: (Size, ChartViewport) -> ChartProjection,
     tooltipFor: (Int) -> TooltipSpec,
     modifier: Modifier = Modifier,
     crosshair: CrosshairStyle = CrosshairStyle.Vertical,
-    chartBody: @Composable (Modifier) -> Unit,
+    // Optional override: given the live pointer x and the nearest index, a chart may return a special
+    // tooltip (e.g. "No reading" when the pointer is inside a data gap). Null → fall back to tooltipFor.
+    tooltipAt: ((pointerX: Float, nearestIndex: Int) -> TooltipSpec?)? = null,
+    // When true (default) a two-finger pinch zooms and pans the x-axis; double-tap resets. Charts with
+    // too few points to benefit (e.g. scatter) pass false to stay fixed.
+    zoomable: Boolean = true,
+    // Max horizontal zoom factor. Clamped per-chart so a sparse series can't zoom into nonsense.
+    maxZoom: Float = 10f,
+    chartBody: @Composable (Modifier, ChartViewport) -> Unit,
 ) {
     var selected by remember { mutableStateOf(-1) }
-    var projection by remember { mutableStateOf<ChartProjection?>(null) }
+    var pointerX by remember { mutableStateOf(Float.NaN) }
+    var viewport by remember { mutableStateOf(ChartViewport()) }
+    var canvasSize by remember { mutableStateOf(Size.Zero) }
+    val projection = remember(canvasSize, viewport) {
+        if (canvasSize == Size.Zero) null else project(canvasSize, viewport)
+    }
+    // The gesture coroutine is long-lived and MUST NOT restart mid-gesture. It is keyed only on
+    // canvasSize/zoomable (stable during a touch); it reads the live viewport + projection through these
+    // updated refs so it always sees the latest without the pointerInput being torn down and relaunched
+    // on every viewport change (which was cancelling pinches/pans after a single frame).
+    val viewportRef = androidx.compose.runtime.rememberUpdatedState(viewport)
+    val projectionRef = androidx.compose.runtime.rememberUpdatedState(projection)
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
     val minHit = with(density) { 24.dp.toPx() }
 
     Box(modifier.fillMaxWidth().height(heightDp)) {
-        chartBody(Modifier.matchParentSize().onSizeChanged { projection = project(it.toSize()) })
+        chartBody(Modifier.matchParentSize().onSizeChanged { canvasSize = it.toSize() }, viewport)
 
         Box(
             Modifier
                 .matchParentSize()
-                .pointerInput(projection) {
-                    val proj = projection ?: return@pointerInput
-                    // One unified handler distinguishes tap (clear) from drag (scrub) by movement,
-                    // avoiding the two-sibling-detector down-event conflict.
+                // One unified gesture handler so the three modes never fight each other:
+                //   • one finger, moved right away            → PAN the viewport left/right
+                //   • one finger, held still past long-press   → SCRUB (pin + tooltip), drag moves the pin
+                //   • two fingers                              → ZOOM only (pinch; no lateral pan)
+                //   • double-tap                               → reset zoom (separate detector below)
+                .pointerInput(canvasSize, zoomable) {
+                    val plotW = ChartGutters.plotRect(size.toSize(), hasX = true, hasY = true, density = this).width
+                    val longPressMs = android.view.ViewConfiguration.getLongPressTimeout().toLong()
+                    val touchSlop = viewConfiguration.touchSlop
                     awaitPointerEventScope {
                         while (true) {
-                            val down = awaitPointerEvent()
-                            val first = down.changes.firstOrNull() ?: continue
-                            if (!first.pressed) continue
-                            val hit = hitTest(proj, first.position, minHit)
-                            if (hit >= 0) { selected = hit; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-                            else selected = -1 // tap on empty space clears the pin
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val downTime = android.os.SystemClock.uptimeMillis()
+                            var mode = 0 // 0 = undecided, 1 = pan, 2 = scrub, 3 = zoom
+                            var lastX = down.position.x
+                            // Absolute pinch model: latch the span + scale when the 2nd finger lands, then
+                            // recompute scale from the CURRENT span each frame. Immune to the per-frame
+                            // ratchet that made the old incremental model discard zoom on every wobble.
+                            var startSpan = Float.NaN
+                            var scaleAtStart = 1f
+
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                if (pressed.isEmpty()) {
+                                    // Released without ever deciding a mode → treat as a tap: pin the
+                                    // nearest point (or clear if the tap missed). Keeps tap-to-inspect
+                                    // working, esp. for non-zoomable charts (scatter/weekly).
+                                    if (mode == 0) {
+                                        val proj = projectionRef.value
+                                        if (proj != null) {
+                                            val h = hitTest(proj, down.position, minHit)
+                                            selected = h
+                                            if (h >= 0) { pointerX = down.position.x; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        }
+                                    }
+                                    break
+                                }
+
+                                if (zoomable && pressed.size >= 2) {
+                                    mode = 3
+                                    val span = (pressed[0].position - pressed[1].position).getDistance()
+                                    if (startSpan.isNaN()) {
+                                        // Latch on 2nd-finger-down (and re-latch after dropping to 1 finger).
+                                        startSpan = span
+                                        scaleAtStart = viewportRef.value.scale
+                                    } else if (span > 1f && startSpan > 1f) {
+                                        val ratio = 1f + (span / startSpan - 1f) * ZOOM_GAIN
+                                        val cur = viewportRef.value
+                                        viewport = cur.copy(scale = (scaleAtStart * ratio).coerceIn(1f, maxZoom)).clamped()
+                                    }
+                                    pressed.forEach { it.consume() }
+                                    continue
+                                }
+                                // Back to (or still) one finger: drop the pinch latch so a re-pinch re-latches,
+                                // and resync lastX so the pan after a pinch doesn't jump from a stale value.
+                                if (!startSpan.isNaN()) { startSpan = Float.NaN; lastX = pressed.first().position.x }
+
+                                val cur = pressed.first()
+                                val dx = cur.position.x - lastX
+                                if (mode == 0) {
+                                    val moved = kotlin.math.abs(cur.position.x - down.position.x) > touchSlop ||
+                                        kotlin.math.abs(cur.position.y - down.position.y) > touchSlop
+                                    val held = android.os.SystemClock.uptimeMillis() - downTime >= longPressMs
+                                    if (moved) {
+                                        // Moved before the long-press fired → pan.
+                                        mode = if (zoomable) 1 else 2
+                                        if (mode == 2) {
+                                            projectionRef.value?.let { p ->
+                                                val h = hitTest(p, cur.position, minHit)
+                                                if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                            }
+                                        }
+                                    } else if (held) {
+                                        // Held still long enough → scrub; pin the starting point.
+                                        mode = 2
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        projectionRef.value?.let { p ->
+                                            val h = hitTest(p, cur.position, minHit)
+                                            if (h >= 0) { selected = h; pointerX = cur.position.x }
+                                        }
+                                    }
+                                }
+
+                                when (mode) {
+                                    1 -> { // pan — content tracks the finger 1:1
+                                        if (plotW > 0f && dx != 0f) {
+                                            val c = viewportRef.value
+                                            viewport = c.copy(panFraction = c.panFraction - dx / plotW * c.windowFraction).clamped()
+                                        }
+                                        cur.consume()
+                                    }
+                                    2 -> { // scrub
+                                        projectionRef.value?.let { p ->
+                                            val h = hitTest(p, cur.position, minHit)
+                                            pointerX = cur.position.x
+                                            if (h >= 0 && h != selected) { selected = h; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                                        }
+                                        cur.consume()
+                                    }
+                                }
+                                lastX = cur.position.x
+                            }
                         }
                     }
                 }
-                .pointerInput(projection) {
-                    val proj = projection ?: return@pointerInput
-                    detectHorizontalDrag { pos ->
-                        val i = hitTest(proj, pos, minHit)
-                        if (i >= 0 && i != selected) { selected = i; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-                    }
-                }
+                .then(
+                    if (zoomable) Modifier.pointerInput(Unit) {
+                        detectTapGestures(onDoubleTap = { viewport = ChartViewport() })
+                    } else Modifier
+                )
         ) {
             val proj = projection
             if (proj != null && selected in 0 until proj.count) {
-                CrosshairLayer(proj, selected, accent, crosshair)
-                TooltipBubble(proj.anchorOf(selected), tooltipFor(selected), proj.size)
+                val gapSpec = tooltipAt?.invoke(pointerX, selected)
+                if (gapSpec != null) {
+                    // Pointer is in a gap: anchor the bubble at the pointer x on the baseline, no crosshair dot.
+                    TooltipBubble(Offset(pointerX, proj.size.height / 2f), gapSpec, proj.size)
+                } else {
+                    CrosshairLayer(proj, selected, accent, crosshair)
+                    TooltipBubble(proj.anchorOf(selected), tooltipFor(selected), proj.size)
+                }
+            }
+            // A quiet "zoomed · double-tap to reset" hint + a scrollbar strip showing the window position.
+            if (zoomable && !viewport.isIdentity && proj != null) {
+                ViewportHint(viewport, accent, proj.size)
             }
         }
     }
 }
 
-/** Scrub detector: reports the pointer position on down + every horizontal move. */
-private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectHorizontalDrag(
-    onPos: (Offset) -> Unit,
-) {
-    awaitPointerEventScope {
-        while (true) {
-            val down = awaitPointerEvent()
-            val change = down.changes.firstOrNull { it.pressed } ?: continue
-            onPos(change.position)
-            change.consume()
-        }
+/** A thin bottom scrollbar strip indicating the visible window within the full range when zoomed. */
+@Composable
+private fun ViewportHint(viewport: ChartViewport, accent: Color, size: Size) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val trackY = this.size.height - 2f
+        val x0 = viewport.panFraction * this.size.width
+        val x1 = (viewport.panFraction + viewport.windowFraction) * this.size.width
+        drawLine(accent.copy(alpha = 0.15f), Offset(0f, trackY), Offset(this.size.width, trackY), strokeWidth = 3f)
+        drawLine(accent.copy(alpha = 0.8f), Offset(x0, trackY), Offset(x1, trackY), strokeWidth = 3f)
     }
 }
 
@@ -219,38 +339,3 @@ private fun TooltipBubble(anchor: Offset, spec: TooltipSpec, size: Size) {
     }
 }
 
-/**
- * Collapsible value table placed under a chart — the dataviz "table fallback" so every value is
- * reachable with zero interaction (and by TalkBack). Reads straight from the chart's data via [cell].
- */
-@Composable
-fun ChartValueTable(rowCount: Int, header: List<String>, cell: (row: Int, col: Int) -> String) {
-    var open by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth()) {
-        TextButton(onClick = { open = !open }) {
-            Text(if (open) "Hide values" else "Show values", style = MaterialTheme.typography.labelMedium)
-            Icon(if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = null)
-        }
-        AnimatedVisibility(open) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-                TableRow(header, bold = true)
-                for (r in 0 until rowCount) TableRow(header.indices.map { c -> cell(r, c) }, bold = false)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TableRow(cells: List<String>, bold: Boolean) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        cells.forEach { c ->
-            Text(
-                c,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (bold) 0.8f else 0.6f),
-            )
-        }
-    }
-}

@@ -33,6 +33,7 @@ import coil.compose.AsyncImage
 import com.hellohealth.domain.model.UnitPreference
 import com.hellohealth.domain.model.UserProfile
 import com.hellohealth.ui.auth.AuthViewModel
+import com.hellohealth.ui.common.toDisplayNameOr
 import com.hellohealth.ui.common.cmToFeetInches
 import com.hellohealth.ui.common.displayLabel
 import com.hellohealth.ui.common.formatNumber
@@ -151,7 +152,7 @@ fun ProfileScreen(
 
                 // User Info
                 Text(
-                    text = user?.name ?: "Healthy User",
+                    text = user?.name.toDisplayNameOr("Healthy User"),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Black
                 )
@@ -170,7 +171,7 @@ fun ProfileScreen(
                     colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
-                        ProfileInfoItem("Name", user?.name ?: "--")
+                        ProfileInfoItem("Name", user?.name.toDisplayNameOr("--"))
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                         ProfileInfoItem("Email", user?.email ?: "--")
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))

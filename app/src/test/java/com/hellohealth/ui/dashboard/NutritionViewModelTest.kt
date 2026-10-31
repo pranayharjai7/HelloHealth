@@ -97,6 +97,16 @@ class NutritionViewModelTest {
         override fun observeAiCoachingEnabled(): Flow<Boolean> = flowOf(false)
     }
 
+    /** Auto-everything goals so the VM keeps the pure profile derivation (no overrides). */
+    private class FakeNutritionGoals(
+        private val goals: com.hellohealth.domain.model.nutrition.NutritionGoals =
+            com.hellohealth.domain.model.nutrition.NutritionGoals.DEFAULT,
+    ) : com.hellohealth.domain.repository.NutritionGoalsRepository {
+        override fun observeNutritionGoals() = flowOf(goals)
+        override suspend fun getNutritionGoals() = goals
+        override suspend fun updateNutritionGoals(goals: com.hellohealth.domain.model.nutrition.NutritionGoals) = Unit
+    }
+
     /** A complete profile whose budget/macros are computable (drives the non-DASH path). */
     private fun fullProfile() = UserProfile(
         gender = Gender.MALE,
@@ -108,17 +118,35 @@ class NutritionViewModelTest {
         hasOnboarded = true,
     )
 
-    private fun daySummary(calories: Double, protein: Double, carbs: Double, fat: Double, waterMl: Double) =
+    private fun daySummary(calories: Double, protein: Double, carbs: Double, fat: Double, waterMl: Double, fibre: Double = 0.0) =
         NutritionDaySummary(
             localDate = today,
             caloriesConsumed = calories,
             proteinG = protein,
             carbsG = carbs,
             fatG = fat,
-            fibreG = 0.0,
+            fibreG = fibre,
             waterMl = waterMl,
             entriesByMeal = emptyMap(),
         )
+
+    @Test
+    fun `fibre grams and target surface on the card state`() = runTest {
+        val vm = NutritionViewModel(
+            FakeNutrition(daySummary(1500.0, 100.0, 150.0, 50.0, waterMl = 0.0, fibre = 22.0)),
+            FakeActivity(caloriesOut = 2600.0),
+            FakeProfile(fullProfile()),
+            FakeNutritionGoals(),
+            SelectedDateHolder(),
+        )
+        vm.uiState.test {
+            var state = awaitItem()
+            while (!state.hasData) state = awaitItem()
+            assertEquals("fibre consumed surfaces", 22, state.fibreG)
+            assertTrue("a fibre target is always shown", (state.fibreTargetG ?: 0) > 0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 
     @Test
     fun `net is caloriesOut minus caloriesIn as a deficit when burn exceeds intake`() = runTest {
@@ -127,6 +155,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(1500.0, 100.0, 150.0, 50.0, waterMl = 500.0)),
             FakeActivity(caloriesOut = 2600.0),
             FakeProfile(fullProfile()),
+            FakeNutritionGoals(),
             SelectedDateHolder(),
         )
         vm.uiState.test {
@@ -151,6 +180,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(3000.0, 0.0, 0.0, 0.0, waterMl = 0.0)),
             FakeActivity(caloriesOut = 2000.0),
             FakeProfile(fullProfile()),
+            FakeNutritionGoals(),
             SelectedDateHolder(),
         )
         vm.uiState.test {
@@ -173,6 +203,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(1500.0, 0.0, 0.0, 0.0, waterMl = 0.0)),
             FakeActivity(caloriesOut = 2000.0),
             FakeProfile(profile),
+            FakeNutritionGoals(),
             SelectedDateHolder(),
         )
         vm.uiState.test {
@@ -194,6 +225,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(1200.0, 20.0, 30.0, 10.0, waterMl = 250.0)),
             FakeActivity(caloriesOut = 1800.0),
             FakeProfile(UserProfile(hasOnboarded = true)),
+            FakeNutritionGoals(),
             SelectedDateHolder(),
         )
         vm.uiState.test {
@@ -216,6 +248,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(0.0, 0.0, 0.0, 0.0, waterMl = 0.0)),
             FakeActivity(caloriesOut = 0.0),
             FakeProfile(null),
+            FakeNutritionGoals(),
             SelectedDateHolder(),
         )
         vm.uiState.test {
@@ -237,6 +270,7 @@ class NutritionViewModelTest {
             FakeNutrition(daySummary(500.0, 0.0, 0.0, 0.0, waterMl = 1500.0)),
             FakeActivity(caloriesOut = 100.0),
             FakeProfile(fullProfile()),
+            FakeNutritionGoals(),
             SelectedDateHolder(),
         )
         vm.uiState.test {
@@ -260,7 +294,7 @@ class NutritionViewModelTest {
         // Today has a snapshot (2600 out); the past day has NO snapshot (null).
         val activity = FakeActivity(mapOf(today.toString() to 2600.0, pastDay.toString() to null))
         val holder = SelectedDateHolder()
-        val vm = NutritionViewModel(nutrition, activity, FakeProfile(fullProfile()), holder)
+        val vm = NutritionViewModel(nutrition, activity, FakeProfile(fullProfile()), FakeNutritionGoals(), holder)
 
         vm.uiState.test {
             var state = awaitItem()

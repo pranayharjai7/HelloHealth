@@ -30,7 +30,10 @@ class NutritionEntrySyncerMappingTest {
             timestampUtcEpochMs = timestampMs, tzOffsetMinutes = 330, kind = "food",
             mealCategory = "breakfast", foodId = "seed:oats", foodName = "Oats",
             quantity = 100.0, unit = "g", calories = 389.0,
-            proteinG = 16.9, carbsG = 66.3, fatG = 6.9, fibreG = 10.6, waterMl = null,
+            proteinG = 16.9, carbsG = 66.3, fatG = 6.9, fibreG = 10.6,
+            sodiumMg = 79.0, saturatedFatG = 1.2, sugarG = 0.9, calciumMg = 99.0,
+            ironMg = 2.7, potassiumMg = 362.0, vitaminDMcg = 0.0, vitaminCMg = 28.1,
+            waterMl = null,
             entryMethod = "catalog",
             updatedAtEpochMs = updatedMs, updatedAtTzOffsetMinutes = 330,
             deletedAtEpochMs = null, isSynced = false,
@@ -46,6 +49,9 @@ class NutritionEntrySyncerMappingTest {
         assertEquals(100.0, dto.quantity, 0.0001)
         assertEquals(389.0, dto.calories, 0.0001)
         assertEquals(16.9, dto.protein_g!!, 0.0001)
+        assertEquals(79.0, dto.sodium_mg!!, 0.0001)
+        assertEquals(99.0, dto.calcium_mg!!, 0.0001)
+        assertEquals(28.1, dto.vitamin_c_mg!!, 0.0001)
         assertNull("food row carries no water_ml", dto.water_ml)
         assertNull("live row carries no deleted_at", dto.deleted_at)
 
@@ -55,6 +61,9 @@ class NutritionEntrySyncerMappingTest {
         assertEquals(66.3, back.carbsG!!, 0.0001)
         assertEquals(6.9, back.fatG!!, 0.0001)
         assertEquals(10.6, back.fibreG!!, 0.0001)
+        assertEquals("sodium round-trips", 79.0, back.sodiumMg!!, 0.0001)
+        assertEquals("iron round-trips", 2.7, back.ironMg!!, 0.0001)
+        assertEquals("potassium round-trips", 362.0, back.potassiumMg!!, 0.0001)
         assertEquals("catalog", back.entryMethod)
         assertEquals(updatedMs, back.updatedAtEpochMs)
         assertTrue("pulled rows are already synced", back.isSynced)

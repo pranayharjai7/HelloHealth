@@ -48,6 +48,7 @@ import com.hellohealth.domain.model.WellnessSnapshot
 fun WellnessCard(
     snapshot: WellnessSnapshot?,
     onClick: () -> Unit,
+    isLoading: Boolean = false,
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
@@ -81,6 +82,10 @@ fun WellnessCard(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+            if (isLoading) {
+                com.hellohealth.ui.common.ScoreCardSkeleton(base = onSurfaceColor)
+                return@Column
+            }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier

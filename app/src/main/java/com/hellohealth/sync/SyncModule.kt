@@ -21,6 +21,10 @@ abstract class SyncModule {
 
     @Binds
     @IntoSet
+    abstract fun bindNutritionGoalsSyncer(impl: NutritionGoalsSyncer): Syncer
+
+    @Binds
+    @IntoSet
     abstract fun bindProfileSyncer(impl: ProfileSyncer): Syncer
 
     @Binds
