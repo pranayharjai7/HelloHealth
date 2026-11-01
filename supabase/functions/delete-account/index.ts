@@ -174,11 +174,14 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // 5. Revoke user sessions globally and permanently delete the Auth identity from auth.users
-  try {
-    await userClient.auth.signOut({ scope: "global" });
-  } catch (_signOutErr) {
-    // Best-effort session revocation before hard user deletion
+  // 5. Revoke user sessions globally (fail closed on sign-out error) and permanently delete the Auth identity
+  const { error: signOutError } = await userClient.auth.signOut({ scope: "global" });
+  if (signOutError) {
+    console.error(`signOut error for user ${userId}:`, signOutError.message);
+    return new Response(
+      JSON.stringify({ error: `failed to revoke user sessions: ${signOutError.message}` }),
+      { status: 500, headers: JSON_HEADERS }
+    );
   }
 
   const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);

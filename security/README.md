@@ -7,7 +7,7 @@
 - Audited revision: `543c67e0becfaee7a28c704246ce041600dbea3d` (checked-out and upstream audit branch tip).
 - Audit date: 2026-11-01.
 - Method: source review, local static scans, Gradle debug build/unit tests/lint, local MobSF static scan, and review against OWASP MASVS/MASTG. No production requests, credential changes, or device installs were made.
-- Result: **BLOCKED**. Storage deletion now enumerates recursively/paginates and fails closed on errors. Account deletion remains blocked because already-issued JWTs can still satisfy owner RLS policies and recreate rows until expiry. AI quota/source hardening and database search-path changes are present, but need staging verification. Debug build/tests/lint pass; MobSF evidence is from a debug APK. Release signing and Play deletion resource/declarations remain outstanding.
+- Result: **BLOCKED**. Account deletion lifecycle is hardened in source: recursive/paginated Storage deletion (fail-closed), fail-closed session sign-out, tombstone recording, active-account RLS policies across all 17 tables, mutation triggers on all 12 text-keyed tables, and restrictive storage policies prevent stale-token row recreation. AI quota controls and database search-path hardening are present. Debug build/tests/lint pass (575 tests, 0 lint errors). Staging verification, release signing, and Play deletion resource/declarations remain outstanding.
 
 This is a source and local-build assessment, not a certification that the application or deployed backend is secure. Deployed Supabase state, Play Console disclosures, release signing, and runtime behavior were not verified.
 
