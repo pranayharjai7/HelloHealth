@@ -1,6 +1,6 @@
 # Consolidated security findings
 
-Audit revision: `32cf0145ebcc7bc40cf5175d0daf6493b71f4f17` on `security/pre-play-store-audit`.
+Audit revision: `9300eaf2bbe4c43836982be147f5135ff17cb705` on `security/pre-play-store-audit`.
 
 ## Severity summary
 
@@ -16,20 +16,20 @@ The audit is **BLOCKED for Play release**. The open findings below require corre
 
 - **Severity:** High — release blocker
 - **Category:** Privacy, account lifecycle, data retention
-- **Status:** Remediated in repository source; staging deployment and runtime verification pending.
+- **Status:** Duplicate-call defect remediated in repository source. The idempotent error predicate is broader than the missing-session case; staging deployment and runtime verification remain pending.
 - **Affected components:** `supabase/functions/delete-account/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`, Android account deletion flow.
-- **Evidence / Rerun Analysis:** Previously, a duplicate global sign-out sequence (direct HTTP fetch followed by admin SDK `signOut`) caused a potential failure path where the second call returned a 403 `session_not_found` error, returning HTTP 500 before `adminClient.auth.admin.deleteUser(userId)` was reached. In the latest source, the duplicate call has been removed: the Edge Function executes a single server-side global revocation call via `adminClient.auth.admin.signOut(rawToken, "global")` and treats missing/already-revoked sessions (HTTP 403/404, `session_not_found`, `AuthSessionMissingError`) idempotently. This guarantees that the workflow safely proceeds to permanent Auth identity deletion via `deleteUser(userId)`. Unexpected revocation errors continue to fail closed with HTTP 500.
+- **Evidence / Rerun Analysis:** The duplicate global sign-out call has been removed. The handler now calls `adminClient.auth.admin.signOut(rawToken, "global")` once. However, `isAlreadyRevoked` accepts every HTTP 403 or 404 and several broad message substrings (`invalid claim`, `token is expired`) as evidence that revocation already happened. Supabase's Auth error guidance recommends branching on the structured `error.code` and avoiding status-only or message-string matching; `session_not_found` is a specific error code. A different 403/404 could therefore be treated as successful revocation, after which the function proceeds to delete the Auth user. Tombstone/RLS controls still block stale-token access to covered data, but the handler would not have confirmed the intended revocation result. This is a source review concern; no deployed Auth response was tested.
 - **Remediation Implemented:**
   1. Single server-side Auth Admin revocation call `adminClient.auth.admin.signOut(rawToken, "global")` using the caller's JWT, eliminating duplicate network requests.
-  2. Idempotent handling for already-revoked or missing sessions (403/404 / `session_not_found`), ensuring the workflow safely proceeds to `adminClient.auth.admin.deleteUser(userId)`.
-  3. Fail-closed error handling: unexpected revocation errors return HTTP 500.
+  2. Idempotent handling for already-revoked or missing sessions so the workflow can proceed to `adminClient.auth.admin.deleteUser(userId)`; current matching by all 403/404 statuses should be narrowed to recognized Auth error codes.
+  3. Other revocation errors return HTTP 500.
   4. Mandatory Auth user deletion via `adminClient.auth.admin.deleteUser(userId)` verified before returning 200 OK.
   5. `public.is_active_account` strictly fails closed (`COALESCE(v_exists, false)`) and has execute revoked from `anon`.
   6. Storage restrictive policy DDL installation is unsuppressed.
   7. Tombstone table `public.deleted_accounts`, 17 active-account RLS policies, and 12 mutation triggers prevent stale-token data recreation.
   8. Recursive, paginated, and fail-closed Storage API enumeration and chunked removal.
-- **Remaining for Release:** Test account deletion and retry behavior with synthetic staging accounts (including stale JWT database and Storage access); publish the Google Play deletion web resource and complete Data Safety declarations.
-- **References:** [Supabase sign-out behavior](https://supabase.com/docs/guides/auth/signout); [Supabase GoTrueAdminApi.signOut implementation](https://github.com/supabase/supabase-js/blob/master/packages/core/auth-js/src/GoTrueAdminApi.ts); [Supabase 403 missing-session behavior](https://github.com/supabase/supabase-js/issues/1170); [Supabase delete objects](https://supabase.com/docs/guides/storage/management/delete-objects); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
+- **Remaining for Release:** Narrow already-revoked handling to explicit Auth error codes, then test successful deletion and retry behavior with synthetic staging accounts (including stale JWT database and Storage access); publish the Google Play deletion web resource and complete Data Safety declarations.
+- **References:** [Supabase Auth error codes and handling guidance](https://supabase.com/docs/guides/auth/debugging/error-codes); [Supabase sign-out behavior](https://supabase.com/docs/guides/auth/signout); [Supabase GoTrueAdminApi.signOut implementation](https://github.com/supabase/supabase-js/blob/master/packages/core/auth-js/src/GoTrueAdminApi.ts); [Supabase 403 missing-session behavior](https://github.com/supabase/supabase-js/issues/1170); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
 
 ## HHA-002 — AI coaching quota controls need deployment and runtime verification
 
@@ -83,7 +83,7 @@ The audit is **BLOCKED for Play release**. The open findings below require corre
 
 ## Observations not promoted to findings
 
-- Gitleaks scanned 242 commits and reported one `generic-api-key` heuristic on descriptive text about the server-side Auth admin credential at `security/SECURITY_FINDINGS.md:31` in the audited commit; review confirmed there is no credential value in that text. The final current-tree scan reported 35 heuristics in ignored IDE settings, generated build output, or ignored local configuration. No confirmed credential was identified; no rotation is recommended from this scan alone.
+- Gitleaks scanned 244 commits and reported one `generic-api-key` heuristic on descriptive text about the server-side Auth admin credential in an earlier commit; review confirmed there is no credential value in that text. The current-tree scan reported 35 heuristics in ignored IDE settings, generated build output, or ignored local configuration. No confirmed credential was identified; no rotation is recommended from this scan alone.
 - Trivy reported no filesystem vulnerabilities, misconfigurations, or secrets in scanned inputs. Dependency CVE coverage remains incomplete without lockfiles, verification metadata, or a release SBOM.
 - Semgrep reported zero findings for the selected Java, Kotlin, security-audit, and secrets rules. The Android pack lookup returned HTTP 404, and this is not proof of safety.
 - MobSF reported three high findings on the debug APK (debug signing, debuggable flag, debug configuration), 11 warnings, one informational finding, and a score of 49. Debug-only findings are not attributed to a release artifact. The raw report was not committed because it contains extracted strings and secret-like material.

@@ -1,7 +1,7 @@
 # Trivy filesystem report
 
 - **Version:** 0.76.1 (installed outside the app repository)
-- **Target:** HelloHealth filesystem at `32cf0145ebcc7bc40cf5175d0daf6493b71f4f17` (rerun 2026-11-01 17:01 UTC).
+- **Target:** HelloHealth filesystem at `9300eaf2bbe4c43836982be147f5135ff17cb705` (rerun 2026-11-01 17:34 UTC).
 - **Scanners:** vulnerability, misconfiguration, secret.
 - **Exclusions:** `.git`, build outputs, `androidx`, `.artifacts`, and `*.hprof`.
 - **Result:** 0 vulnerabilities, 0 misconfigurations, 0 secret matches.

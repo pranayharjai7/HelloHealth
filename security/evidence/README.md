@@ -1,6 +1,6 @@
 # Evidence index
 
-The current checked-in audit reports cover source revision `32cf0145ebcc7bc40cf5175d0daf6493b71f4f17`. Reports avoid secret values, tokens, signing data, personal data, and real health records. Ignored machine-readable JSON and build artifacts are local-only and may predate this rerun; the latest executed results are summarized in `../reports/automated-scan-summary.md`.
+The current checked-in audit reports cover source revision `9300eaf2bbe4c43836982be147f5135ff17cb705`. Reports avoid secret values, tokens, signing data, personal data, and real health records. Ignored machine-readable JSON and build artifacts are local-only and may predate this rerun; the latest executed results are summarized in `../reports/automated-scan-summary.md`.
 
 | Evidence | Description | Redaction / Git visibility |
 |---|---|---|
