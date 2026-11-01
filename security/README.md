@@ -4,10 +4,10 @@
 
 - Repository: HelloHealth Android application and the checked-in Supabase Edge Function / SQL definitions.
 - Branch: `security/pre-play-store-audit`.
-- Audited revision: `73ce32e7545e3eb68b1ddeee7cd0034a183e79e5` (checked-out and upstream audit branch tip).
+- Source revision audited: `32cf0145ebcc7bc40cf5175d0daf6493b71f4f17` on `security/pre-play-store-audit`.
 - Audit date: 2026-11-01.
 - Method: source review, local static scans, Gradle debug build/unit tests/lint, local MobSF static scan, and review against OWASP MASVS/MASTG. No production requests, credential changes, or device installs were made.
-- Result: **BLOCKED**. Account deletion lifecycle is hardened in source: recursive/paginated Storage deletion (fail-closed), server-side GoTrue token revocation (fail-closed), tombstone recording, fail-closed active-account RLS policies across all 17 tables (revoked from anon), mutation triggers on all 12 text-keyed tables, and unsuppressed restrictive storage policy prevent stale-token row recreation. AI quota controls and search-path hardening are present. Debug build/tests/lint pass (575 tests, 0 lint errors). Staging verification, release signing, and Play deletion resource/declarations remain outstanding.
+- Result: **BLOCKED**. The latest account deletion handler sends global sign-out twice with the same JWT. If the second request reports the already-revoked session, the handler returns 500 before deleting the Auth identity. Tombstone/RLS controls, fail-closed Storage deletion, active-account checks on 17 public tables, and mutation triggers on 12 text-keyed tables are present in source. AI quota controls and search-path hardening are present. Debug build and 575 unit tests pass; lint reports 0 errors. Staging verification, release signing, and Play deletion resource/declarations remain outstanding.
 
 This is a source and local-build assessment, not a certification that the application or deployed backend is secure. Deployed Supabase state, Play Console disclosures, release signing, and runtime behavior were not verified.
 

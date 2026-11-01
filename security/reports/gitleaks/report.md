@@ -1,10 +1,10 @@
 # Gitleaks report
 
 - **Version:** 8.30.1 (installed outside the app repository)
-- **Revision:** `15171845ecf72eaea1dddfa5eb248b43652fa567`
-- **History scan:** full Git history (`--all --full-history`), redacted; 0 findings.
-- **Filesystem scan:** 36 heuristic matches; values are not retained in this report.
+- **Revision:** `32cf0145ebcc7bc40cf5175d0daf6493b71f4f17`
+- **History scan:** full Git history (`--all --full-history`), 242 commits scanned; one `generic-api-key` heuristic in descriptive security-report prose, manually reviewed as non-secret text.
+- **Filesystem scan:** 35 heuristic matches; values are not retained in this report.
 
-The current-tree matches were limited to ignored local materials: 10 in IDE planning settings, 22 in generated build outputs, and 4 in ignored `local.properties`. The latter contains local API configuration values; the scanner did not establish that any match is a credential committed to Git or embedded in the release app. No secret value is printed. No confirmed history exposure was found, so this scan alone does not justify rotating a credential.
+All current-tree matches were in ignored IDE settings, generated build outputs, or ignored local configuration. The scanner did not establish that any match is a credential committed to Git or embedded in the release app. No secret value is printed. No confirmed history exposure was found, so this scan alone does not justify rotating a credential.
 
 Sanitized reports: `git-history-redacted.json` and `working-tree-redacted.json`. These files are ignored by the repository's `*.json` rule.
