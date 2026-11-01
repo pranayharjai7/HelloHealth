@@ -21,6 +21,7 @@ import com.hellohealth.data.food.NutritionSeeder
 import com.hellohealth.data.vitals.VitalsBackfiller
 import com.hellohealth.domain.repository.WorkoutSessionRepository
 import com.hellohealth.ui.navigation.AppNavigation
+import com.hellohealth.ui.navigation.Screen
 import com.hellohealth.ui.theme.HelloHealthTheme
 import com.hellohealth.ui.theme.ThemeViewModel
 import com.hellohealth.workoutsession.WorkoutSessionService
@@ -132,6 +133,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // Health Connect can fire the rationale intent while the app is already running. onCreate's
+        // start-destination override only applies to a cold launch, so route it explicitly here.
+        if (intent.action == "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE") {
+            navController?.navigate(Screen.HealthRationale.route)
+            return
+        }
         navController?.handleDeepLink(intent)
     }
 }
