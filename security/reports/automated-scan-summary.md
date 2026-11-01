@@ -1,7 +1,7 @@
 # Automated scan and build summary
 
-- **Date:** 2026-11-01 (UTC report timestamp: 2026-11-01 14:56 UTC; see local artifact timestamps for scan outputs)
-- **Branch / revision:** `security/pre-play-store-audit` / `543c67e0becfaee7a28c704246ce041600dbea3d`
+- **Date:** 2026-11-01 (UTC report timestamp: 2026-11-01 15:24 UTC; see local artifact timestamps for scan outputs)
+- **Branch / revision:** `security/pre-play-store-audit` / `73ce32e7545e3eb68b1ddeee7cd0034a183e79e5`
 - **Target:** HelloHealth Android source tree, checked-in SQL and Supabase Edge Function, Gradle debug build/test/lint tasks.
 - **No production Supabase or LLM provider endpoint was contacted.** No secrets or health records are reproduced here.
 
@@ -10,13 +10,13 @@
 | Tool | Installed | Executed | Run time (UTC) | Target | Result | Limitations |
 |---|---|---|---|---|---|---|
 | MobSF | Yes (local Docker) | Prior scan only | Earlier 2026-11-01 rerun | `app/build/outputs/apk/debug/app-debug.apk` | Prior debug-only result reused as context | The latest commits change Supabase source/docs and do not change the APK. The debug APK evidence is therefore contextual, not a fresh analysis of the backend changes. Prior MobSF result: HelloHealth 1.2.0 (code 3), score 49; debug signing/debuggable findings expected for debug. Raw report excluded. No release artifact is available. |
-| Gitleaks 8.30.1 | Yes, outside repo | Yes | Latest rerun 14:54 UTC | Current repository filesystem and full Git history | History: 0 findings. Filesystem: 35 heuristic matches, all in ignored IDE settings, generated build outputs, or ignored local config; no confirmed committed secret. | Values were redacted. Local config and generated artifacts produced false-positive/irrelevant matches. Raw output is not stored. |
-| Trivy 0.76.1 | Yes, outside repo | Yes | 2026-11-01 14:54 UTC | Filesystem scan; excluded `.git`, build outputs, `androidx`, `.artifacts`, and `*.hprof`; scanners: vulnerability, misconfiguration, secret | 0 vulnerabilities, 0 misconfigurations, 0 secret matches | No Gradle lockfiles/dependency verification metadata or SBOM; dependency CVE coverage is incomplete. |
-| Semgrep 1.183.0 | Yes, isolated Python venv outside repo | Yes | 2026-11-01 14:56 UTC | Java/Kotlin/security source rules | 0 findings using `p/java`, `p/kotlin`, `p/security-audit`, `p/secrets` | `p/android` returned HTTP 404. Kotlin pack has limited rule breadth; static analysis does not establish runtime safety. Metrics were disabled. |
+| Gitleaks 8.30.1 | Yes, outside repo | Yes | Latest rerun 15:23 UTC | Current repository filesystem and full Git history | History: 0 findings. Filesystem: 35 heuristic matches, all in ignored IDE settings, generated build outputs, or ignored local config; no confirmed committed secret. | Values were redacted. Local config and generated artifacts produced false-positive/irrelevant matches. Raw output is not stored. |
+| Trivy 0.76.1 | Yes, outside repo | Yes | 2026-11-01 15:22 UTC | Filesystem scan; excluded `.git`, build outputs, `androidx`, `.artifacts`, and `*.hprof`; scanners: vulnerability, misconfiguration, secret | 0 vulnerabilities, 0 misconfigurations, 0 secret matches | No Gradle lockfiles/dependency verification metadata or SBOM; dependency CVE coverage is incomplete. |
+| Semgrep 1.183.0 | Yes, isolated Python venv outside repo | Yes | 2026-11-01 15:24 UTC | Java/Kotlin/security source rules | 0 findings using `p/java`, `p/kotlin`, `p/security-audit`, `p/secrets` | `p/android` returned HTTP 404. Kotlin pack has limited rule breadth; static analysis does not establish runtime safety. Metrics were disabled. |
 | OWASP ZAP | No | No | 2026-11-01; exact attempt time not retained | Intended: authorized staging API | Not tested | No authorized staging endpoint supplied; production was not tested. Winget installer required administrator elevation. A direct installer launch was blocked by tool policy. |
 | OWASP MASVS/MASTG + secure-agent mobile review play | Reference repositories cloned outside app; web guides consulted | Yes, source-only review | 2026-11-01; exact review time not retained | Android source/manifest, SQL and Edge Function | Findings and 8 control groups mapped in `SECURITY_CHECKLIST.md` | No full device/runtime MASTG execution. The OWASP guide states source-only mobile review does not cover remote endpoints. |
 | Gradle task discovery | Gradle 9.0.0 | Yes | prior audit | `gradlew.bat tasks --all` | Passed | Task discovery only. |
-| Gradle debug build, tests, lint (latest branch) | Gradle 9.0.0; AGP 8.9.3; Kotlin 2.0.21 | Yes | 2026-11-01 14:53 UTC | `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug` | Debug APK, unit tests, and lint all PASSED | 575 tests / 99 suites passed (0 failures); lint: 0 errors, 82 warnings (all 7 original lint errors resolved). |
+| Gradle debug build, tests, lint (latest branch) | Gradle 9.0.0; AGP 8.9.3; Kotlin 2.0.21 | Yes | 2026-11-01 15:22 UTC | `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug` | Debug APK, unit tests, and lint all PASSED | 575 tests / 99 suites passed (0 failures); lint: 0 errors, 82 warnings (all 7 original lint errors resolved). |
 | Gradle release build | Gradle 9.0.0 | Yes | 2026-11-01 rerun | `:app:assembleRelease` | Failed at the signing gate | No release keystore configured; task refused to emit an unsigned artifact. No key was created or modified. |
 
 ## Commands and evidence
@@ -39,8 +39,8 @@ Generated JSON and Gradle build evidence files are locally present but ignored b
 MobSF raw output is not retained in Git. The report markdown contains only a sanitized summary.
 ## Latest commit review
 
-- Current revision: `543c67e0becfaee7a28c704246ce041600dbea3d` on the audit branch.
+- Current revision: `73ce32e7545e3eb68b1ddeee7cd0034a183e79e5` on the audit branch.
 - Re-ran debug assembly, unit tests, and lint: passed; 575 tests / 99 suites, no failures; lint 0 errors and 82 warnings.
 - Re-ran Gitleaks: 0 full-history findings and 35 current-filesystem heuristic matches. Trivy: 0 findings for selected scanners. Semgrep: 0 findings and 0 scanner errors for selected rules.
-- Reviewed the new recursive/paginated Storage cleanup. It fails closed on list/remove errors for user-UUID-prefixed objects. No Deno/Supabase CLI or staging environment was available for Edge Function typecheck, migration, or integration tests.
-- HHA-001 source remediation complete: global sign-out error checking is fail-closed, tombstone table `public.deleted_accounts` records deletions, `public.is_active_account()` checks are integrated into all 17 public RLS policies, BEFORE INSERT/UPDATE mutation triggers protect all 12 text-keyed tables, and a restrictive storage policy prevents post-deletion uploads. Staging deployment and runtime verification remain pending.
+- Reviewed the tombstone and active-account mitigation. RLS predicates check `public.is_active_account`, but the helper grants `anon` execution and returns true if its `auth.users` lookup errors. The Storage RLS DDL is inside a `DO` block that catches all errors without reporting them. The Edge function's `userClient` has `persistSession: false` and only an Authorization header; `auth.signOut()` obtains the access token from stored session state, so this call can return without revoking the server-side refresh session. Already-issued JWTs remain valid until expiry.
+- No Deno/Supabase CLI or staging project was available; Edge Function typechecking, migration execution, and stale-token/Storage integration tests were not performed. HHA-001 remains a release blocker. HHA-005 records the anonymous account-status endpoint.

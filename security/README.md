@@ -4,10 +4,10 @@
 
 - Repository: HelloHealth Android application and the checked-in Supabase Edge Function / SQL definitions.
 - Branch: `security/pre-play-store-audit`.
-- Audited revision: `543c67e0becfaee7a28c704246ce041600dbea3d` (checked-out and upstream audit branch tip).
+- Audited revision: `73ce32e7545e3eb68b1ddeee7cd0034a183e79e5` (checked-out and upstream audit branch tip).
 - Audit date: 2026-11-01.
 - Method: source review, local static scans, Gradle debug build/unit tests/lint, local MobSF static scan, and review against OWASP MASVS/MASTG. No production requests, credential changes, or device installs were made.
-- Result: **BLOCKED**. Account deletion lifecycle is hardened in source: recursive/paginated Storage deletion (fail-closed), fail-closed session sign-out, tombstone recording, active-account RLS policies across all 17 tables, mutation triggers on all 12 text-keyed tables, and restrictive storage policies prevent stale-token row recreation. AI quota controls and database search-path hardening are present. Debug build/tests/lint pass (575 tests, 0 lint errors). Staging verification, release signing, and Play deletion resource/declarations remain outstanding.
+- Result: **BLOCKED**. Tombstone and active-account RLS protections are present, but the helper fails open on auth lookup errors, the Storage policy migration swallows DDL errors, and the public helper is granted to anon. The sessionless Edge client may report global sign-out success without revoking server sessions. Debug build/tests/lint pass (575 tests, 0 lint errors). Staging verification, release signing, and Play deletion resource/declarations remain outstanding.
 
 This is a source and local-build assessment, not a certification that the application or deployed backend is secure. Deployed Supabase state, Play Console disclosures, release signing, and runtime behavior were not verified.
 

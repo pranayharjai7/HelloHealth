@@ -1,6 +1,6 @@
 # Consolidated security findings
 
-Audit revision: `543c67e0becfaee7a28c704246ce041600dbea3d` on `security/pre-play-store-audit`.
+Audit revision: `73ce32e7545e3eb68b1ddeee7cd0034a183e79e5` on `security/pre-play-store-audit`.
 
 ## Severity summary
 
@@ -8,36 +8,20 @@ Counts include findings still open or awaiting deployment/runtime verification; 
 
 | Critical | High | Medium | Low | Informational |
 |---:|---:|---:|---:|---:|
-| 0 | 1 | 1 | 1 | 0 |
+| 0 | 1 | 1 | 2 | 0 |
 
 The audit is **BLOCKED for Play release**. The open findings below require correction or verification. Static scan/build results and scope limits are summarized in [the audit summary](reports/automated-scan-summary.md).
 
-## HHA-001 — Stale access tokens can recreate data after account deletion
+## HHA-001 — Stale-token protections are not reliably fail-closed
 
 - **Severity:** High — release blocker
 - **Category:** Privacy, account lifecycle, data retention
-- **Status:** Remediated in repository source; staging deployment and runtime verification pending.
+- **Status:** Partially mitigated in source; migration and Edge Function require hardening and staging verification.
 - **Affected components:** `supabase/functions/delete-account/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`, Android account deletion flow.
-- **Evidence / Rerun Analysis:** Global sign-out revokes refresh tokens, but already-issued access JWTs remain cryptographically valid until their expiry timestamp (~1 hour). In previous revisions, PostgREST evaluated `user_id = auth.uid()` statelessly without checking `auth.users`, allowing a stale JWT to recreate rows on the 12 text-keyed tables (`emotion_records`, `workout_plans`, `workout_days`, `planned_exercises`, `vitals_samples`, `body_metrics`, `nutrition_entries`, `workout_sessions`, `session_sets`, `streaks`, `points_ledger`, `achievements`) where foreign keys to `auth.users(id)` were absent. In addition, `userClient.auth.signOut({ scope: "global" })` previously caught and ignored returned errors. In the latest source revision, all gaps have been remediated:
-  1. Edge Function `delete-account/index.ts` explicitly checks `{ error: signOutError }` from `userClient.auth.signOut({ scope: "global" })` and fails closed (HTTP 500) if session revocation fails.
-  2. Created tombstone table `public.deleted_accounts (user_id text PRIMARY KEY, deleted_at timestamptz)` with RLS enabled and revoked from public/anon/authenticated.
-  3. `public.delete_user_account` inserts the target user ID into `public.deleted_accounts` at the very beginning of the purge transaction.
-  4. Implemented fast indexed function `public.is_active_account(p_user_id text) RETURNS boolean` (`STABLE SECURITY DEFINER SET search_path = ''`) which checks that `p_user_id` is NOT in `public.deleted_accounts` AND exists in `auth.users`.
-  5. Hardened RLS policies across all 17 public tables (`profiles`, `activity_goals`, `food_preferences`, `daily_health_snapshots`, `nutrition_goals`, `emotion_records`, `workout_plans`, `workout_days`, `planned_exercises`, `vitals_samples`, `body_metrics`, `nutrition_entries`, `workout_sessions`, `session_sets`, `streaks`, `points_ledger`, `achievements`) to require `AND public.is_active_account(auth.uid()::text)` for both `USING` and `WITH CHECK`.
-  6. Added defense-in-depth trigger `trg_prevent_deleted_mutation` `BEFORE INSERT OR UPDATE` on all 12 text-keyed tables calling `public.prevent_deleted_account_mutation()` which raises an exception on any mutation attempt for inactive or deleted accounts.
-  7. Hardened `public.check_and_record_ai_usage` to reject AI requests from deleted/inactive accounts.
-  8. Added a restrictive RLS policy on `storage.objects` blocking all uploads/mutations from deleted/inactive accounts across all storage buckets.
-- **Remediation Implemented:**
-  1. In `delete-account/index.ts`, `SUPABASE_SERVICE_ROLE_KEY` is strictly required (fails closed with 500 if missing).
-  2. Implemented recursive and paginated storage enumeration (`listAllUserFilesRecursively`) and chunked removal via the Supabase Storage API, failing closed on any storage error.
-  3. Enforced fail-closed session sign-out error checking on `userClient.auth.signOut({ scope: "global" })` and mandatory Auth user deletion via `adminClient.auth.admin.deleteUser(userId)` verified before returning 200 OK.
-  4. Created `public.deleted_accounts` tombstone table and `public.is_active_account(p_user_id text)` verification function.
-  5. Hardened RLS policies on all 17 public database tables with active-account verification.
-  6. Added `BEFORE INSERT OR UPDATE` mutation triggers on all 12 text-keyed tables.
-  7. Added restrictive storage policy on `storage.objects` to block post-deletion uploads across all buckets.
-  8. In SQL migration, all procedures set `search_path = ''` with schema-qualified references.
-- **Remaining for Release:** Deploy migration and Edge Function to authorized staging; verify end-to-end rejection of stale access JWTs with an unexpired synthetic token; publish the Google Play deletion web resource and complete Data Safety declarations.
-- **References:** [Supabase delete objects](https://supabase.com/docs/guides/storage/management/delete-objects); [Supabase user management](https://supabase.com/docs/guides/auth/managing-user-data); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
+- **Evidence / Rerun Analysis:** The new migration adds a tombstone table, active-account RLS predicates, and mutation triggers. However, `public.is_active_account` catches all errors from its `auth.users` lookup and sets `v_exists := true`, which fails open. It is also executable by `anon`, exposing whether a supplied UUID is active. The Storage restrictive policy is installed inside a `DO` block with `EXCEPTION WHEN OTHERS THEN NULL`; a DDL failure is silently swallowed and the migration can continue without the Storage safeguard. The Edge Function builds `userClient` with `persistSession: false` and only a custom Authorization header, then calls `userClient.auth.signOut({ scope: "global" })`. Supabase JS `signOut` reads its stored session; no session is stored on this client, so the call can return without sending a revocation request. Returned-error checking alone does not prove server revocation. Even successful global sign-out cannot invalidate already-issued access JWTs before expiry. RLS tombstones can mitigate that risk only if the helper and policies are successfully installed and fail closed. No database or Edge Function runtime test was available.
+- **Implemented in latest source:** Tombstone insertion before row cleanup; active-account checks on 17 public user tables; triggers on text-keyed tables; recursive/paginated Storage enumeration and fail-closed Storage listing/removal; Auth deletion is required before 200.
+- **Remaining for Release:** Make active-account checks fail closed; remove anonymous execute access; install the Storage policy without swallowing DDL failures; revoke refresh tokens using the supplied JWT through the server-side Auth API; verify stale-token rejection across Postgres and Storage with synthetic staging accounts; publish the Google Play deletion web resource and complete Data Safety declarations.
+- **References:** [Supabase delete objects](https://supabase.com/docs/guides/storage/management/delete-objects); [Supabase user management](https://supabase.com/docs/guides/auth/managing-user-data); [Supabase JavaScript sign-out](https://supabase.com/docs/reference/javascript/auth-signout); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
 
 ## HHA-002 — AI coaching quota controls need deployment and runtime verification
 
@@ -75,6 +59,16 @@ The audit is **BLOCKED for Play release**. The open findings below require corre
 - **Status:** Open verification item.
 - **Evidence:** Local MobSF static analysis ran on `app-debug.apk` (package `com.hellohealth`, version `1.2.0`, code 3). MobSF reported expected debug signing and debuggable configuration warnings, plus generic static warnings. These results cannot establish release artifact posture. `:app:assembleRelease` remains blocked by missing release signing configuration.
 - **Required:** Produce a properly signed release candidate through the established secret-safe process, verify signing/debug flags, then rerun MobSF and retain a sanitized summary.
+
+## HHA-005 — Anonymous callers can query account activity by UUID
+
+- **Severity:** Low
+- **Category:** Account enumeration / privacy
+- **Status:** Open in source.
+- **Affected component:** `public.is_active_account(text)` in `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql` and `run_sql_in_supabase.sql`.
+- **Evidence:** The `SECURITY DEFINER` function returns whether an arbitrary UUID exists in `auth.users` and is absent from the tombstone table. It is explicitly granted to `anon`, making the status check callable without authentication through the exposed public RPC schema.
+- **Impact:** A caller who knows or obtains a user UUID can test whether that account is active. UUID entropy limits brute-force discovery, but the grant is unnecessary for the RLS use case.
+- **Required:** Revoke execute from `anon`; grant only to roles needed by RLS/server-side workflows and verify effective privileges in staging.
 
 ## Observations not promoted to findings
 
