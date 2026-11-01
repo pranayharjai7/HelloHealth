@@ -61,5 +61,4 @@ Health & Fitness
 pranayharjai7@gmail.com
 
 ## Privacy policy URL
-<!-- Replace with your hosted docs/privacy-policy.html URL, e.g. GitHub Pages: -->
-https://<your-username>.github.io/hellohealth/privacy-policy.html
+https://pranayharjai7.github.io/HelloHealth/privacy-policy.html

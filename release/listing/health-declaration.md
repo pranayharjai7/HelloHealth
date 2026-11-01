@@ -53,8 +53,7 @@ For each requested Health Connect READ permission, the user-facing benefit:
 - The face-scan image is processed entirely on-device and never uploaded.
 
 ## Privacy policy URL
-<!-- Replace with your hosted docs/privacy-policy.html URL -->
-https://<your-username>.github.io/hellohealth/privacy-policy.html
+https://pranayharjai7.github.io/HelloHealth/privacy-policy.html
 
 ## Data deletion
 In-app permanent account deletion removes all health records, files, sessions, and the auth identity
