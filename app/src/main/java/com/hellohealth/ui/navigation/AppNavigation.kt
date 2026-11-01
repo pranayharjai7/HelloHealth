@@ -65,7 +65,11 @@ import com.hellohealth.ui.wellness.WellnessViewModel
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    authViewModel: AuthViewModel = hiltViewModel(),
+    // Set when the app was launched by Health Connect via ACTION_SHOW_PERMISSIONS_RATIONALE. When
+    // true, the rationale screen is the start destination so Health Connect's "see why" link lands
+    // on our data-use explanation instead of the normal splash flow.
+    showHealthRationale: Boolean = false
 ) {
     // Wrap the whole NavHost so the dashboard Activity card and the Health screen's Activity section
     // can morph into one another (Stage 6 shared element). The scope is published via a
@@ -74,7 +78,7 @@ fun AppNavigation(
         CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             NavHost(
                 navController = navController,
-                startDestination = Screen.Splash.route
+                startDestination = if (showHealthRationale) Screen.HealthRationale.route else Screen.Splash.route
             ) {
         composable(
             route = Screen.Splash.route,
@@ -239,6 +243,7 @@ fun AppNavigation(
                 onBack = { navController.popBackStack() },
                 onOpenSyncDebug = { navController.navigate(Screen.SyncDebug.route) },
                 onEditProfile = { navController.navigate(Screen.EditProfile.route) },
+                onOpenPrivacyPolicy = { navController.navigate(Screen.PrivacyPolicy.route) },
                 onAccountDeleted = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
@@ -487,6 +492,37 @@ fun AppNavigation(
             HelpScreen(onBack = { navController.popBackStack() })
         }
 
+        composable(
+            route = Screen.PrivacyPolicy.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            com.hellohealth.ui.privacy.PrivacyPolicyScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Screen.HealthRationale.route,
+            enterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { it } },
+            exitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { -it } },
+            popEnterTransition = { fadeIn(tween(300)) + slideInHorizontally(tween(350)) { -it } },
+            popExitTransition = { fadeOut(tween(300)) + slideOutHorizontally(tween(350)) { it } }
+        ) {
+            com.hellohealth.ui.privacy.HealthRationaleScreen(
+                onBack = {
+                    // When launched as the start destination (rationale intent), there may be nothing
+                    // to pop back to; fall through to the normal splash flow in that case.
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Splash.route) {
+                            popUpTo(Screen.HealthRationale.route) { inclusive = true }
+                        }
+                    }
+                },
+                onOpenPrivacyPolicy = { navController.navigate(Screen.PrivacyPolicy.route) }
+            )
+        }
+
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
                 onFinished = {
@@ -672,6 +708,10 @@ sealed class Screen(val route: String) {
     object Preferences : Screen("food_preferences")
     object Insights : Screen("insights")
     object Help : Screen("help")
+    object PrivacyPolicy : Screen("privacy_policy")
+
+    /** Health Connect data-use rationale (also the start destination for the rationale intent). */
+    object HealthRationale : Screen("health_rationale")
     object Onboarding : Screen("onboarding")
 
     /** The wellness score + gamification detail screen (F3). */
