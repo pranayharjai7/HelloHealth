@@ -1,6 +1,6 @@
 # Consolidated security findings
 
-Audit revision: `9066f0cd0757230a74cc8b67868287d2c2dbd616` on `security/pre-play-store-audit`.
+Audit revision: `543c67e0becfaee7a28c704246ce041600dbea3d` on `security/pre-play-store-audit`.
 
 ## Severity summary
 
@@ -12,19 +12,19 @@ Counts include findings still open or awaiting deployment/runtime verification; 
 
 The audit is **BLOCKED for Play release**. The open findings below require correction or verification. Static scan/build results and scope limits are summarized in [the audit summary](reports/automated-scan-summary.md).
 
-## HHA-001 — Account deletion may leave Storage objects and stale access tokens
+## HHA-001 — Stale access tokens can recreate data after account deletion
 
 - **Severity:** High — release blocker
 - **Category:** Privacy, account lifecycle, data retention
-- **Status:** Partially hardened in repository source; deletion completeness remains a release blocker.
+- **Status:** Storage enumeration/deletion is hardened in latest source; stale-token access remains a release blocker and needs deployed mitigation/verification.
 - **Affected components:** `supabase/functions/delete-account/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`, Android account deletion flow.
-- **Evidence / Rerun Analysis:** The latest function requires the service-role key, uses Storage API, and requires Auth deletion before returning 200. However, bucket-list errors, object-list errors, and removal errors are ignored or only logged; the function can continue and report success with objects remaining. Listing only `list(userId)` does not recurse into nested folders or paginate beyond the default page. Deployment and staging behavior remain unverified. Supabase documents that already-issued access JWTs remain valid until expiry after user deletion; stale-token behavior with app RLS policies is untested.
+- **Evidence / Rerun Analysis:** Latest source requires the service-role key, recursively enumerates user-prefixed Storage paths with pagination, fails on listing/removal errors, and requires Auth deletion before returning 200. However, `userClient.auth.signOut({ scope: "global" })` is best-effort and ignores returned errors. Even successful global sign-out or Auth deletion does not revoke already-issued access JWTs before `exp`. The checked-in RLS policies on tables with text `user_id` compare only `user_id = auth.uid()` and allow writes; those same tables grant authenticated `INSERT` privileges in `run_sql_in_supabase.sql` (for example `activity_goals`, `food_preferences`, and `daily_health_snapshots`); the deletion routine removes rows but does not disable those policies or add an Auth-user-exists check. An unexpired JWT can therefore recreate rows after deletion. Deployment, token expiry configuration, and staging behavior remain unverified. Storage cleanup enumerates paths beneath the user UUID prefix; whether any deployed bucket stores user-owned objects outside that prefix is unknown.
 - **Remediation Implemented:**
   1. In `delete-account/index.ts`, `SUPABASE_SERVICE_ROLE_KEY` is strictly required (fails closed with 500 if missing).
   2. Implemented recursive and paginated storage enumeration (`listAllUserFilesRecursively`) and chunked removal via the Supabase Storage API. All listing, directory traversal, and file removal operations strictly fail closed (return HTTP 500 on error) rather than proceeding on error.
-  3. Added global session invalidation (`userClient.auth.signOut({ scope: "global" })`) and mandatory Auth user deletion via `adminClient.auth.admin.deleteUser(userId)` checked before returning a 200 OK response.
-  4. In SQL migration, `public.delete_user_account` sets `search_path = ''` and fully qualifies all 17 user-data tables plus the separate AI usage ledger, wiping all rows so that even an unexpired access token has 0 rows accessible via RLS.
-- **Remaining for Release:** Deploy migration and Edge Function to authorized staging environment; verify deletion end-to-end with synthetic accounts; publish the Google Play deletion web resource and complete Data Safety declarations.
+  3. Added a best-effort global sign-out call and mandatory Auth user deletion via `adminClient.auth.admin.deleteUser(userId)` checked before returning a 200 OK response. The sign-out result is not checked, and even successful revocation does not invalidate already-issued access JWTs before expiry.
+  4. In SQL migration, `public.delete_user_account` sets `search_path = ''` and fully qualifies all 17 user-data tables plus the separate AI usage ledger.
+- **Remaining for Release:** Prevent stale-token access after deletion across database and Storage RLS policies, including inserts/uploads, or otherwise ensure deleted identities cannot pass authorization until JWT expiry. Test with an unexpired synthetic JWT after deletion. Deploy migration and Edge Function to authorized staging; verify object path coverage and deletion end-to-end; publish the Google Play deletion web resource and complete Data Safety declarations.
 - **References:** [Supabase delete objects](https://supabase.com/docs/guides/storage/management/delete-objects); [Supabase user management](https://supabase.com/docs/guides/auth/managing-user-data); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
 
 ## HHA-002 — AI coaching quota controls need deployment and runtime verification

@@ -4,10 +4,10 @@
 
 - Repository: HelloHealth Android application and the checked-in Supabase Edge Function / SQL definitions.
 - Branch: `security/pre-play-store-audit`.
-- Audited revision: `9066f0cd0757230a74cc8b67868287d2c2dbd616` (checked-out and upstream audit branch tip).
+- Audited revision: `543c67e0becfaee7a28c704246ce041600dbea3d` (checked-out and upstream audit branch tip).
 - Audit date: 2026-11-01.
 - Method: source review, local static scans, Gradle debug build/unit tests/lint, local MobSF static scan, and review against OWASP MASVS/MASTG. No production requests, credential changes, or device installs were made.
-- Result: **BLOCKED**. Account deletion can still report success with Storage objects remaining, and stale-token behavior is unverified. AI quota/source hardening and database search-path changes are present, but need staging verification. Debug build/tests/lint pass; MobSF evidence is from a debug APK. Release signing and Play deletion resource/declarations remain outstanding.
+- Result: **BLOCKED**. Storage deletion now enumerates recursively/paginates and fails closed on errors. Account deletion remains blocked because already-issued JWTs can still satisfy owner RLS policies and recreate rows until expiry. AI quota/source hardening and database search-path changes are present, but need staging verification. Debug build/tests/lint pass; MobSF evidence is from a debug APK. Release signing and Play deletion resource/declarations remain outstanding.
 
 This is a source and local-build assessment, not a certification that the application or deployed backend is secure. Deployed Supabase state, Play Console disclosures, release signing, and runtime behavior were not verified.
 
