@@ -94,6 +94,8 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: "missing authorization header" }), { status: 401, headers: JSON_HEADERS });
   }
 
+  const rawToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -174,16 +176,48 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // 5. Revoke user sessions globally (fail closed on sign-out error) and permanently delete the Auth identity
-  const { error: signOutError } = await userClient.auth.signOut({ scope: "global" });
-  if (signOutError) {
-    console.error(`signOut error for user ${userId}:`, signOutError.message);
+  // 5. Revoke user sessions and refresh tokens globally via server-side Auth API (fail closed)
+  // Direct HTTP call to GoTrue /auth/v1/logout?scope=global using the caller's JWT ensures
+  // server-side refresh token destruction, independent of client-side session persistence.
+  try {
+    const logoutRes = await fetch(`${supabaseUrl}/auth/v1/logout?scope=global`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${rawToken}`,
+        "apikey": anonKey,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!logoutRes.ok) {
+      const errText = await logoutRes.text();
+      console.error(`GoTrue global logout error for user ${userId} (status ${logoutRes.status}):`, errText);
+      return new Response(
+        JSON.stringify({ error: `failed to revoke user sessions on server: ${logoutRes.statusText || errText}` }),
+        { status: 500, headers: JSON_HEADERS }
+      );
+    }
+  } catch (logoutErr: any) {
+    console.error(`GoTrue global logout request failed for user ${userId}:`, logoutErr.message);
     return new Response(
-      JSON.stringify({ error: `failed to revoke user sessions: ${signOutError.message}` }),
+      JSON.stringify({ error: `failed to reach auth service for session revocation: ${logoutErr.message}` }),
       { status: 500, headers: JSON_HEADERS }
     );
   }
 
+  // Also invoke adminClient.auth.admin.signOut with user token if supported by SDK version
+  if (typeof (adminClient.auth.admin as any)?.signOut === "function") {
+    const { error: adminSignOutError } = await (adminClient.auth.admin as any).signOut(rawToken, "global");
+    if (adminSignOutError) {
+      console.error(`admin.signOut error for user ${userId}:`, adminSignOutError.message);
+      return new Response(
+        JSON.stringify({ error: `failed to revoke user sessions via admin: ${adminSignOutError.message}` }),
+        { status: 500, headers: JSON_HEADERS }
+      );
+    }
+  }
+
+  // 6. Permanently delete the Auth identity from auth.users
   const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
   if (deleteAuthError) {
     console.error(`deleteUser error for user ${userId}:`, deleteAuthError.message);

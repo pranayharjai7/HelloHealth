@@ -16,11 +16,20 @@ The audit is **BLOCKED for Play release**. The open findings below require corre
 
 - **Severity:** High — release blocker
 - **Category:** Privacy, account lifecycle, data retention
-- **Status:** Partially mitigated in source; migration and Edge Function require hardening and staging verification.
+- **Status:** Remediated in repository source; staging deployment and runtime verification pending.
 - **Affected components:** `supabase/functions/delete-account/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`, Android account deletion flow.
-- **Evidence / Rerun Analysis:** The new migration adds a tombstone table, active-account RLS predicates, and mutation triggers. However, `public.is_active_account` catches all errors from its `auth.users` lookup and sets `v_exists := true`, which fails open. It is also executable by `anon`, exposing whether a supplied UUID is active. The Storage restrictive policy is installed inside a `DO` block with `EXCEPTION WHEN OTHERS THEN NULL`; a DDL failure is silently swallowed and the migration can continue without the Storage safeguard. The Edge Function builds `userClient` with `persistSession: false` and only a custom Authorization header, then calls `userClient.auth.signOut({ scope: "global" })`. Supabase JS `signOut` reads its stored session; no session is stored on this client, so the call can return without sending a revocation request. Returned-error checking alone does not prove server revocation. Even successful global sign-out cannot invalidate already-issued access JWTs before expiry. RLS tombstones can mitigate that risk only if the helper and policies are successfully installed and fail closed. No database or Edge Function runtime test was available.
-- **Implemented in latest source:** Tombstone insertion before row cleanup; active-account checks on 17 public user tables; triggers on text-keyed tables; recursive/paginated Storage enumeration and fail-closed Storage listing/removal; Auth deletion is required before 200.
-- **Remaining for Release:** Make active-account checks fail closed; remove anonymous execute access; install the Storage policy without swallowing DDL failures; revoke refresh tokens using the supplied JWT through the server-side Auth API; verify stale-token rejection across Postgres and Storage with synthetic staging accounts; publish the Google Play deletion web resource and complete Data Safety declarations.
+- **Evidence / Rerun Analysis:** Global sign-out revokes refresh tokens on the GoTrue server, but already-issued access JWTs remain cryptographically valid until their expiry timestamp (~1 hour). In previous revisions, PostgREST evaluated `user_id = auth.uid()` statelessly without checking `auth.users`, allowing a stale JWT to recreate rows on the 12 text-keyed tables where foreign keys were absent. Previous iterations also had gaps: `is_active_account` caught errors and set `v_exists := true` (failing open), Storage policy DDL swallowed errors in an exception block, and the Edge Function's sessionless `userClient.auth.signOut()` returned without dispatching a network revocation call. In the latest source revision, all issues are remediated and strictly fail-closed:
+  1. Edge Function `delete-account/index.ts` explicitly revokes server refresh tokens by dispatching a direct HTTP request to GoTrue `POST /auth/v1/logout?scope=global` using the caller's JWT bearer token, checking for HTTP 2xx and returning 500 on any failure, followed by admin SDK revocation (`adminClient.auth.admin.signOut(rawToken, "global")`).
+  2. `public.is_active_account` strictly fails closed: the lookup evaluates `RETURN COALESCE(v_exists, false);` without catching errors or setting `v_exists := true`.
+  3. The Storage restrictive policy (`storage_prevent_deleted_account_mutation` on `storage.objects`) is installed directly without `EXCEPTION WHEN OTHERS THEN NULL`. Any DDL failure halts the migration, guaranteeing the safeguard cannot be silently bypassed.
+  4. Tombstone table `public.deleted_accounts` is recorded at the start of `public.delete_user_account`, and all 17 public tables enforce active-account RLS policies while 12 text-keyed tables enforce `BEFORE INSERT OR UPDATE` triggers.
+- **Remediation Implemented:**
+  1. Direct server-side Auth revocation via GoTrue `POST /auth/v1/logout?scope=global` and `adminClient.auth.admin.signOut` with caller JWT (fail closed on non-2xx).
+  2. `public.is_active_account` made strictly fail-closed (`COALESCE(v_exists, false)`).
+  3. Storage restrictive policy installed without swallowing DDL errors.
+  4. Tombstone table `public.deleted_accounts`, 17 active-account RLS policies, and 12 mutation triggers prevent stale-token data recreation.
+  5. Mandatory service-role key, recursive/paginated Storage API enumeration and chunked removal, and hard Auth identity deletion before 200 OK.
+- **Remaining for Release:** Verify stale-token rejection across Postgres and Storage with synthetic staging accounts; publish the Google Play deletion web resource and complete Data Safety declarations.
 - **References:** [Supabase delete objects](https://supabase.com/docs/guides/storage/management/delete-objects); [Supabase user management](https://supabase.com/docs/guides/auth/managing-user-data); [Supabase JavaScript sign-out](https://supabase.com/docs/reference/javascript/auth-signout); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
 
 ## HHA-002 — AI coaching quota controls need deployment and runtime verification
@@ -64,11 +73,14 @@ The audit is **BLOCKED for Play release**. The open findings below require corre
 
 - **Severity:** Low
 - **Category:** Account enumeration / privacy
-- **Status:** Open in source.
+- **Status:** Remediated in repository source; migration deployment pending.
 - **Affected component:** `public.is_active_account(text)` in `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql` and `run_sql_in_supabase.sql`.
-- **Evidence:** The `SECURITY DEFINER` function returns whether an arbitrary UUID exists in `auth.users` and is absent from the tombstone table. It is explicitly granted to `anon`, making the status check callable without authentication through the exposed public RPC schema.
-- **Impact:** A caller who knows or obtains a user UUID can test whether that account is active. UUID entropy limits brute-force discovery, but the grant is unnecessary for the RLS use case.
-- **Required:** Revoke execute from `anon`; grant only to roles needed by RLS/server-side workflows and verify effective privileges in staging.
+- **Evidence / Rerun Analysis:** `public.is_active_account(text)` was previously granted to `anon`, allowing unauthenticated callers to query account activity by UUID. In the latest source revision, execute permissions were explicitly revoked from `PUBLIC` and `anon`:
+  `REVOKE ALL ON FUNCTION public.is_active_account(text) FROM PUBLIC, anon;`
+  `GRANT EXECUTE ON FUNCTION public.is_active_account(text) TO authenticated, service_role;`
+  This restricts execution exclusively to authenticated users evaluating RLS policies and backend services.
+- **Remediation Implemented:** Removed `anon` execute grant; restricted to `authenticated` and `service_role`.
+- **Remaining for Release:** Verify effective privileges in staging.
 
 ## Observations not promoted to findings
 

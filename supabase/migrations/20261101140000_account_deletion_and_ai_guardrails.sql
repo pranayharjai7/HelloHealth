@@ -78,20 +78,17 @@ BEGIN
     END;
 
     -- 3. Check if user actually exists in auth.users (fast indexed PK lookup)
-    BEGIN
-        SELECT EXISTS (
-            SELECT 1 FROM auth.users WHERE id = v_user_uuid
-        ) INTO v_exists;
-    EXCEPTION WHEN OTHERS THEN
-        v_exists := true;
-    END;
+    -- Fail-closed: returns true ONLY if user is verified to exist in auth.users
+    SELECT EXISTS (
+        SELECT 1 FROM auth.users WHERE id = v_user_uuid
+    ) INTO v_exists;
 
-    RETURN v_exists;
+    RETURN COALESCE(v_exists, false);
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.is_active_account(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_active_account(text) TO authenticated, service_role, anon;
+REVOKE ALL ON FUNCTION public.is_active_account(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.is_active_account(text) TO authenticated, service_role;
 
 -- ----------------------------------------------------------------------------
 -- 3. Atomic procedure to delete all user-associated database records (HHA-001 & HHA-003)
@@ -473,17 +470,13 @@ BEGIN
         SELECT 1 FROM information_schema.tables 
         WHERE table_schema = 'storage' AND table_name = 'objects'
     ) THEN
-        EXECUTE $pol$
-            DROP POLICY IF EXISTS storage_prevent_deleted_account_mutation ON storage.objects;
-            CREATE POLICY storage_prevent_deleted_account_mutation ON storage.objects
-                AS RESTRICTIVE
-                FOR ALL TO authenticated
-                USING (public.is_active_account(auth.uid()::text))
-                WITH CHECK (public.is_active_account(auth.uid()::text));
-        $pol$;
+        DROP POLICY IF EXISTS storage_prevent_deleted_account_mutation ON storage.objects;
+        CREATE POLICY storage_prevent_deleted_account_mutation ON storage.objects
+            AS RESTRICTIVE
+            FOR ALL TO authenticated
+            USING (public.is_active_account(auth.uid()::text))
+            WITH CHECK (public.is_active_account(auth.uid()::text));
     END IF;
-EXCEPTION WHEN OTHERS THEN
-    NULL;
 END $$;
 
 NOTIFY pgrst, 'reload schema';
