@@ -1,0 +1,261 @@
+{
+  "tool": "Gitleaks",
+  "version": "8.30.1",
+  "target": "complete working tree including ignored local config and generated files",
+  "redactPercent": 100,
+  "rawValuesOmitted": true,
+  "findings": [
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 6,
+      "endLine": 6,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 7,
+      "endLine": 7,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 8,
+      "endLine": 8,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 9,
+      "endLine": 9,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 10,
+      "endLine": 10,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 11,
+      "endLine": 11,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 12,
+      "endLine": 12,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 13,
+      "endLine": 13,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 14,
+      "endLine": 14,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": ".idea/planningMode.xml",
+      "startLine": 15,
+      "endLine": 15,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/android_test_lint_model/debug/generateDebugAndroidTestLintModel/debug.xml",
+      "startLine": 28,
+      "endLine": 28,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/generated/source/buildConfig/release/com/hellohealth/BuildConfig.java",
+      "startLine": 13,
+      "endLine": 13,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": "app/build/generated/source/buildConfig/release/com/hellohealth/BuildConfig.java",
+      "startLine": 17,
+      "endLine": 17,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": "app/build/generated/source/buildConfig/debug/com/hellohealth/BuildConfig.java",
+      "startLine": 17,
+      "endLine": 17,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/generated/source/buildConfig/debug/com/hellohealth/BuildConfig.java",
+      "startLine": 13,
+      "endLine": 13,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/incremental/lintAnalyzeDebugAndroidTest/debug.xml",
+      "startLine": 28,
+      "endLine": 28,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/incremental/lintAnalyzeDebug/debug.xml",
+      "startLine": 28,
+      "endLine": 28,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/incremental/lintAnalyzeDebugUnitTest/debug.xml",
+      "startLine": 27,
+      "endLine": 27,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/incremental/lintVitalAnalyzeRelease/release.xml",
+      "startLine": 27,
+      "endLine": 27,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/lint_report_lint_model/debug/generateDebugLintReportModel/debug.xml",
+      "startLine": 28,
+      "endLine": 28,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/lint_vital_report_lint_model/release/generateReleaseLintVitalReportModel/release.xml",
+      "startLine": 27,
+      "endLine": 27,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/manifest_merge_blame_file/debug/processDebugMainManifest/manifest-merger-blame-debug-report.txt",
+      "startLine": 148,
+      "endLine": 148,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml",
+      "startLine": 70,
+      "endLine": 70,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml",
+      "startLine": 74,
+      "endLine": 74,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
+      "startLine": 74,
+      "endLine": 74,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/manifest_merge_blame_file/release/processReleaseMainManifest/manifest-merger-blame-release-report.txt",
+      "startLine": 140,
+      "endLine": 140,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml",
+      "startLine": 70,
+      "endLine": 70,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/packaged_manifests/debug/processDebugManifestForPackage/AndroidManifest.xml",
+      "startLine": 74,
+      "endLine": 74,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/packaged_manifests/release/processReleaseManifestForPackage/AndroidManifest.xml",
+      "startLine": 70,
+      "endLine": 70,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/intermediates/unit_test_lint_model/debug/generateDebugUnitTestLintModel/debug.xml",
+      "startLine": 27,
+      "endLine": 27,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/java-sources-proto-map.tab.values.at",
+      "startLine": 18,
+      "endLine": 18,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "app/build/kotlin/compileReleaseKotlin/cacheable/caches-jvm/jvm/kotlin/java-sources-proto-map.tab.values.at",
+      "startLine": 17,
+      "endLine": 17,
+      "commit": ""
+    },
+    {
+      "rule": "gcp-api-key",
+      "path": "local.properties",
+      "startLine": 11,
+      "endLine": 11,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": "local.properties",
+      "startLine": 12,
+      "endLine": 12,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": "local.properties",
+      "startLine": 16,
+      "endLine": 16,
+      "commit": ""
+    },
+    {
+      "rule": "generic-api-key",
+      "path": "local.properties",
+      "startLine": 17,
+      "endLine": 17,
+      "commit": ""
+    }
+  ]
+}

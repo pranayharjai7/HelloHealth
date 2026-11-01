@@ -1,0 +1,25 @@
+{
+  "tool": "Semgrep",
+  "version": "1.183.0",
+  "rulesets": [
+    "p/java",
+    "p/kotlin",
+    "p/security-audit",
+    "p/secrets"
+  ],
+  "unsupportedRulesetAttempt": "p/android returned HTTP 404",
+  "metrics": "off",
+  "targets": [
+    "app/src/main/java",
+    "app/src/main/AndroidManifest.xml",
+    "app/src/main/res/xml",
+    "app/build.gradle.kts",
+    "build.gradle.kts",
+    "supabase/functions",
+    "run_sql_in_supabase.sql",
+    "supabase_setup.sql"
+  ],
+  "scanExitCode": 0,
+  "findings": [],
+  "errors": []
+}

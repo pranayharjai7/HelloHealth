@@ -71,6 +71,13 @@ open class SyncScheduler @Inject constructor(
         AppLogger.d(FeatureTag.SYNC, "One-shot sync requested")
     }
 
+    /** Cancel any pending periodic or one-shot sync passes (e.g. on account deletion or sign out). */
+    open fun cancelAll() {
+        workManager.cancelUniqueWork(PERIODIC_WORK_NAME)
+        workManager.cancelUniqueWork(ONE_SHOT_WORK_NAME)
+        AppLogger.d(FeatureTag.SYNC, "Cancelled all sync passes")
+    }
+
     companion object {
         const val PERIODIC_WORK_NAME = "hh.sync.periodic"
         const val ONE_SHOT_WORK_NAME = "hh.sync.oneshot"

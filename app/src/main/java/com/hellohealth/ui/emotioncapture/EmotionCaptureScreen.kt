@@ -8,6 +8,8 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -530,10 +532,16 @@ private fun imageProxyToUprightBitmap(image: ImageProxy, mirror: Boolean): Bitma
 /** Decode [uri] to a software (mutable-pixel-readable) bitmap; ML pixel reads need a non-hardware config. */
 private fun decodeSoftwareBitmap(context: Context, uri: Uri): Bitmap? {
     return try {
-        val source = ImageDecoder.createSource(context.contentResolver, uri)
-        ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            decoder.isMutableRequired = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(context.contentResolver, uri)
+            ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.isMutableRequired = true
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            val bitmap = MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+            bitmap.copy(Bitmap.Config.ARGB_8888, true)
         }
     } catch (t: Throwable) {
         AppLogger.w(FeatureTag.EMOTION_ML, "Gallery decode failed", t)

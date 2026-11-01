@@ -48,6 +48,7 @@ class OnboardingViewModelTest {
             Result.success(Unit)
         override suspend fun signOut() = Result.success(Unit)
         override suspend fun isUserLoggedIn() = true
+        override suspend fun deleteAccount() = Result.success(Unit)
         override suspend fun getCurrentUser(): User? = User(email = "a@b.com", name = currentName)
         override suspend fun updateCurrentUserName(name: String): Result<User?> {
             updatedName = name

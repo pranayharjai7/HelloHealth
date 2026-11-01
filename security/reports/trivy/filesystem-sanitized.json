@@ -1,0 +1,20 @@
+{
+  "tool": "Trivy",
+  "version": "0.76.1",
+  "target": "repository filesystem",
+  "scanners": [
+    "vuln",
+    "misconfig",
+    "secret"
+  ],
+  "excluded": [
+    ".git",
+    ".gradle",
+    "build",
+    "androidx",
+    ".artifacts",
+    "*.hprof"
+  ],
+  "scanExitCode": 0,
+  "results": []
+}

@@ -12,6 +12,7 @@
          "health"; POST_NOTIFICATIONS is the Android 13+ runtime permission for the notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Camera (P2): front-camera face scan. Feature is not required — devices without a

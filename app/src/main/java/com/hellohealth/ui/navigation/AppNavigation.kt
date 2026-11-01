@@ -238,7 +238,12 @@ fun AppNavigation(
                 viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenSyncDebug = { navController.navigate(Screen.SyncDebug.route) },
-                onEditProfile = { navController.navigate(Screen.EditProfile.route) }
+                onEditProfile = { navController.navigate(Screen.EditProfile.route) },
+                onAccountDeleted = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
 

@@ -32,6 +32,10 @@ class AuthViewModel @Inject constructor(
     val currentUser = _currentUser.asStateFlow()
     private val _profileEditorState = MutableStateFlow(ProfileEditorState())
     val profileEditorState = _profileEditorState.asStateFlow()
+    private val _isDeletingAccount = MutableStateFlow(false)
+    val isDeletingAccount = _isDeletingAccount.asStateFlow()
+    private val _deleteAccountError = MutableStateFlow<String?>(null)
+    val deleteAccountError = _deleteAccountError.asStateFlow()
 
     init {
         checkSession()
@@ -90,6 +94,29 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.signOut()
         }
+    }
+
+    fun deleteAccount(onSuccess: () -> Unit) {
+        if (_isDeletingAccount.value) return
+        _isDeletingAccount.value = true
+        _deleteAccountError.value = null
+        viewModelScope.launch {
+            val result = authRepository.deleteAccount()
+            _isDeletingAccount.value = false
+            if (result.isSuccess) {
+                _currentUser.value = null
+                _authState.value = AuthState.Unauthenticated
+                onSuccess()
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message ?: "Failed to delete account"
+                _deleteAccountError.value = errorMsg
+                AppLogger.e(FeatureTag.AUTH, "Account deletion failed: $errorMsg")
+            }
+        }
+    }
+
+    fun clearDeleteAccountError() {
+        _deleteAccountError.value = null
     }
 
     fun setLoading() {

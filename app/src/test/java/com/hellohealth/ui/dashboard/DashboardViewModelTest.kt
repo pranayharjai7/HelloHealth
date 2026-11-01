@@ -82,6 +82,7 @@ class DashboardViewModelTest {
         override suspend fun isUserLoggedIn() = true
         override suspend fun getCurrentUser(): User? = null
         override suspend fun updateCurrentUserName(name: String) = Result.success<User?>(null)
+        override suspend fun deleteAccount() = Result.success(Unit)
     }
 
     private class FakeGoalsRepository : GoalsRepository {
