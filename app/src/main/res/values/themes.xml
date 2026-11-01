@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.HelloHealth" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+        Android 12+ system splash (androidx.core:core-splashscreen). Shown during cold start before
+        installSplashScreen() hands off to the in-app Compose SplashScreen. Uses the launcher
+        background + adaptive foreground so the system splash matches the app icon, then swaps to the
+        normal theme via postSplashScreenTheme.
+    -->
+    <style name="Theme.HelloHealth.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.HelloHealth</item>
+    </style>
 </resources>
