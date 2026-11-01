@@ -3,13 +3,14 @@
 // Authenticated server-side account deletion endpoint for HelloHealth.
 // Derives identity strictly from caller's verified JWT (never trusts client-supplied user ID).
 // Purges all 17 public database tables via public.delete_user_account(),
-// deletes physical storage objects via Supabase Storage API,
-// and permanently deletes the auth user from auth.users via Supabase Admin API.
+// recursively enumerates, paginates, and deletes physical storage objects via Supabase Storage API,
+// invalidates user sessions globally, and permanently deletes the auth user from auth.users.
 //
 // Fail-closed security design:
 //   - Requires verified JWT (401 Unauthorized)
 //   - Requires SUPABASE_SERVICE_ROLE_KEY to guarantee Auth identity and Storage deletion (500)
-//   - Both database wipe, storage cleanup, and Auth identity deletion must succeed before returning 200.
+//   - Fails closed on any database wipe error, storage enumeration error, or storage removal error
+//   - Requires successful Auth identity deletion before returning 200 OK.
 //
 // Response JSON:
 //   200 { success: true, message: string }
@@ -17,9 +18,60 @@
 //   500 { error: string }
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Connection": "keep-alive" };
+
+/** Recursively enumerates and paginates all files located under a prefix in a storage bucket. */
+async function listAllUserFilesRecursively(
+  adminClient: SupabaseClient,
+  bucketName: string,
+  prefix: string
+): Promise<string[]> {
+  const filePaths: string[] = [];
+  const directoriesToScan = [prefix];
+
+  while (directoriesToScan.length > 0) {
+    const currentDir = directoriesToScan.pop()!;
+    let offset = 0;
+    const limit = 100;
+
+    while (true) {
+      const { data: items, error } = await adminClient.storage
+        .from(bucketName)
+        .list(currentDir, {
+          limit,
+          offset,
+          sortBy: { column: "name", order: "asc" },
+        });
+
+      if (error) {
+        throw new Error(`Failed to list storage objects in bucket '${bucketName}' at path '${currentDir}': ${error.message}`);
+      }
+
+      if (!items || items.length === 0) {
+        break;
+      }
+
+      for (const item of items) {
+        const fullPath = currentDir ? `${currentDir}/${item.name}` : item.name;
+        // In Supabase storage, folders have id == null
+        if (item.id === null) {
+          directoriesToScan.push(fullPath);
+        } else {
+          filePaths.push(fullPath);
+        }
+      }
+
+      if (items.length < limit) {
+        break;
+      }
+      offset += limit;
+    }
+  }
+
+  return filePaths;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -82,27 +134,53 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // 4. Delete physical storage objects via Supabase Storage API across all buckets
-  try {
-    const { data: buckets, error: listBucketsError } = await adminClient.storage.listBuckets();
-    if (!listBucketsError && buckets && buckets.length > 0) {
-      for (const bucket of buckets) {
-        // List files under this user's folder
-        const { data: files } = await adminClient.storage.from(bucket.name).list(userId);
-        if (files && files.length > 0) {
-          const filePaths = files.map((f) => `${userId}/${f.name}`);
-          const { error: removeError } = await adminClient.storage.from(bucket.name).remove(filePaths);
+  // 4. Delete physical storage objects via Supabase Storage API across all buckets (Fail-Closed)
+  const { data: buckets, error: listBucketsError } = await adminClient.storage.listBuckets();
+  if (listBucketsError) {
+    console.error("Storage listBuckets error:", listBucketsError.message);
+    return new Response(
+      JSON.stringify({ error: `failed to query storage buckets: ${listBucketsError.message}` }),
+      { status: 500, headers: JSON_HEADERS }
+    );
+  }
+
+  if (buckets && buckets.length > 0) {
+    for (const bucket of buckets) {
+      let userFiles: string[] = [];
+      try {
+        userFiles = await listAllUserFilesRecursively(adminClient, bucket.name, userId);
+      } catch (err: any) {
+        console.error(`Error enumerating files in bucket ${bucket.name}:`, err.message);
+        return new Response(
+          JSON.stringify({ error: `storage enumeration failed: ${err.message}` }),
+          { status: 500, headers: JSON_HEADERS }
+        );
+      }
+
+      if (userFiles.length > 0) {
+        // Batch remove in chunks of 100
+        for (let i = 0; i < userFiles.length; i += 100) {
+          const batch = userFiles.slice(i, i + 100);
+          const { error: removeError } = await adminClient.storage.from(bucket.name).remove(batch);
           if (removeError) {
-            console.warn(`Storage file removal warning in bucket ${bucket.name}:`, removeError.message);
+            console.error(`Storage file removal error in bucket ${bucket.name}:`, removeError.message);
+            return new Response(
+              JSON.stringify({ error: `failed to remove storage objects in bucket ${bucket.name}: ${removeError.message}` }),
+              { status: 500, headers: JSON_HEADERS }
+            );
           }
         }
       }
     }
-  } catch (storageErr) {
-    console.warn("Storage cleanup exception:", storageErr);
   }
 
-  // 5. Invalidate sessions and permanently delete the Auth identity from auth.users
+  // 5. Revoke user sessions globally and permanently delete the Auth identity from auth.users
+  try {
+    await userClient.auth.signOut({ scope: "global" });
+  } catch (_signOutErr) {
+    // Best-effort session revocation before hard user deletion
+  }
+
   const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
   if (deleteAuthError) {
     console.error(`deleteUser error for user ${userId}:`, deleteAuthError.message);
