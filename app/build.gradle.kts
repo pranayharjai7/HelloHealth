@@ -10,6 +10,16 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
 }
 
+// Firebase Crashlytics (A1.5) — applied ONLY when google-services.json is present. This keeps a fresh
+// clone (and this repo, which git-ignores the file) building: no json → plugins not applied → no crash
+// reporting, build still green. Drop app/google-services.json in from the Firebase console to activate.
+val hasGoogleServices = file("google-services.json").exists()
+if (hasGoogleServices) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
+}
+
+
 android {
     namespace = "com.hellohealth"
     compileSdk = 36
@@ -157,6 +167,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("com.google.firebase:firebase-crashlytics:21.0.1")
     // Drag-to-reorder for LazyColumn (Stage 9: exercise reordering). Compose 1.7-compatible.
     implementation("sh.calvin.reorderable:reorderable:2.4.3")
 
@@ -235,6 +246,17 @@ dependencies {
     // CameraX exposes in its API but only ships as an empty stub transitively.
     implementation("androidx.concurrent:concurrent-futures-ktx:1.1.0")
     implementation("com.google.guava:guava:33.2.1-android")
+
+    // Firebase Crashlytics (A1.5) — guarded on the same google-services.json presence as the plugin
+    // apply above. Without the json the plugins are not applied, so these deps would be inert; gating
+    // them keeps a no-json build byte-for-byte unchanged. BoM pins mutually-compatible versions.
+    // NOTE: firebase-analytics is deliberately NOT included — its transitive play-services-measurement
+    // 24.0.0 is compiled with Kotlin 2.4 metadata, unreadable by this project's Kotlin 2.0.21 compiler.
+    // Crashlytics works standalone (crash + crash-free metrics) without Analytics.
+    if (hasGoogleServices) {
+        implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+        implementation("com.google.firebase:firebase-crashlytics")
+    }
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

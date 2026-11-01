@@ -23,6 +23,10 @@ capture/
 # Secrets
 *.json
 
+# ...but the Firebase config is required build config, not a secret (only public client identifiers).
+# Crashlytics' Gradle plugin reads it at build time; without it the plugin is not applied.
+!app/google-services.json
+
 # Signing keystores — never commit. Keep the .jks OUTSIDE the repo; secrets live in local.properties.
 *.jks
 *.keystore

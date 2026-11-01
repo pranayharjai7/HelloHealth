@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hello Health — Privacy Policy</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+      color: #1a1a1a;
+      background: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { color: #e6e6e6; background: #121212; }
+      h1, h2 { color: #ffffff; }
+      .muted { color: #9a9a9a; }
+    }
+    h1 { font-size: 1.9rem; margin-bottom: 4px; }
+    h2 { font-size: 1.25rem; margin-top: 2rem; }
+    .muted { color: #666; font-size: 0.95rem; }
+    ul { padding-left: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+    a { color: #2e7d32; }
+  </style>
+</head>
+<body>
+  <h1>Hello Health — Privacy Policy</h1>
+  <p class="muted">Last updated November 2026</p>
+
+  <p>This policy explains what data Hello Health collects, why, where it is stored, and the control you
+  have over it. Hello Health is a personal health companion: your health data stays yours. We do not
+  sell your data and we do not use it for advertising.</p>
+
+  <h2>Data we collect</h2>
+  <ul>
+    <li><strong>Account:</strong> your email address and display name (and avatar, if you sign in with
+    Google), used to authenticate you and sync your data across devices.</li>
+    <li><strong>Profile &amp; body metrics:</strong> gender, age, height, weight, and the activity/goal
+    preferences you enter during onboarding or in settings.</li>
+    <li><strong>Health &amp; fitness data from Android Health Connect</strong> (only the types you
+    explicitly grant): steps, distance, floors climbed, active/total/basal calories, heart rate,
+    resting heart rate, heart-rate variability, respiratory rate, oxygen saturation, blood pressure,
+    blood glucose, body temperature, VO2 max, sleep, exercise sessions, speed, elevation, hydration,
+    nutrition, height, weight, and body fat.</li>
+    <li><strong>Mood &amp; emotions:</strong> mood entries you log manually, and — only if you choose
+    the face-scan feature — a camera image processed <strong>on your device</strong> to estimate an
+    emotion. The face image itself is never uploaded; only the resulting mood label and score are
+    stored.</li>
+    <li><strong>Nutrition:</strong> the foods and quantities you log, and your nutrition goals.</li>
+    <li><strong>Workouts:</strong> routines, planned exercises, and logged workout sessions.</li>
+    <li><strong>Approximate/precise location:</strong> used only while a feature that needs it is active
+    (e.g. showing an exercise route on a map). Location is not tracked in the background.</li>
+  </ul>
+
+  <h2>How we use your data</h2>
+  <ul>
+    <li>To show your dashboards, trends, insights, wellness score, and progress.</li>
+    <li>To sync your data to your account so it is available on your other devices.</li>
+    <li>To provide <strong>AI coaching</strong>: when you use the coach, the relevant summary of your
+    health context is sent to our secure server-side proxy, which forwards it to a third-party AI
+    provider (Google Gemini, with an OpenRouter fallback) to generate a response. API keys are held
+    server-side and never shipped in the app.</li>
+    <li>We do <strong>not</strong> sell your data, and we do <strong>not</strong> use it for
+    advertising.</li>
+  </ul>
+
+  <h2>Where your data is stored</h2>
+  <ul>
+    <li>Your data syncs to Supabase (our managed backend), stored encrypted in transit and at rest,
+    isolated per-user by row-level security so only you can read or write your rows.</li>
+    <li>A copy is cached on your device so the app works offline.</li>
+    <li>The on-device face-scan model and its image processing never leave your phone.</li>
+  </ul>
+
+  <h2>AI coaching &amp; third parties</h2>
+  <ul>
+    <li>AI coaching requests are rate-limited and tied to your authenticated account. The text sent is
+    the coaching prompt assembled from your health summary; it is processed by the AI provider to
+    generate the reply and is not used by us to build an advertising profile.</li>
+    <li>Mapping/route display uses Google Maps.</li>
+    <li>Nutrition lookups may query public food databases (USDA FoodData Central, Open Food Facts) using
+    only the search term you type — never your identity.</li>
+  </ul>
+
+  <h2>Your controls &amp; data deletion</h2>
+  <ul>
+    <li>You can revoke Health Connect permissions at any time from Android settings or within the app;
+    Hello Health stops reading those types immediately.</li>
+    <li>You can permanently delete your account from <strong>Profile → Delete Account</strong>. This
+    erases all your records from our servers (health, workout, nutrition, mood, profile), removes your
+    stored files, revokes your sessions, and deletes your login identity. The deletion is immediate and
+    irreversible.</li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy or your data: <a href="mailto:pranayharjai7@gmail.com">pranayharjai7@gmail.com</a>.</p>
+</body>
+</html>

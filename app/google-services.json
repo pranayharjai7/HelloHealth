@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "179554988674",
+    "project_id": "hellohealth-007",
+    "storage_bucket": "hellohealth-007.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:179554988674:android:405adaa5ecca011535fa9b",
+        "android_client_info": {
+          "package_name": "com.hellohealth"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEwQB3atS8mihqeHBDb_uVN7NA6b9WJrE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -104,12 +104,20 @@ class MainActivity : ComponentActivity() {
             val accent by themeViewModel.accent.collectAsState()
             val controller = rememberNavController().also { navController = it }
 
+            // Health Connect launches us with this action to show the data-use rationale; make the
+            // rationale screen the start destination in that case.
+            val launchedForRationale =
+                intent?.action == "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"
+
             HelloHealthTheme(accent = accent) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(navController = controller)
+                    AppNavigation(
+                        navController = controller,
+                        showHealthRationale = launchedForRationale
+                    )
                 }
             }
         }
