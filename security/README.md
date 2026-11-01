@@ -4,10 +4,10 @@
 
 - Repository: HelloHealth Android application and the checked-in Supabase Edge Function / SQL definitions.
 - Branch: `security/pre-play-store-audit`.
-- Audited revision: `15171845ecf72eaea1dddfa5eb248b43652fa567` (the current `master` and `origin/master` tip at audit time).
+- Audited revision: `69ddd1553ed2d109c72cd9da98fe6e6f3b4d54b1` (the current `master` and `origin/master` tip at audit time).
 - Audit date: 2026-11-01.
-- Method: source review, local static scans, Gradle debug build/unit tests/lint, and review against OWASP MASVS/MASTG. No app/backend changes, production requests, credential changes, device installs, commits, or pushes were made.
-- Result: **BLOCKED**. One confirmed High Play release blocker remains, lint has errors, and signed release artifact / APK analysis / runtime backend checks were unavailable.
+- Method: source review, local static scans, Gradle debug build/unit tests/lint, local MobSF static scan, and review against OWASP MASVS/MASTG. No production requests, credential changes, or device installs were made.
+- Result: **BLOCKED**. One High deletion/privacy release blocker and open AI quota hardening issues remain. Debug build/tests/lint pass; MobSF scanned only a debug APK. Release signing, staging backend validation, and Play deletion resource/declarations remain outstanding.
 
 This is a source and local-build assessment, not a certification that the application or deployed backend is secure. Deployed Supabase state, Play Console disclosures, release signing, and runtime behavior were not verified.
 
@@ -27,7 +27,7 @@ Individual tool/build notes are under `reports/`. Sanitized machine-readable out
 - Static SQL review found owner-scoped RLS enablement/policies for 17 tables in `run_sql_in_supabase.sql`. This does not establish that these definitions have been applied to the deployed project.
 - The Supabase project was not accessed. No ZAP or synthetic-account test was run because no authorized staging environment was supplied; production testing was outside scope.
 - No connected Android test was run because the only connected target was a physical device and the request prohibited installing on a personal phone without asking.
-- No signed release artifact was produced. The release task intentionally refuses to emit an unsigned artifact when the configured release keystore is absent.
+- No signed release artifact was produced. The release task refuses to emit an unsigned artifact while release signing configuration is unavailable. MobSF ran on the debug APK only; its report was kept outside the repository because it contains extracted strings and secret-like material.
 - The repository's `.gitignore` excludes `*.json` and nested `build/` output. Sanitized JSON and Gradle evidence files exist locally but do not appear in normal Git status. The audit Markdown files are visible to Git.
 - Gradle created a local `.kotlin/` directory. It was left intact; its current contents do not appear in normal Git status. No application source was modified.
 
