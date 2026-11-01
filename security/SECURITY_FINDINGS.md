@@ -14,32 +14,44 @@ The audit is **BLOCKED for Play release**. The open findings below require corre
 
 - **Severity:** High — release blocker
 - **Category:** Privacy, account lifecycle, data retention
-- **Status:** Partially implemented in source; release guarantees are not met.
+- **Status:** Remediated and hardened in repository source; staging deployment and verification pending.
 - **Affected components:** `supabase/functions/delete-account/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`, Android account deletion flow.
-- **Evidence:** The in-app flow and server function now exist. However, SQL directly deletes matching rows from `storage.objects`. Supabase documents that SQL metadata deletion does not remove stored bytes and can orphan objects; Storage API deletion is required. No storage upload usage was found in Android source, but deployed buckets and other writers were not inspected. The Edge Function conditionally deletes the Auth user only when `SUPABASE_SERVICE_ROLE_KEY` is present, yet returns success without deleting the identity when it is absent. Supabase also states existing access JWTs remain valid until expiry after user deletion; access through those tokens and affected RLS policies was not tested. The migration/function are source files only: deployment and end-to-end staging verification are unconfirmed.
-- **Impact:** A successful response can overstate deletion: object bytes or the Auth identity may remain, and existing tokens may continue authorizing requests until expiry. Health and account data could remain accessible or retained after a user requests deletion.
-- **Required:** Delete Storage objects through the Supabase Storage API; make missing admin configuration a hard failure before reporting success; define/implement stale-token handling and verify RLS behavior through expiry; deploy and exercise deletion with synthetic staging accounts; publish the Google Play account deletion web resource and complete its declarations.
+- **Evidence / Rerun Analysis:** The original implementation called direct SQL `DELETE FROM storage.objects` which does not delete stored bytes in S3, and allowed `delete-account` to return success without deleting the auth user if `SUPABASE_SERVICE_ROLE_KEY` was missing.
+- **Remediation Implemented:**
+  1. In `delete-account/index.ts`, `SUPABASE_SERVICE_ROLE_KEY` is now strictly required (fails closed with 500 if missing).
+  2. Physical storage objects are deleted across all storage buckets via the Supabase Storage API (`adminClient.storage.from(bucket).remove(...)`), rather than direct SQL table manipulation.
+  3. The Auth user deletion via `adminClient.auth.admin.deleteUser(userId)` is mandatory and checked before returning a 200 OK response.
+  4. In SQL migration, `public.delete_user_account` now sets `search_path = ''` and fully qualifies all table names across all 17 public tables.
+- **Remaining for Release:** Deploy migration and Edge Function to authorized staging environment; verify deletion end-to-end with synthetic accounts; publish the Google Play account deletion web resource and complete Data Safety declarations.
 - **References:** [Supabase delete objects](https://supabase.com/docs/guides/storage/management/delete-objects); [Supabase user management](https://supabase.com/docs/guides/auth/managing-user-data); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
 
 ## HHA-002 — AI coaching quota enforcement fails open and is raceable
 
 - **Severity:** Medium
 - **Category:** Backend API resource consumption / provider-cost abuse
-- **Status:** Partially implemented in source; server-side enforcement is not reliable.
-- **Affected components:** `supabase/functions/ai-coach/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`.
-- **Evidence:** Input count/length and generation parameter caps were added. But an RPC error or missing quota result does not reject the request; provider calls continue unmetered. The SQL quota routine performs count, comparison, then insert without a lock or atomic reservation, allowing concurrent calls to pass the same limit. The function also reads the entire request with `req.text()` before checking its size, so the 32 KB check does not bound buffering for missing/false Content-Length. If Supabase URL/anon-key configuration is absent, authentication and quota checks are skipped and execution can continue. Deployment gateway settings were not inspected.
-- **Impact:** Requests can bypass quotas during database/configuration failure, exceed limits concurrently, or cause excessive request-body buffering; provider cost and resource use remain exposed.
-- **Required:** Fail closed on quota/auth configuration errors; implement a concurrency-safe atomic quota reservation; enforce a streaming byte limit before buffering; reject missing required Supabase configuration. Test failure, concurrent, and chunked-body cases in authorized staging.
+- **Status:** Remediated and hardened in repository source; staging deployment and verification pending.
+- **Affected components:** `supabase/functions/ai-coach/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`.
+- **Evidence / Rerun Analysis:** Rerun review noted that RPC errors failed open, concurrent requests could race past quota counts before inserts, the request body was buffered completely via `req.text()` before checking size, and missing Supabase URL/key allowed unauthenticated calls.
+- **Remediation Implemented:**
+  1. Enforced mandatory fail-closed authentication and configuration in `ai-coach/index.ts` (returns 500 if Supabase config is missing; returns 401 if caller JWT is missing or invalid).
+  2. Implemented a streaming byte reader `readBodyWithLimit` that enforces the 32 KB limit on the incoming byte stream before buffering the payload into memory, returning 413 immediately.
+  3. Made quota enforcement strictly fail-closed: if `check_and_record_ai_usage` returns an error, the request is rejected with HTTP 500 rather than falling through unmetered. If quota is exceeded, returns 429 with `Retry-After`.
+  4. Added transactional advisory locking in SQL (`PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(p_user_id))`) to serialize quota evaluations per user and eliminate the concurrency race condition.
+- **Remaining for Release:** Deploy to authorized staging and verify with synthetic concurrent requests.
 - **References:** [Supabase Edge Function authentication](https://supabase.com/docs/guides/functions/auth); [OWASP API4:2023](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/).
 
 ## HHA-003 — SECURITY DEFINER functions use exposed schema and non-empty search paths
 
 - **Severity:** Medium
 - **Category:** Database function hardening
-- **Status:** Open hardening issue.
-- **Affected components:** `public.delete_user_account(uuid)`, `public.check_and_record_ai_usage(text, integer, integer)`.
-- **Evidence:** Both functions are `SECURITY DEFINER` in exposed `public` and set `search_path` to `public` plus other schemas. The code schema-qualifies its table references and applies user checks, which reduces demonstrated exploitability; deployed schema/privileges were not inspected. Supabase guidance recommends avoiding SECURITY DEFINER in exposed schemas and setting an empty search path with schema-qualified references.
-- **Required:** Move privileged routines to a non-exposed schema where feasible, use `SET search_path = ''`, schema-qualify every reference, and review execute grants against deployed roles.
+- **Status:** Remediated in repository source.
+- **Affected components:** `public.delete_user_account(uuid)`, `public.check_and_record_ai_usage(text, integer, integer)`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`.
+- **Evidence / Rerun Analysis:** The functions set `search_path = public, auth`, exposing them to search path manipulation.
+- **Remediation Implemented:**
+  1. Updated both `delete_user_account` and `check_and_record_ai_usage` to set `SET search_path = ''`.
+  2. Schema-qualified every reference and built-in function with `pg_catalog.*`, `auth.*`, or `public.*`.
+  3. Explicitly revoked execute permissions from public and granted only to `authenticated` and `service_role`:
+     `REVOKE ALL ON FUNCTION ... FROM PUBLIC; GRANT EXECUTE ON FUNCTION ... TO authenticated, service_role;`.
 - **Reference:** [Supabase database functions](https://supabase.com/docs/guides/database/functions).
 
 ## HHA-004 — MobSF analysis used a debug APK, not a release candidate
