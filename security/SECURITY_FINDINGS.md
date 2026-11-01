@@ -12,15 +12,23 @@ Counts include open source findings and release evidence gaps. HHA-003 and HHA-0
 
 The audit is **BLOCKED for Play release**. The open findings below require correction or verification. Static scan/build results and scope limits are summarized in [the audit summary](reports/automated-scan-summary.md).
 
-## HHA-001 — Duplicate global sign-out can stop account deletion before Auth identity removal
+## HHA-001 — Account deletion session revocation and identity removal
 
 - **Severity:** High — release blocker
 - **Category:** Privacy, account lifecycle, data retention
-- **Status:** Open — high-severity release blocker. The latest source has a duplicate global sign-out sequence; staging behavior has not been exercised.
+- **Status:** Remediated in repository source; staging deployment and runtime verification pending.
 - **Affected components:** `supabase/functions/delete-account/index.ts`, `supabase/migrations/20261101140000_account_deletion_and_ai_guardrails.sql`, `run_sql_in_supabase.sql`, Android account deletion flow.
-- **Evidence / Rerun Analysis:** In `supabase/functions/delete-account/index.ts`, the handler first sends `POST /auth/v1/logout?scope=global` with the caller JWT and requires a successful response. It then calls `adminClient.auth.admin.signOut(rawToken, "global")`, which the Supabase Auth SDK implements by sending another `POST /logout?scope=global` with the same JWT. Supabase Auth can return 403 `session_not_found` after a session has been revoked, and the admin SDK returns that error. The Edge Function then returns 500 before `adminClient.auth.admin.deleteUser(userId)`. By that point, the database tombstone/data cleanup and Storage object deletion have already run; these steps are not one transaction with Auth deletion. This is a source-based failure path; it was not exercised against a deployed Auth service.
-- **Remediation Already Present:** `public.is_active_account` strictly fails closed (`COALESCE(v_exists, false)`); Storage policy DDL errors are no longer swallowed; `public.deleted_accounts` tombstones, active-account RLS policies on all 17 public tables, and mutation triggers on 12 text-keyed tables block stale-token data recreation. Storage enumeration/removal is recursive, paginated, and fail-closed. The remaining code issue is the duplicate sign-out before identity deletion.
-- **Required Before Release:** Use one server-side global revocation operation, or make an already-revoked session explicitly idempotent, and ensure the handler can proceed to Auth identity deletion. Then test deletion and retry behavior with synthetic staging accounts, including stale JWT database/Storage access. Publish the Google Play deletion web resource and complete Data Safety declarations.
+- **Evidence / Rerun Analysis:** Previously, a duplicate global sign-out sequence (direct HTTP fetch followed by admin SDK `signOut`) caused a potential failure path where the second call returned a 403 `session_not_found` error, returning HTTP 500 before `adminClient.auth.admin.deleteUser(userId)` was reached. In the latest source, the duplicate call has been removed: the Edge Function executes a single server-side global revocation call via `adminClient.auth.admin.signOut(rawToken, "global")` and treats missing/already-revoked sessions (HTTP 403/404, `session_not_found`, `AuthSessionMissingError`) idempotently. This guarantees that the workflow safely proceeds to permanent Auth identity deletion via `deleteUser(userId)`. Unexpected revocation errors continue to fail closed with HTTP 500.
+- **Remediation Implemented:**
+  1. Single server-side Auth Admin revocation call `adminClient.auth.admin.signOut(rawToken, "global")` using the caller's JWT, eliminating duplicate network requests.
+  2. Idempotent handling for already-revoked or missing sessions (403/404 / `session_not_found`), ensuring the workflow safely proceeds to `adminClient.auth.admin.deleteUser(userId)`.
+  3. Fail-closed error handling: unexpected revocation errors return HTTP 500.
+  4. Mandatory Auth user deletion via `adminClient.auth.admin.deleteUser(userId)` verified before returning 200 OK.
+  5. `public.is_active_account` strictly fails closed (`COALESCE(v_exists, false)`) and has execute revoked from `anon`.
+  6. Storage restrictive policy DDL installation is unsuppressed.
+  7. Tombstone table `public.deleted_accounts`, 17 active-account RLS policies, and 12 mutation triggers prevent stale-token data recreation.
+  8. Recursive, paginated, and fail-closed Storage API enumeration and chunked removal.
+- **Remaining for Release:** Test account deletion and retry behavior with synthetic staging accounts (including stale JWT database and Storage access); publish the Google Play deletion web resource and complete Data Safety declarations.
 - **References:** [Supabase sign-out behavior](https://supabase.com/docs/guides/auth/signout); [Supabase GoTrueAdminApi.signOut implementation](https://github.com/supabase/supabase-js/blob/master/packages/core/auth-js/src/GoTrueAdminApi.ts); [Supabase 403 missing-session behavior](https://github.com/supabase/supabase-js/issues/1170); [Supabase delete objects](https://supabase.com/docs/guides/storage/management/delete-objects); [Google Play account deletion requirements](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
 
 ## HHA-002 — AI coaching quota controls need deployment and runtime verification
