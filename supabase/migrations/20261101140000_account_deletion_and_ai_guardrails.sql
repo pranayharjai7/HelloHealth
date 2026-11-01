@@ -3,6 +3,7 @@
 -- ----------------------------------------------------------------------------
 -- 1. HHA-001: Server-side account deletion procedure & foreign key cascade
 -- 2. HHA-002: Server-side AI coaching rate limiting and usage tracking
+-- 3. HHA-003: Hardened SECURITY DEFINER functions with search_path = ''
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -25,13 +26,13 @@ ALTER TABLE public.nutrition_goals
     FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 -- ----------------------------------------------------------------------------
--- 2. Atomic procedure to delete all user-associated database records
+-- 2. Atomic procedure to delete all user-associated database records (HHA-001 & HHA-003)
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.delete_user_account(target_user_id uuid DEFAULT NULL)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth, storage
+SET search_path = ''
 AS $$
 DECLARE
     v_user_id uuid;
@@ -83,24 +84,16 @@ BEGIN
     DELETE FROM public.food_preferences WHERE user_id = v_user_id;
     DELETE FROM public.activity_goals WHERE user_id = v_user_id;
 
-    -- 7. Supabase Storage objects (if any exist)
-    BEGIN
-        DELETE FROM storage.objects WHERE owner = v_user_id OR name LIKE (v_user_id_text || '/%');
-    EXCEPTION WHEN undefined_table THEN
-        NULL;
-    END;
-
-    -- 8. User profile
+    -- 7. User profile
     DELETE FROM public.profiles WHERE id = v_user_id;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.delete_user_account(uuid) FROM public;
-GRANT EXECUTE ON FUNCTION public.delete_user_account(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.delete_user_account(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.delete_user_account(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.delete_user_account(uuid) TO authenticated, service_role;
 
 -- ----------------------------------------------------------------------------
--- 3. AI Usage Ledger & Atomic Rate Limiting / Quotas
+-- 3. AI Usage Ledger & Atomic Rate Limiting / Quotas (HHA-002 & HHA-003)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.ai_usage_ledger (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -121,14 +114,14 @@ CREATE OR REPLACE FUNCTION public.check_and_record_ai_usage(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = ''
 AS $$
 DECLARE
     v_minute_count integer;
     v_day_count integer;
 BEGIN
-    IF p_user_id IS NULL OR length(trim(p_user_id)) = 0 THEN
-        RETURN jsonb_build_object(
+    IF p_user_id IS NULL OR pg_catalog.length(pg_catalog.trim(p_user_id)) = 0 THEN
+        RETURN pg_catalog.jsonb_build_object(
             'allowed', false,
             'reason', 'invalid_user_id'
         );
@@ -136,20 +129,23 @@ BEGIN
 
     -- Enforce that caller's JWT matches the target user_id (if authenticated)
     IF auth.uid() IS NOT NULL AND auth.uid()::text <> p_user_id THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'allowed', false,
             'reason', 'unauthorized_user_id'
         );
     END IF;
 
+    -- Concurrency protection: serialize quota checks per user for the transaction duration
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(p_user_id));
+
     -- Count requests in the last 60 seconds
     SELECT COUNT(*) INTO v_minute_count
     FROM public.ai_usage_ledger
     WHERE user_id = p_user_id
-      AND requested_at >= now() - interval '1 minute';
+      AND requested_at >= pg_catalog.now() - interval '1 minute';
 
     IF v_minute_count >= p_max_per_minute THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'allowed', false,
             'reason', 'rate_limit_exceeded',
             'retry_after_seconds', 60
@@ -160,10 +156,10 @@ BEGIN
     SELECT COUNT(*) INTO v_day_count
     FROM public.ai_usage_ledger
     WHERE user_id = p_user_id
-      AND requested_at >= now() - interval '24 hours';
+      AND requested_at >= pg_catalog.now() - interval '24 hours';
 
     IF v_day_count >= p_max_per_day THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'allowed', false,
             'reason', 'daily_quota_exceeded',
             'retry_after_seconds', 3600
@@ -172,13 +168,13 @@ BEGIN
 
     -- Record request
     INSERT INTO public.ai_usage_ledger (user_id, requested_at)
-    VALUES (p_user_id, now());
+    VALUES (p_user_id, pg_catalog.now());
 
     -- Opportunistic cleanup of entries older than 48 hours
     DELETE FROM public.ai_usage_ledger
-    WHERE requested_at < now() - interval '48 hours';
+    WHERE requested_at < pg_catalog.now() - interval '48 hours';
 
-    RETURN jsonb_build_object(
+    RETURN pg_catalog.jsonb_build_object(
         'allowed', true,
         'minute_count', v_minute_count + 1,
         'day_count', v_day_count + 1
@@ -186,8 +182,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.check_and_record_ai_usage(text, integer, integer) FROM public;
-GRANT EXECUTE ON FUNCTION public.check_and_record_ai_usage(text, integer, integer) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.check_and_record_ai_usage(text, integer, integer) TO service_role;
+REVOKE ALL ON FUNCTION public.check_and_record_ai_usage(text, integer, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_and_record_ai_usage(text, integer, integer) TO authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';

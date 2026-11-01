@@ -5,14 +5,14 @@
 // APK. The client sends the assembled coaching prompt (provider-neutral) and this function runs the
 // fallback chain — Gemini (default) -> OpenRouter (fallback) — and returns the generated text.
 //
-// Guardrails & Protection (HHA-002 remediation):
-//   - Request body limit: <= 32 KB (413 Payload Too Large)
-//   - JWT authentication: requires verified user token (401 Unauthorized)
+// Hardened Controls & Guardrails (HHA-002 remediation):
+//   - Mandatory authentication & fail-closed config: requires valid user JWT and Supabase configuration (401/500)
+//   - Streaming body limit: enforces <= 32 KB on request stream prior to full buffering (413 Payload Too Large)
 //   - Message count limit: 1..10 messages (400 Bad Request)
 //   - Message text limit: <= 2000 chars per message, <= 8000 chars total (400 Bad Request)
 //   - System prompt limit: <= 2000 chars (400 Bad Request)
 //   - Parameter clamping: temperature in [0.0, 1.0], maxOutputTokens in [100, 2048]
-//   - Rate limiting & Quotas: Atomic database ledger via public.check_and_record_ai_usage() (429 Too Many Requests)
+//   - Concurrency-safe rate limiting: Fail-closed atomic RPC public.check_and_record_ai_usage() (429/500)
 //   - Privacy: Sanitized logging only; user health details and conversation text are NEVER logged.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -42,6 +42,48 @@ interface CoachRequest {
 }
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Connection": "keep-alive" };
+
+/** Stream reader that enforces a hard byte limit before buffering the entire body into memory. */
+async function readBodyWithLimit(req: Request, maxBytes: number): Promise<{ text?: string; exceeded: boolean }> {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > maxBytes) {
+    return { exceeded: true };
+  }
+
+  if (!req.body) {
+    return { text: "" , exceeded: false };
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          await reader.cancel("payload too large");
+          return { exceeded: true };
+        }
+        chunks.push(value);
+      }
+    }
+  } catch (err) {
+    if (totalBytes > maxBytes) return { exceeded: true };
+    throw err;
+  }
+
+  const concatenated = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    concatenated.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(concatenated), exceeded: false };
+}
 
 /** Gemini generateContent. Returns the text, or null on any failure (non-2xx, empty, malformed). */
 async function tryGemini(req: CoachRequest): Promise<string | null> {
@@ -121,7 +163,7 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: "method not allowed" }), { status: 405, headers: JSON_HEADERS });
   }
 
-  // 1. Verify Authentication & Extract JWT
+  // 1. Fail-closed check: verify authorization header & Supabase credentials
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     return new Response(JSON.stringify({ error: "missing authorization header" }), { status: 401, headers: JSON_HEADERS });
@@ -130,29 +172,32 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-  let userId: string | null = null;
-  let userClient = null;
-
-  if (supabaseUrl && anonKey) {
-    userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "invalid or expired authentication token" }), { status: 401, headers: JSON_HEADERS });
-    }
-    userId = user.id;
+  if (!supabaseUrl || !anonKey) {
+    console.error("ai-coach configuration error: SUPABASE_URL and SUPABASE_ANON_KEY must be set");
+    return new Response(
+      JSON.stringify({ error: "server configuration error: authentication service unavailable" }),
+      { status: 500, headers: JSON_HEADERS }
+    );
   }
 
-  // 2. Request body size check
-  const contentLength = req.headers.get("content-length");
-  if (contentLength && parseInt(contentLength, 10) > MAX_BODY_BYTES) {
-    return new Response(JSON.stringify({ error: "request body too large" }), { status: 413, headers: JSON_HEADERS });
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+
+  const { data: { user }, error: userError } = await userClient.auth.getUser();
+  if (userError || !user) {
+    return new Response(
+      JSON.stringify({ error: "invalid or expired authentication token" }),
+      { status: 401, headers: JSON_HEADERS }
+    );
   }
 
-  const rawBody = await req.text();
-  if (rawBody.length > MAX_BODY_BYTES) {
+  const userId = user.id;
+
+  // 2. Stream-based body size limit (rejects bodies > 32 KB before buffering into memory)
+  const { text: rawBody, exceeded } = await readBodyWithLimit(req, MAX_BODY_BYTES);
+  if (exceeded || rawBody === undefined) {
     return new Response(JSON.stringify({ error: "request body too large" }), { status: 413, headers: JSON_HEADERS });
   }
 
@@ -203,31 +248,34 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // 4. Per-user atomic rate limiting & quotas via database procedure
-  if (userClient && userId) {
-    const { data: usageCheck, error: usageError } = await userClient.rpc("check_and_record_ai_usage", {
-      p_user_id: userId,
-      p_max_per_minute: 5,
-      p_max_per_day: 30,
-    });
+  // 4. Per-user atomic rate limiting & quotas via database procedure (FAIL-CLOSED)
+  const { data: usageCheck, error: usageError } = await userClient.rpc("check_and_record_ai_usage", {
+    p_user_id: userId,
+    p_max_per_minute: 5,
+    p_max_per_day: 30,
+  });
 
-    if (!usageError && usageCheck && typeof usageCheck === "object") {
-      const allowed = (usageCheck as Record<string, unknown>).allowed;
-      if (allowed === false) {
-        const retryAfter = (usageCheck as Record<string, unknown>).retry_after_seconds ?? 60;
-        const reason = (usageCheck as Record<string, unknown>).reason ?? "rate_limited";
-        return new Response(
-          JSON.stringify({ error: `rate limit or quota exceeded: ${reason}` }),
-          {
-            status: 429,
-            headers: {
-              ...JSON_HEADERS,
-              "Retry-After": String(retryAfter),
-            },
-          }
-        );
+  if (usageError) {
+    console.error("check_and_record_ai_usage database error:", usageError.message);
+    return new Response(
+      JSON.stringify({ error: "usage tracking service unavailable; request rejected for safety" }),
+      { status: 500, headers: JSON_HEADERS }
+    );
+  }
+
+  if (!usageCheck || typeof usageCheck !== "object" || (usageCheck as Record<string, unknown>).allowed !== true) {
+    const retryAfter = (usageCheck as Record<string, unknown>)?.retry_after_seconds ?? 60;
+    const reason = (usageCheck as Record<string, unknown>)?.reason ?? "rate_limit_exceeded";
+    return new Response(
+      JSON.stringify({ error: `rate limit or quota exceeded: ${reason}` }),
+      {
+        status: 429,
+        headers: {
+          ...JSON_HEADERS,
+          "Retry-After": String(retryAfter),
+        },
       }
-    }
+    );
   }
 
   // 5. Clamp generation parameters
@@ -255,6 +303,6 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ text: openRouter, provider: "openrouter" }), { status: 200, headers: JSON_HEADERS });
   }
 
-  // Both providers failed or unavailable; client will fall back to its on-device rule-based coach
+  // Both providers failed or unavailable; client falls back gracefully to its on-device rule-based coach
   return new Response(JSON.stringify({ error: "all providers failed" }), { status: 502, headers: JSON_HEADERS });
 });
