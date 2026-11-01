@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,7 +49,8 @@ fun ProfileScreen(
     viewModel: AuthViewModel,
     onBack: () -> Unit,
     onOpenSyncDebug: () -> Unit = {},
-    onEditProfile: () -> Unit = {}
+    onEditProfile: () -> Unit = {},
+    onAccountDeleted: () -> Unit = {}
 ) {
     val user by viewModel.currentUser.collectAsState()
     // The onboarding vitals live on the stored UserProfile. Reuse the editor's read path
@@ -59,6 +61,9 @@ fun ProfileScreen(
     val profile = editorState.profile
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
+    val isDeletingAccount by viewModel.isDeletingAccount.collectAsState()
+    val deleteAccountError by viewModel.deleteAccountError.collectAsState()
+    var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
 
     // Hidden developer gesture: 7 quick taps on the "Profile" title opens the sync debug screen.
     // No visible affordance; the tap streak resets if taps are more than 600ms apart.
@@ -241,12 +246,118 @@ fun ProfileScreen(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Danger Zone / Account Management Card
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text(
+                            text = "Account",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Permanently delete your HelloHealth account and all associated personal health, workout, nutrition, and mood data.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { showDeleteConfirmationDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isDeletingAccount,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isDeletingAccount) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Deleting Account...")
+                            } else {
+                                Icon(
+                                    Icons.Default.DeleteForever,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Delete Account", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
-}
 
+        if (showDeleteConfirmationDialog) {
+            AlertDialog(
+                onDismissRequest = { if (!isDeletingAccount) showDeleteConfirmationDialog = false },
+                title = { Text("Delete Account?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "Are you sure you want to permanently delete your account? This action cannot be undone. " +
+                            "All your health records, workout history, nutrition logs, and personal settings will be permanently erased from our servers."
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirmationDialog = false
+                            viewModel.deleteAccount(onSuccess = onAccountDeleted)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Delete Permanently")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showDeleteConfirmationDialog = false },
+                        enabled = !isDeletingAccount
+                    ) {
+                        Text("Cancel")
+                    }
+                },
+                shape = RoundedCornerShape(24.dp),
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        }
+
+        deleteAccountError?.let { errorMsg ->
+            AlertDialog(
+                onDismissRequest = { viewModel.clearDeleteAccountError() },
+                title = { Text("Deletion Failed", fontWeight = FontWeight.Bold) },
+                text = { Text(errorMsg) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.clearDeleteAccountError() }) {
+                        Text("OK")
+                    }
+                },
+                shape = RoundedCornerShape(24.dp),
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        }
+}
 @Composable
+
 private fun ProfileInfoItem(label: String, value: String) {
     Column {
         Text(

@@ -51,6 +51,12 @@ class AuthViewModelTest {
             Result.success(Unit)
         override suspend fun signOut() = Result.success(Unit)
         override suspend fun isUserLoggedIn() = loggedIn
+        var deleteAccountCalled: Boolean = false
+        var deleteAccountResult: Result<Unit> = Result.success(Unit)
+        override suspend fun deleteAccount(): Result<Unit> {
+            deleteAccountCalled = true
+            return deleteAccountResult
+        }
         override suspend fun getCurrentUser(): User? = user
         override suspend fun updateCurrentUserName(name: String): Result<User?> {
             lastNameUpdate = name
@@ -328,5 +334,42 @@ class AuthViewModelTest {
         assertFalse("a failed load must not mark loaded", editor.loaded)
         assertNull(editor.profile)
         assertTrue("an error must surface", editor.error != null)
+    }
+
+    @Test
+    fun deleteAccount_calls_authRepository_and_triggers_onSuccess() = runTest(dispatcher) {
+        val authRepo = FakeAuthRepository()
+        val vm = viewModel(authRepo, FakeProfileRepository(profile = null))
+        advanceUntilIdle()
+
+        var successCalled = false
+        vm.deleteAccount { successCalled = true }
+        advanceUntilIdle()
+
+        assertFalse("isDeletingAccount must be false after completion", vm.isDeletingAccount.value)
+        assertTrue("deleteAccount must be invoked on authRepository", authRepo.deleteAccountCalled)
+        assertTrue("onSuccess must be invoked", successCalled)
+        assertNull("currentUser must be cleared", vm.currentUser.value)
+        assertEquals(AuthState.Unauthenticated, vm.authState.value)
+        assertNull("deleteAccountError must be null", vm.deleteAccountError.value)
+    }
+
+    @Test
+    fun deleteAccount_surfaces_error_when_repository_fails() = runTest(dispatcher) {
+        val authRepo = FakeAuthRepository()
+        authRepo.deleteAccountResult = Result.failure(RuntimeException("Network failure"))
+        val vm = viewModel(authRepo, FakeProfileRepository(profile = null))
+        advanceUntilIdle()
+
+        var successCalled = false
+        vm.deleteAccount { successCalled = true }
+        advanceUntilIdle()
+
+        assertFalse("isDeletingAccount must be false after failure", vm.isDeletingAccount.value)
+        assertFalse("onSuccess must NOT be called on failure", successCalled)
+        assertEquals("Network failure", vm.deleteAccountError.value)
+
+        vm.clearDeleteAccountError()
+        assertNull(vm.deleteAccountError.value)
     }
 }

@@ -14,11 +14,29 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import javax.inject.Inject
+import com.hellohealth.core.logging.AppLogger
+import com.hellohealth.core.logging.FeatureTag
+import com.hellohealth.data.exercise.ExerciseSeeder
+import com.hellohealth.data.food.NutritionSeeder
+import com.hellohealth.data.local.AppDatabase
+import com.hellohealth.data.local.dao.UserDao
+import com.hellohealth.sync.SyncScheduler
+import io.github.jan.supabase.functions.functions
+import io.ktor.client.call.body
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.HttpHeaders
+import io.ktor.http.headers
+import io.ktor.http.isSuccess
 import javax.inject.Singleton
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
-    private val supabase: SupabaseClient
+    private val supabase: SupabaseClient,
+    private val database: AppDatabase,
+    private val syncScheduler: SyncScheduler,
+    private val exerciseSeeder: ExerciseSeeder,
+    private val nutritionSeeder: NutritionSeeder,
+    private val userDao: UserDao
 ) : AuthRepository {
 
     override suspend fun signUp(email: String, password: String): Result<Unit> {
@@ -96,6 +114,42 @@ class AuthRepositoryImpl @Inject constructor(
                 }
             }
             getCurrentUser()
+        }
+    }
+
+    override suspend fun deleteAccount(): Result<Unit> {
+        return runCatching {
+            supabase.auth.awaitInitialization()
+            val session = supabase.auth.currentSessionOrNull()
+            if (session == null) {
+                error("No authenticated user to delete")
+            }
+
+            val response: HttpResponse = supabase.functions.invoke(
+                function = "delete-account",
+                headers = headers { append(HttpHeaders.ContentType, "application/json") }
+            )
+
+            if (!response.status.isSuccess()) {
+                val errorBody = runCatching { response.body<String>() }.getOrDefault("Unknown server error")
+                AppLogger.e(FeatureTag.AUTH, "Account deletion failed on server: HTTP ${response.status.value} - $errorBody")
+                error("Server account deletion failed (HTTP ${response.status.value})")
+            }
+
+            AppLogger.i(FeatureTag.AUTH, "Server-side account deletion confirmed. Purging local app data.")
+
+            syncScheduler.cancelAll()
+            database.clearAllTables()
+
+            runCatching { exerciseSeeder.seedIfNeeded() }
+            runCatching { nutritionSeeder.seedIfNeeded() }
+
+            userDao.logoutAll()
+            try {
+                supabase.auth.signOut()
+            } catch (_: Exception) {
+                supabase.auth.clearSession()
+            }
         }
     }
 
