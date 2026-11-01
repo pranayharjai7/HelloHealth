@@ -16,7 +16,7 @@
 | OWASP ZAP | No | No | 2026-11-01; exact attempt time not retained | Intended: authorized staging API | Not tested | No authorized staging endpoint supplied; production was not tested. Winget installer required administrator elevation. A direct installer launch was blocked by tool policy. |
 | OWASP MASVS/MASTG + secure-agent mobile review play | Reference repositories cloned outside app; web guides consulted | Yes, source-only review | 2026-11-01; exact review time not retained | Android source/manifest, SQL and Edge Function | Findings and 8 control groups mapped in `SECURITY_CHECKLIST.md` | No full device/runtime MASTG execution. The OWASP guide states source-only mobile review does not cover remote endpoints. |
 | Gradle task discovery | Gradle 9.0.0 | Yes | 12:16:01 | `gradlew.bat tasks --all` | Passed | Task discovery only. |
-| Gradle debug build, tests, lint | Gradle 9.0.0; AGP 8.9.3; Kotlin 2.0.21 | Yes | 12:28:02 | `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug` | Debug APK and unit tests passed; lint failed | 565 tests / 97 suites; lint: 7 errors, 84 warnings. Debug artifact was not scanned with MobSF. |
+| Gradle debug build, tests, lint (post-remediation) | Gradle 9.0.0; AGP 8.9.3; Kotlin 2.0.21 | Yes | 13:19:06 | `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug` | Debug APK, unit tests, and lint all PASSED | 575 tests / 99 suites passed (0 failures); lint: 0 errors, 82 warnings (all 7 original lint errors resolved). |
 | Gradle release build | Gradle 9.0.0 | Yes | 12:28:14 | `:app:assembleRelease` | Failed at the signing gate | No release keystore configured; task refused to emit an unsigned artifact. No key was created or modified. |
 
 ## Commands and evidence
